@@ -104,7 +104,7 @@ class ZeEventCache {
           nullptr, flags, EVENT_POOL_SIZE};
       ze_event_pool_handle_t pool = nullptr;
       status = ZE_FUNC(zeEventPoolCreate)(context, &pool_desc, 0, nullptr, &pool);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
       auto pool_iter = event_pools_.find(context);
       if (pool_iter == event_pools_.end()) {
@@ -120,9 +120,9 @@ class ZeEventCache {
             ZE_EVENT_SCOPE_FLAG_HOST,
             ZE_EVENT_SCOPE_FLAG_HOST};
         status = ZE_FUNC(zeEventCreate)(pool, &event_desc, &event);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
-        PTI_ASSERT(event_info_map_.count(event) == 0);
+        UNITRACE_ASSERT(event_info_map_.count(event) == 0);
         event_info_map_.insert({event, std::make_pair(context, i)});
         result->second.push_back(event);
       }
@@ -131,7 +131,7 @@ class ZeEventCache {
     event = result->second.back();
     result->second.pop_back();
 
-    //PTI_ASSERT(ZE_FUNC(zeEventQueryStatus)(event) == ZE_RESULT_NOT_READY);
+    //UNITRACE_ASSERT(ZE_FUNC(zeEventQueryStatus)(event) == ZE_RESULT_NOT_READY);
 
     return event;
   }
@@ -146,7 +146,7 @@ class ZeEventCache {
     auto info = event_info_map_.find(event);
     if (info != event_info_map_.end()) {
       ze_result_t status = ZE_FUNC(zeEventHostReset)(event);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
     }
   }
 
@@ -163,7 +163,7 @@ class ZeEventCache {
     }
 
     auto result = event_map_.find(info->second.first);
-    PTI_ASSERT(result != event_map_.end());
+    UNITRACE_ASSERT(result != event_map_.end());
     if (result != event_map_.end()) {
       // Workaround to cover L0 bug related to V2 adaptor. Tracking ID: https://github.com/intel-innersource/applications.analyzers.profilingtoolsinterfaces.sdk/issues/700
       // Idea is to create new event from same event pool at same index. Destroy the old event and update the map.
@@ -174,11 +174,11 @@ class ZeEventCache {
 
       ze_event_pool_handle_t pool;
       auto status = ZE_FUNC(zeEventGetEventPool)(event, &pool);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
       // destroy old event
       status = ZE_FUNC(zeEventDestroy)(event);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
       // create new event
       ze_event_handle_t new_event;
@@ -189,7 +189,7 @@ class ZeEventCache {
           ZE_EVENT_SCOPE_FLAG_HOST,
           ZE_EVENT_SCOPE_FLAG_HOST};
       status = ZE_FUNC(zeEventCreate)(pool, &event_desc, &new_event);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
       // Update event info map
       event_info_map_.erase(event);
@@ -214,7 +214,7 @@ class ZeEventCache {
           for (auto event : result->second) {
             ze_result_t status = ZE_RESULT_SUCCESS;
             status = ZE_FUNC(zeEventDestroy)(event);
-            PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+            UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
             event_info_map_.erase(event);
           }
 
@@ -223,7 +223,7 @@ class ZeEventCache {
           for (auto pool: iter->second) {
             ze_result_t status = ZE_RESULT_SUCCESS;
             status = ZE_FUNC(zeEventPoolDestroy)(pool);
-            PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+            UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
           }
           event_pools_.erase(iter);
         }

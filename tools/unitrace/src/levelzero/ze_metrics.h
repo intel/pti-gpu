@@ -28,11 +28,11 @@
 #include <atomic>
 #include <thread>
 
-#include "logger.h"
+#include "utils/unilogger.h"
 #include "unimemory.h"
-#include "utils.h"
+#include "utils/utils.h"
 #include "utils_ze.h"
-#include "pti_assert.h"
+#include "utils/unitrace_assert.h"
 #include "logger_factory.h"
 #include "unicontrol.h"
 #include "kernel_disassembler.h"
@@ -67,14 +67,14 @@ inline void PrintDeviceList() {
     ze_device_properties_t device_properties{
         ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES, };
     auto status = ZE_FUNC(zeDeviceGetProperties)(device, &device_properties);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
     ze_pci_ext_properties_t pci_props;
     pci_props.pNext = nullptr;
     pci_props.stype = ZE_STRUCTURE_TYPE_PCI_EXT_PROPERTIES;
     status = ZE_FUNC(zeDevicePciGetPropertiesExt)(device, &pci_props);
 
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
     std::cout << "Device #" << i << ": [" << std::hex <<
       pci_props.address.domain << ":" <<
@@ -86,7 +86,7 @@ inline void PrintDeviceList() {
 }
 
 inline std::string GetMetricUnits(const char* units) {
-  PTI_ASSERT(units != nullptr);
+  UNITRACE_ASSERT(units != nullptr);
 
   std::string result = units;
   if (result.find("null") != std::string::npos) {
@@ -109,7 +109,7 @@ inline void PrintMetricList(uint32_t device_id) {
     return;
   }
 
-  PTI_ASSERT(device_id < device_list.size());
+  UNITRACE_ASSERT(device_id < device_list.size());
   ze_device_handle_t device = device_list[device_id];
 
   uint32_t group_count = 0;
@@ -122,20 +122,20 @@ inline void PrintMetricList(uint32_t device_id) {
 
   std::vector<zet_metric_group_handle_t> group_list(group_count, nullptr);
   status = ZE_FUNC(zetMetricGroupGet)(device, &group_count, group_list.data());
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
   uint32_t group_id = 0;
   for (uint32_t i = 0; i < group_count; ++i) {
     zet_metric_group_properties_t group_props{};
     group_props.stype = ZET_STRUCTURE_TYPE_METRIC_GROUP_PROPERTIES;
     status = ZE_FUNC(zetMetricGroupGetProperties)(group_list[i], &group_props);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
     bool is_ebs = (group_props.samplingType &
                    ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_EVENT_BASED);
     bool is_tbs = (group_props.samplingType &
                    ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_TIME_BASED);
-    PTI_ASSERT(is_ebs || is_tbs);
+    UNITRACE_ASSERT(is_ebs || is_tbs);
     if (is_ebs) {
       continue;
     }
@@ -147,14 +147,14 @@ inline void PrintMetricList(uint32_t device_id) {
     uint32_t metric_count = group_props.metricCount;
     std::vector<zet_metric_handle_t> metric_list(metric_count, nullptr);
     status = ZE_FUNC(zetMetricGet)(group_list[i], &metric_count, metric_list.data());
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    PTI_ASSERT(metric_count == group_props.metricCount);
+    UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
+    UNITRACE_ASSERT(metric_count == group_props.metricCount);
 
     for (uint32_t j = 0; j < metric_count; ++j) {
       zet_metric_properties_t metric_props{};
       metric_props.stype = ZET_STRUCTURE_TYPE_METRIC_PROPERTIES;
       status = ZE_FUNC(zetMetricGetProperties)(metric_list[j], &metric_props);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
       std::cout << "\tMetric " << j << ": "  << metric_props.name;
       std::string units = GetMetricUnits(metric_props.resultUnits);
@@ -170,8 +170,8 @@ inline void PrintMetricList(uint32_t device_id) {
 }
 
 inline uint32_t GetMetricId(const std::vector<std::string>& metric_list, const std::string& metric_name) {
-  PTI_ASSERT(!metric_list.empty());
-  PTI_ASSERT(!metric_name.empty());
+  UNITRACE_ASSERT(!metric_list.empty());
+  UNITRACE_ASSERT(!metric_name.empty());
 
   for (size_t i = 0; i < metric_list.size(); ++i) {
     if (metric_list[i].find(metric_name) == 0) {
@@ -316,7 +316,7 @@ class ZeMetricProfiler {
     LoggerFactory* logger_factory = LoggerFactory::Create();
     std::pair<std::string, std::string> metrics_files = logger_factory->SearchRawMetricFiles(pid);
     std::string metrics_file_name = metrics_files.first;
-    std::shared_ptr<Logger> metrics_logger = std::make_shared<Logger>(metrics_files.second);
+    std::shared_ptr<UniLogger> metrics_logger = std::make_shared<UniLogger>(metrics_files.second);
     if (metrics_logger == nullptr) {
       std::cerr << "[ERROR] Failed to create metric data file" << std::endl;
     }
@@ -374,7 +374,7 @@ class ZeMetricProfiler {
         did = device;
         group = groups[device];
         metric_names = GetMetricNames(groups[device]);
-        PTI_ASSERT(!metric_names.empty());
+        UNITRACE_ASSERT(!metric_names.empty());
 
         if (logger_factory->IsLegacy()) {
            metrics_logger->Log("\n=== Device #" + std::to_string(did) + " Metrics ===\n");
@@ -487,7 +487,7 @@ class ZeMetricProfiler {
       ze_context_desc_t cdesc = {ZE_STRUCTURE_TYPE_CONTEXT_DESC, nullptr, 0};
 
       auto status = ZE_FUNC(zeContextCreate)(driver, &cdesc, &context);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
       metric_contexts_.push_back(context);
 
       auto devices = GetDeviceList(driver);
@@ -516,16 +516,16 @@ class ZeMetricProfiler {
 
         ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2, };
         ze_result_t status = ZE_FUNC(zeDeviceGetProperties)(device, &props);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-        PTI_ASSERT(props.timerResolution != 0);
-        PTI_ASSERT(props.kernelTimestampValidBits != 0);
+        UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
+        UNITRACE_ASSERT(props.timerResolution != 0);
+        UNITRACE_ASSERT(props.kernelTimestampValidBits != 0);
 
         desc->device_timer_frequency_ = props.timerResolution;
         desc->device_timer_mask_ = (props.kernelTimestampValidBits == 64) ? (std::numeric_limits<uint64_t>::max)() : ((1ull << props.kernelTimestampValidBits) - 1ull);
 
         ze_pci_ext_properties_t pci_device_properties;
         status = ZE_FUNC(zeDevicePciGetPropertiesExt)(device, &pci_device_properties);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
         desc->pci_properties_ = pci_device_properties;
 
         zet_metric_group_handle_t group = FindMetricGroup (device, metric_group, ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_TIME_BASED);
@@ -543,9 +543,9 @@ class ZeMetricProfiler {
         metrics_ts_prop.pNext = nullptr;
         metric_group_prop.pNext = &metrics_ts_prop;
         status = ZE_FUNC(zetMetricGroupGetProperties)(group, &metric_group_prop);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-        PTI_ASSERT(metrics_ts_prop.timerResolution != 0);
-        PTI_ASSERT(metrics_ts_prop.timestampValidBits != 0);
+        UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
+        UNITRACE_ASSERT(metrics_ts_prop.timerResolution != 0);
+        UNITRACE_ASSERT(metrics_ts_prop.timestampValidBits != 0);
 
         desc->metric_timer_frequency_ = metrics_ts_prop.timerResolution;
         // special handling for certain older devices
@@ -598,7 +598,7 @@ class ZeMetricProfiler {
 
           ze_pci_ext_properties_t pci_device_properties;
           ze_result_t status = ZE_FUNC(zeDevicePciGetPropertiesExt)(sub_devices[j], &pci_device_properties);
-          PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+          UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
           sub_desc->pci_properties_ = pci_device_properties;
 
@@ -665,8 +665,8 @@ class ZeMetricProfiler {
         // subdevice
         continue;
       }
-      PTI_ASSERT(device->profiling_thread_ != nullptr);
-      PTI_ASSERT(device->profiling_state_ == PROFILER_ENABLED);
+      UNITRACE_ASSERT(device->profiling_thread_ != nullptr);
+      UNITRACE_ASSERT(device->profiling_state_ == PROFILER_ENABLED);
       device->profiling_state_.store(PROFILER_DISABLED, std::memory_order_release);
       device->profiling_thread_->join();
       delete device->profiling_thread_;
@@ -880,7 +880,7 @@ class ZeMetricProfiler {
 
   // Writes <device>.<pid>.<kernel id>.asm to disasm_dir: the IGA listing, the source
   // locations and the defs of one disassembled kernel. A plain stream, since a per-kernel
-  // file does not fit a Logger's (type, device) naming.
+  // file does not fit a UniLogger's (type, device) naming.
   bool WriteOutKernelAssembly(const std::string& disasm_dir, int32_t device_id, uint32_t pid,
                               uint64_t kernel_id, const std::string& kname,
                               const std::string& disassembly,
@@ -976,7 +976,7 @@ class ZeMetricProfiler {
   // the caller's buffer, reused across devices. Returns false when the run cannot be
   // continued at all, as opposed to this device having nothing to report.
   bool ComputeStallMetrics(const ZeDeviceDescriptor* device,
-                           const std::shared_ptr<Logger>& metric_logger,
+                           const std::shared_ptr<UniLogger>& metric_logger,
                            uint8_t* raw_metrics) {
     DeviceModuleProps modules = ReadModuleAndKernelProps(device->device_id_);
     if (modules.size() == 0) {
@@ -985,7 +985,7 @@ class ZeMetricProfiler {
 
     std::vector<std::string> metric_list;
     metric_list = GetMetricList(device->metric_group_);
-    PTI_ASSERT(!metric_list.empty());
+    UNITRACE_ASSERT(!metric_list.empty());
 
     uint32_t ip_idx = GetMetricId(metric_list, "IP");
     if (ip_idx >= metric_list.size()) {
@@ -1271,7 +1271,7 @@ class ZeMetricProfiler {
   // against the intervals the kernels ran in and write the report. raw_metrics is the
   // caller's buffer, reused across devices.
   void ComputeTimedMetrics(const ZeDeviceDescriptor* device,
-                           const std::shared_ptr<Logger>& metric_logger,
+                           const std::shared_ptr<UniLogger>& metric_logger,
                            uint8_t* raw_metrics) {
     std::vector<ZeKernelInfo> kinfo;
     uint64_t max_global_instance_id = 0;
@@ -1353,7 +1353,7 @@ class ZeMetricProfiler {
     std::sort(kinfo.begin(), kinfo.end(), CompareInterval);
 
     auto metric_list = GetMetricList(device->metric_group_);
-    PTI_ASSERT(!metric_list.empty());
+    UNITRACE_ASSERT(!metric_list.empty());
 
     uint32_t ts_idx = GetMetricId(metric_list, "QueryBeginTime");
     if (ts_idx >= metric_list.size()) {
@@ -1543,7 +1543,7 @@ class ZeMetricProfiler {
     auto *raw_metrics = static_cast<uint8_t*>(malloc(sizeof(uint8_t)*MAX_METRIC_BUFFER));
     UniMemory::ExitIfOutOfMemory((void *)raw_metrics);
 
-    std::shared_ptr<Logger> metric_logger = nullptr;
+    std::shared_ptr<UniLogger> metric_logger = nullptr;
 
     for (auto [handle, device] : device_descriptors_) {
       if (device->parent_device_ != nullptr) {
@@ -1570,22 +1570,22 @@ class ZeMetricProfiler {
   }
 
   static std::vector<std::string> GetMetricNames(zet_metric_group_handle_t group) {
-    PTI_ASSERT(group != nullptr);
+    UNITRACE_ASSERT(group != nullptr);
 
     uint32_t metric_count = GetMetricCount(group);
-    PTI_ASSERT(metric_count > 0);
+    UNITRACE_ASSERT(metric_count > 0);
 
     std::vector<zet_metric_handle_t> metrics(metric_count);
     ze_result_t status = ZE_FUNC(zetMetricGet)(group, &metric_count, metrics.data());
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    PTI_ASSERT(metric_count == metrics.size());
+    UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
+    UNITRACE_ASSERT(metric_count == metrics.size());
 
     std::vector<std::string> names;
     for (auto metric : metrics) {
       zet_metric_properties_t metric_props{
           ZET_STRUCTURE_TYPE_METRIC_PROPERTIES, };
       status = ZE_FUNC(zetMetricGetProperties)(metric, &metric_props);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
       std::string units = GetMetricUnits(metric_props.resultUnits);
       std::string name = metric_props.name;
@@ -1613,14 +1613,14 @@ class ZeMetricProfiler {
       case ZET_VALUE_TYPE_BOOL8:
         return std::to_string(static_cast<uint32_t>(typed_value.value.b8));
       default:
-        PTI_ASSERT(0);
+        UNITRACE_ASSERT(0);
         break;
     }
     return "";  // in case of error returns empty string.
   }
 
   inline static std::string GetMetricUnits(const char* units) {
-    PTI_ASSERT(units != nullptr);
+    UNITRACE_ASSERT(units != nullptr);
 
     std::string result = units;
     if (result.find("null") != std::string::npos) {
@@ -1633,33 +1633,33 @@ class ZeMetricProfiler {
   }
 
   static uint32_t GetMetricCount(zet_metric_group_handle_t group) {
-    PTI_ASSERT(group != nullptr);
+    UNITRACE_ASSERT(group != nullptr);
 
     zet_metric_group_properties_t group_props{};
     group_props.stype = ZET_STRUCTURE_TYPE_METRIC_GROUP_PROPERTIES;
     ze_result_t status = ZE_FUNC(zetMetricGroupGetProperties)(group, &group_props);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
     return group_props.metricCount;
   }
 
   static std::vector<std::string> GetMetricList(zet_metric_group_handle_t group) {
-    PTI_ASSERT(group != nullptr);
+    UNITRACE_ASSERT(group != nullptr);
 
     uint32_t metric_count = GetMetricCount(group);
-    PTI_ASSERT(metric_count > 0);
+    UNITRACE_ASSERT(metric_count > 0);
 
     std::vector<zet_metric_handle_t> metric_list(metric_count);
     ze_result_t status = ZE_FUNC(zetMetricGet)(group, &metric_count, metric_list.data());
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    PTI_ASSERT(metric_count == metric_list.size());
+    UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
+    UNITRACE_ASSERT(metric_count == metric_list.size());
 
     std::vector<std::string> name_list;
     for (auto metric : metric_list) {
       zet_metric_properties_t metric_props{
           ZET_STRUCTURE_TYPE_METRIC_PROPERTIES, };
       status = ZE_FUNC(zetMetricGetProperties)(metric, &metric_props);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
       std::string units = GetMetricUnits(metric_props.resultUnits);
       std::string name = metric_props.name;
@@ -1682,7 +1682,7 @@ class ZeMetricProfiler {
       else if (status != ZE_RESULT_SUCCESS) {
           std::cerr << "[ERROR] zetMetricStreamerReadData failed with error code: "
               << static_cast<std::size_t>(status) << std::endl;
-          PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+          UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
       }
       return data_size;
   }
@@ -1692,10 +1692,10 @@ class ZeMetricProfiler {
 
     //status = ZE_FUNC(zeEventHostSynchronize)(event, 0);
     status = ZE_FUNC(zeEventQueryStatus)(event);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS || status == ZE_RESULT_NOT_READY);
+    UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS || status == ZE_RESULT_NOT_READY);
     if (status == ZE_RESULT_SUCCESS) {
       status = ZE_FUNC(zeEventHostReset)(event);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
     }
     else {
       // if (status == ZE_RESULT_NOT_READY)
@@ -1714,17 +1714,17 @@ class ZeMetricProfiler {
     zet_metric_group_handle_t group = desc->metric_group_;
 
     status = ZE_FUNC(zetContextActivateMetricGroups)(context, device, 1, &group);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
     ze_event_pool_handle_t event_pool = nullptr;
     ze_event_pool_desc_t event_pool_desc = {ZE_STRUCTURE_TYPE_EVENT_POOL_DESC, nullptr, ZE_EVENT_POOL_FLAG_HOST_VISIBLE, 1};
     status = ZE_FUNC(zeEventPoolCreate)(context, &event_pool_desc, 1, &device, &event_pool);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
     ze_event_handle_t event = nullptr;
     ze_event_desc_t event_desc = {ZE_STRUCTURE_TYPE_EVENT_DESC, nullptr, 0, ZE_EVENT_SCOPE_FLAG_HOST, ZE_EVENT_SCOPE_FLAG_HOST};
     status = ZE_FUNC(zeEventCreate)(event_pool, &event_desc, &event);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
     zet_metric_streamer_handle_t streamer = nullptr;
     // UNITRACE_SamplingInterval is in us and may be fractional (e.g. "0.5")
@@ -1765,10 +1765,10 @@ class ZeMetricProfiler {
 #endif /* _WIN32 */
 
       status = ZE_FUNC(zeEventDestroy)(event);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
       status = ZE_FUNC(zeEventPoolDestroy)(event_pool);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
       // set state to enabled to let the parent thread continue
       desc->profiling_state_.store(PROFILER_ENABLED, std::memory_order_release);
@@ -1777,7 +1777,7 @@ class ZeMetricProfiler {
 
     std::vector<std::string> metrics_list;
     metrics_list = GetMetricList(group);
-    PTI_ASSERT(!metrics_list.empty());
+    UNITRACE_ASSERT(!metrics_list.empty());
 
     auto *raw_metrics = static_cast<uint8_t*>(malloc(sizeof(uint8_t)*MAX_METRIC_BUFFER));
     UniMemory::ExitIfOutOfMemory((void *)raw_metrics);
@@ -1825,16 +1825,16 @@ class ZeMetricProfiler {
     free (raw_metrics);
 
     status = ZE_FUNC(zetMetricStreamerClose)(streamer);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
     status = ZE_FUNC(zeEventDestroy)(event);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
     status = ZE_FUNC(zeEventPoolDestroy)(event_pool);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
     status = ZE_FUNC(zetContextActivateMetricGroups)(context, device, 0, &group);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
   }
 
  private: // Data

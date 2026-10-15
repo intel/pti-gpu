@@ -277,9 +277,9 @@ def gen_register(f, func_list):
     reg_fname = "ZeLoader::get().zelTracer" + func[offset:] + "RegisterCallback_"
     f.write("    if (" + reg_fname + " != nullptr) {\n")
     f.write("      status = " + reg_fname + "(tracer, ZEL_REGISTER_PROLOGUE, " + func + "OnEnter);\n")
-    f.write("      PTI_ASSERT(status == ZE_RESULT_SUCCESS);\n")
+    f.write("      UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);\n")
     f.write("      status = " + reg_fname + "(tracer, ZEL_REGISTER_EPILOGUE, " + func + "OnExit);\n")
-    f.write("      PTI_ASSERT(status == ZE_RESULT_SUCCESS);\n")
+    f.write("      UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);\n")
     f.write("    }\n")
 
 def gen_api(f, func_list, kfunc_list):
@@ -293,7 +293,7 @@ def gen_api(f, func_list, kfunc_list):
   f.write("  }\n")
   f.write("\n")
   f.write("  status = ZE_FUNC(zelTracerSetEnabled)(tracer, true);\n")
-  f.write("  PTI_ASSERT(status == ZE_RESULT_SUCCESS);\n")
+  f.write("  UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);\n")
   f.write("}\n")
   
   f.write("\n")

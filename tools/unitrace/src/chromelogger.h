@@ -81,7 +81,7 @@ std::string GetZeEngineName(ze_device_handle_t device, uint32_t ordinal);
 extern const char *GetOmptEventName(uint32_t);
 #endif /* BUILD_WITH_OMP */
 
-static std::shared_ptr<Logger> logger_ = nullptr;
+static std::shared_ptr<UniLogger> logger_ = nullptr;
 
 std::recursive_mutex logger_lock_; //lock to synchronize file write
 
@@ -188,7 +188,7 @@ static std::tuple<uint32_t, uint32_t, int32_t> GetDevicePidTid(ze_device_handle_
   int32_t parent_device_id;
   int32_t subdevice_id;
   props = GetZeDevicePciPropertiesAndId(device, &parent_device_id, &device_id, &subdevice_id);
-  PTI_ASSERT(props != nullptr);
+  UNITRACE_ASSERT(props != nullptr);
 
   ZeDeviceTidKey tid_key;
 
@@ -2217,7 +2217,7 @@ class ChromeLogger {
         return;
       }
 
-      PTI_ASSERT(ended > started);
+      UNITRACE_ASSERT(ended > started);
 
       ClKernelCommandExecutionRecord *rec = cl_thread_local_buffer_.GetDeviceEvent();
 

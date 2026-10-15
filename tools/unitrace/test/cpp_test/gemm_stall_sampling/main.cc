@@ -41,7 +41,7 @@
 #include <string>
 #include <vector>
 
-#include "ze_utils.h"
+#include "utils/ze_utils.h"
 
 #define ALIGN 64
 

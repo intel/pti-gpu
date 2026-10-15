@@ -1,11 +1,6 @@
 import sys
 import os
 
-# This script lives under tools/unitrace/scripts, not next to build_utils.py, so
-# add the shared build_utils directory to the import path before importing it.
-sys.path.insert(
-    0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "build_utils"))
-
 import build_utils
 
 url = "https://github.com/intel/intel-graphics-compiler.git"

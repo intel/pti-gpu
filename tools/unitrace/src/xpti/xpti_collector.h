@@ -9,7 +9,7 @@
 
 #include "unicontrol.h"
 #include "unievent.h"
-#include "utils.h"
+#include "utils/utils.h"
 #include "xpti/xpti_trace_framework.h"
 
 #include <chrono>

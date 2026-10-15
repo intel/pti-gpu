@@ -1,14 +1,12 @@
-include("${PROJECT_SOURCE_DIR}/../../../../build_utils/CMakeLists.txt")
-
 project(gemm_stall_sampling CXX)
 
 add_executable(gemm_stall_sampling main.cc)
 
-target_include_directories(gemm_stall_sampling PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../utils")
+target_include_directories(gemm_stall_sampling PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../.." "${CMAKE_CURRENT_SOURCE_DIR}/../../..")
 
 if(WIN32)
-  FindL0Library(gemm_stall_sampling)
-  FindL0Headers(gemm_stall_sampling)
+  UnitraceFindL0Library(gemm_stall_sampling)
+  UnitraceGetLevelZeroHeaders(gemm_stall_sampling ${LEVEL_ZERO_COMMIT_ID})
 else()
   target_link_libraries(gemm_stall_sampling PRIVATE ze_loader)
 endif()

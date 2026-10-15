@@ -1,14 +1,12 @@
-include("${PROJECT_SOURCE_DIR}/../../../../build_utils/CMakeLists.txt")
-
 project(ze_gemm CXX)
 
 add_executable(ze_gemm main.cc)
 
-target_include_directories(ze_gemm PRIVATE "${PROJECT_SOURCE_DIR}/../../../../../utils")
+target_include_directories(ze_gemm PRIVATE "${PROJECT_SOURCE_DIR}/../.." "${PROJECT_SOURCE_DIR}/../../..")
 
 if(WIN32)
-  FindL0Library(ze_gemm)
-  FindL0Headers(ze_gemm)
+  UnitraceFindL0Library(ze_gemm)
+  UnitraceGetLevelZeroHeaders(ze_gemm ${LEVEL_ZERO_COMMIT_ID})
 else()
   target_link_libraries(ze_gemm PRIVATE ze_loader)
 endif()

@@ -12,8 +12,8 @@
 #include <string>
 #include <tuple>
 #include <fstream>
-#include "utils.h"
-#include "logger.h"
+#include "utils/utils.h"
+#include "utils/unilogger.h"
 
 // JSON is the default; protobuf only when --output-format=protobuf and built in.
 // Resolved once (queried per record on the flush path); the format is fixed for
@@ -130,7 +130,7 @@ public:
     // that way, which no file this searches for can.
     static uint32_t GetFileNamePid(const std::string& path);
 
-    std::shared_ptr<Logger> GetLogger(LoggerType type, bool lazy_flush = false, bool lock_free = false, bool binary = false) const {
+    std::shared_ptr<UniLogger> GetLogger(LoggerType type, bool lazy_flush = false, bool lock_free = false, bool binary = false) const {
         int32_t device_id = -1;
         return GetDeviceLogger(type, device_id, lazy_flush, lock_free, binary);
     }
@@ -139,7 +139,7 @@ public:
     LoggerFactory& operator=(const LoggerFactory&) = delete;
     virtual ~LoggerFactory() = default;
 
-    virtual std::shared_ptr<Logger> GetDeviceLogger(LoggerType type, int32_t device_id, bool lazy_flush = false, bool lock_free = false, bool binary = false) const  = 0;
+    virtual std::shared_ptr<UniLogger> GetDeviceLogger(LoggerType type, int32_t device_id, bool lazy_flush = false, bool lock_free = false, bool binary = false) const  = 0;
     virtual std::string GenerateLogFileName(LoggerType type, int32_t device_id = -1) const = 0;
 #ifdef _WIN32
     virtual std::pair<std::string, std::string> SearchRawMetricFiles(uint32_t pid) const = 0;
@@ -150,7 +150,7 @@ protected:
     static std::string ComputeAppName(void);
     explicit LoggerFactory(uint32_t app_id);
     void CreateDirectory(const std::string& dir) const;
-    std::shared_ptr<Logger> GetLoggerImpl(LoggerType type, int32_t device_id, bool lazy_flush, bool lock_free, bool binary = false) const;
+    std::shared_ptr<UniLogger> GetLoggerImpl(LoggerType type, int32_t device_id, bool lazy_flush, bool lock_free, bool binary = false) const;
     void RemoveDirectoryIfEmpty(const std::string& dir) const;
     void SetAppId(uint32_t app_id) {app_id_ = app_id;}
     std::string GetDataDirPath(bool warn = true) const {
@@ -170,7 +170,7 @@ protected:
     // clean it up without calling that method again and re-creating it.
     mutable std::string disasm_dir_path_;
     mutable std::mutex mutex_;
-    mutable std::map<std::tuple<LoggerType, int32_t, bool>, std::shared_ptr<Logger>> loggers_;
+    mutable std::map<std::tuple<LoggerType, int32_t, bool>, std::shared_ptr<UniLogger>> loggers_;
 };
 
 class LegacyLoggerFactory : public LoggerFactory {
@@ -181,7 +181,7 @@ public:
     std::string GetMetricsFileName(const std::string& log_file, uint32_t app_id) const;
 
     std::string GetChromeTraceFileName() const;
-    std::shared_ptr<Logger> GetDeviceLogger(LoggerType type, int32_t device_id, bool lazy_flush = false, bool lock_free = false, bool binary = false) const override;
+    std::shared_ptr<UniLogger> GetDeviceLogger(LoggerType type, int32_t device_id, bool lazy_flush = false, bool lock_free = false, bool binary = false) const override;
     std::string GenerateLogFileName(LoggerType type, int32_t device_id = -1) const override;
 #ifdef _WIN32
     std::pair<std::string, std::string> SearchRawMetricFiles(uint32_t pid) const override;
@@ -198,7 +198,7 @@ public:
     ResultDirLoggerFactory(uint32_t app_id);
     ~ResultDirLoggerFactory() override;
 
-    std::shared_ptr<Logger> GetDeviceLogger(LoggerType type, int32_t device_id, bool lazy_flush = false, bool lock_free = false, bool binary = false) const override;
+    std::shared_ptr<UniLogger> GetDeviceLogger(LoggerType type, int32_t device_id, bool lazy_flush = false, bool lock_free = false, bool binary = false) const override;
     std::string GenerateLogFileName(LoggerType type, int32_t device_id = -1) const override;
 #ifdef _WIN32
     std::pair<std::string, std::string> SearchRawMetricFiles(uint32_t pid) const override;

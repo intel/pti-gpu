@@ -39,7 +39,7 @@
 #include <csignal>
 #include <stdlib.h>
 #include "ze_metrics.h"
-#include "utils.h"
+#include "utils/utils.h"
 #include "cli_options.h"
 #include "version.h"
 #include "unitrace_commit_hash.h"
@@ -843,7 +843,7 @@ static std::string StringifyDevice() {
     return "";
   }
   // Enumerate locally instead of calling GetGpuDevice(): that helper, and the
-  // GetDriverList/GetDeviceList it builds on, PTI_ASSERT on every Level Zero
+  // GetDriverList/GetDeviceList it builds on, UNITRACE_ASSERT on every Level Zero
   // status. Any driver that errored here would then abort the capture -- the
   // opposite of this function's contract. Everything below checks return codes.
   uint32_t driver_count = 0;
@@ -906,7 +906,7 @@ void CreateConfigLog(const std::string& unitrace_version, const std::vector<char
   std::string value = utils::GetEnv("UNITRACE_UseResultDirectory");
   if (!value.empty() && value == "1") {
     LoggerFactory* logger_factory = LoggerFactory::Create();
-    std::shared_ptr<Logger> config_logger = logger_factory->GetLogger(LOGGER_TYPE_CONFIG, true, true);
+    std::shared_ptr<UniLogger> config_logger = logger_factory->GetLogger(LOGGER_TYPE_CONFIG, true, true);
 
     config_logger->Log("{ \"unitrace version\": \"" + unitrace_version + "\",\n");
     config_logger->Log("  \"app\": \"" + std::string(app_args[0]) + "\",\n");
@@ -930,7 +930,7 @@ static void DumpKmdTraceData(std::string& raw_data_file) {
   UniTimer::StartUniTimer();  // need the timer to get the epoch time of system boot and difference between boot time and monotonic time
 
   LoggerFactory* logger_factory = LoggerFactory::Create();
-  std::shared_ptr<Logger> oskmd_logger = logger_factory->GetLogger(LOGGER_TYPE_KMD_TRACE, true, true);
+  std::shared_ptr<UniLogger> oskmd_logger = logger_factory->GetLogger(LOGGER_TYPE_KMD_TRACE, true, true);
   if (oskmd_logger == nullptr) {
     std::cerr << "[ERROR] Failed to create kernel/kmd trace file" << std::endl;
     return;

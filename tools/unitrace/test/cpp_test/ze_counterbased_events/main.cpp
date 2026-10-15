@@ -8,7 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <string>
-#include "ze_utils.h"
+#include "utils/ze_utils.h"
 
 static void *allocSharedMem(ze_context_handle_t hCtx, ze_device_handle_t hDev, size_t size)
 {

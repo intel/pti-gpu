@@ -1,5 +1,3 @@
-include("../../build_utils/CMakeLists.txt")
-
 cmake_minimum_required(VERSION 3.22)
 
 # Need to check the build type first as project() can have default build type set,
@@ -12,7 +10,7 @@ project(PTI_Tools_UniTrace C CXX)
 find_package(Python 3.9 COMPONENTS Interpreter REQUIRED)
 
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
-SetCompilerFlags()
+include(HeaderFetch)
 
 # Print the configured build type and target bitness. unitrace only supports
 # 64-bit builds, so a 32-bit toolchain fails the configure step.
@@ -72,6 +70,8 @@ add_compile_definitions(BUILD_WITH_OMP=${BUILD_WITH_OMP})
 
 if(WIN32)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17 /bigobj ")
+  # Keep <windows.h> from defining min/max macros that break std::min/max.
+  add_compile_definitions(NOMINMAX)
 else()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -fvisibility=default")
 endif()
@@ -99,7 +99,7 @@ macro(FindHeadersPath TARGET L0_GEN_SCRIPT GEN_FILE_NAME custom_target)
     PUBLIC "${L0_GEN_INC_PATH}")
   add_dependencies(${TARGET}
     ${custom_target})
-  add_dependencies(${custom_target} level_zero_headers) # level_zero_headers target added in GetLevelZeroHeaders macro
+  add_dependencies(${custom_target} unitrace_level_zero_headers) # created by UnitraceGetLevelZeroHeaders
 endmacro()
 
 # Get Git Commit Hash
@@ -150,8 +150,6 @@ if (BUILD_WITH_MPI)
     PRIVATE "${I_MPI_ROOT}/include"
     PRIVATE "${PROJECT_SOURCE_DIR}/src"
     PRIVATE "${PROJECT_SOURCE_DIR}/src/utils"
-    PRIVATE "${PROJECT_SOURCE_DIR}/../utils"
-    PRIVATE "${PROJECT_SOURCE_DIR}/../../utils"
     PRIVATE "${PROJECT_SOURCE_DIR}/src/itt"
     PRIVATE "${CMAKE_BINARY_DIR}/ittheaders"
     PRIVATE "${PROJECT_SOURCE_DIR}/src/mpi"
@@ -200,8 +198,6 @@ target_include_directories(unitrace_tool
   PRIVATE "${ONEAPI_COMPILER_HOME}/include"
   PRIVATE "${PROJECT_SOURCE_DIR}/src"
   PRIVATE "${PROJECT_SOURCE_DIR}/src/utils"
-  PRIVATE "${PROJECT_SOURCE_DIR}/../utils"
-  PRIVATE "${PROJECT_SOURCE_DIR}/../../utils"
   PRIVATE "${PROJECT_SOURCE_DIR}/src/opencl"
   PRIVATE "${PROJECT_SOURCE_DIR}/src/levelzero")
 
@@ -256,17 +252,18 @@ if (BUILD_WITH_PERFETTO)
 endif()
 
 if (BUILD_WITH_OPENCL)
-  FindOpenCLLibrary(unitrace_tool)
-  FindOpenCLHeaders(unitrace_tool)
+  include(OpenCL)
+  UnitraceFindOpenCLLibrary(unitrace_tool)
+  UnitraceFindOpenCLHeaders(unitrace_tool)
 endif()
 
-# GetComputeRuntimeHeaders is needed for both OpenCL tracing and Level Zero extension APIs
-GetComputeRuntimeHeaders(unitrace_tool)
+# Needed for both OpenCL tracing and the Level Zero driver extension APIs.
+UnitraceGetComputeRuntimeHeaders(unitrace_tool)
 
 # v1.32.0 is the first release with the stable graph API (zeGraphCreateExt and
 # friends), which SYCL uses instead of the Exp one.
 set (LEVEL_ZERO_COMMIT_ID "v1.32.0")
-GetLevelZeroHeaders(unitrace_tool)
+UnitraceGetLevelZeroHeaders(unitrace_tool ${LEVEL_ZERO_COMMIT_ID})
 
 # Add IGA support for kernel disassembly.
 # Only the IGA C API headers are needed at build time, and only by the unitrace
@@ -275,9 +272,8 @@ GetLevelZeroHeaders(unitrace_tool)
 # no IGA header, calls no IGA function and loads no iga64. The disassembly runs in
 # unitrace, which resolves iga64 dynamically via LibraryLoader on both Windows and
 # Linux.
-# Unitrace owns its IGA header fetch (see cmake/IGAUtils.cmake) so it can pin a
+# Unitrace owns its IGA header fetch (see cmake/HeaderFetch.cmake) so it can pin a
 # revision that defines IGA_XE2 and shield itself from a stale /usr/include/iga.
-include(IGAUtils)
 # intel-graphics-compiler revision to fetch IGA API headers from. Pinned to a
 # revision that defines IGA_XE2 (XE_VER(2,0)) so BMG/Xe2 kernels disassemble.
 # Consumed by the UnitraceGetIGAHeaders(unitrace ...) call further down.
@@ -287,12 +283,12 @@ FindHeadersPath(unitrace_tool "${PROJECT_SOURCE_DIR}/scripts/gen_tracing_common_
 FindHeadersPath(unitrace_tool "${PROJECT_SOURCE_DIR}/scripts/gen_tracing_callbacks.py" "tracing.gen" gen_tracing_header)
 FindHeadersPath(unitrace_tool "${PROJECT_SOURCE_DIR}/scripts/gen_l0_loader.py" "l0_loader.gen" gen_l0_loader_header)
 
-# gen_l0_loader_header needs extensions from compute_runtime_headers
-add_dependencies(gen_l0_loader_header compute_runtime_headers)
-# gen_tracing_header needs extensions from compute_runtime_headers for extension API tracing
-add_dependencies(gen_tracing_header compute_runtime_headers)
-# gen_common_header needs CL tracing headers from compute_runtime_headers
-add_dependencies(gen_common_header compute_runtime_headers)
+# gen_l0_loader_header needs extensions from unitrace_compute_runtime_headers
+add_dependencies(gen_l0_loader_header unitrace_compute_runtime_headers)
+# gen_tracing_header needs extensions from unitrace_compute_runtime_headers for extension API tracing
+add_dependencies(gen_tracing_header unitrace_compute_runtime_headers)
+# gen_common_header needs CL tracing headers from unitrace_compute_runtime_headers
+add_dependencies(gen_common_header unitrace_compute_runtime_headers)
 
 target_include_directories(unitrace_tool PRIVATE "${L0_INC_PATH}")
 
@@ -375,8 +371,7 @@ target_include_directories(unitrace
   PRIVATE "${PROJECT_SOURCE_DIR}/src"
   PRIVATE "${PROJECT_SOURCE_DIR}/src/levelzero"
   PRIVATE "${PROJECT_SOURCE_DIR}/src/utils"
-  PRIVATE "${PROJECT_SOURCE_DIR}/../utils"
-  PRIVATE "${PROJECT_SOURCE_DIR}/../../utils")
+  PRIVATE "${PROJECT_SOURCE_DIR}")
 
 # IGA headers only (needed by kernel_disassembler.h, which unitrace reaches through
 # ze_metrics.h). The iga64 shared library is loaded at runtime, so there is nothing to
@@ -389,7 +384,7 @@ if(UNIX)
   target_link_libraries(unitrace_tool ${CMAKE_DL_LIBS} rt)
 endif()
 
-GetLevelZeroHeaders(unitrace)
+UnitraceGetLevelZeroHeaders(unitrace ${LEVEL_ZERO_COMMIT_ID})
 GetGitCommitHash(unitrace "${PROJECT_SOURCE_DIR}/scripts/get_commit_hash.py" "unitrace_commit_hash.h" get_git_commit_hash_unitrace)
 GetGitCommitHash(unitrace_tool "${PROJECT_SOURCE_DIR}/scripts/get_commit_hash.py" "unitrace_tool_commit_hash.h" get_git_commit_hash_unitrace_tool)
 

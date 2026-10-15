@@ -16,7 +16,7 @@
 #include <iostream>
 #include <string>
 
-#include "utils.h"
+#include "utils/utils.h"
 
 namespace cli {
 

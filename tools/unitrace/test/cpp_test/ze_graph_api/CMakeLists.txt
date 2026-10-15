@@ -1,12 +1,10 @@
-include("${PROJECT_SOURCE_DIR}/../../../../build_utils/CMakeLists.txt")
-
 project(ze_graph_api CXX)
 
 add_executable(ze_graph_api main.cc)
 
 target_compile_features(ze_graph_api PRIVATE cxx_std_17)
 
-target_include_directories(ze_graph_api PRIVATE "${PROJECT_SOURCE_DIR}/../../../../../utils")
+target_include_directories(ze_graph_api PRIVATE "${PROJECT_SOURCE_DIR}/../.." "${PROJECT_SOURCE_DIR}/../../..")
 
 # Include Level Zero headers with Graph extension from unitrace build
 # The headers are in two locations - check both.
@@ -23,8 +21,8 @@ target_include_directories(ze_graph_api PRIVATE
     "${_unitrace_build}/compute-runtime/level_zero/include")
 
 if(WIN32)
-  FindL0Library(ze_graph_api)
-  FindL0Headers(ze_graph_api)
+  UnitraceFindL0Library(ze_graph_api)
+  UnitraceGetLevelZeroHeaders(ze_graph_api ${LEVEL_ZERO_COMMIT_ID})
 else()
   target_link_libraries(ze_graph_api PRIVATE ze_loader ${CMAKE_DL_LIBS})
 endif()

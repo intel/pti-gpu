@@ -15,8 +15,8 @@
 #include <string>
 
 #include "collector_options.h"
-#include "logger.h"
-#include "utils.h"
+#include "utils/unilogger.h"
+#include "utils/utils.h"
 #include "ze_collector.h"
 
 #if BUILD_WITH_OPENCL
@@ -196,7 +196,7 @@ class UniTracer {
     if (itt_collector != nullptr) {
       std::string summary = itt_collector->CclSummaryReport();
       if (summary.size() > 0) {
-        std::shared_ptr<Logger> logger_ccl_summary = logger_factory_->GetLogger(LOGGER_TYPE_TRACE_CCL_SUMMARY_REPORT);
+        std::shared_ptr<UniLogger> logger_ccl_summary = logger_factory_->GetLogger(LOGGER_TYPE_TRACE_CCL_SUMMARY_REPORT);
         logger_ccl_summary->Log(summary);
         // Force flush so the summary is durable on abnormal termination (e.g. SIGKILL)
         logger_ccl_summary->Flush();
@@ -237,7 +237,7 @@ class UniTracer {
       // If CCL summary is not enabled summary string will be empty
       std::string summary = itt_collector->CclSummaryReport();
       if (summary.size() > 0){
-        std::shared_ptr<Logger> logger_ccl_summary = logger_factory_->GetLogger(LOGGER_TYPE_TRACE_CCL_SUMMARY_REPORT);
+        std::shared_ptr<UniLogger> logger_ccl_summary = logger_factory_->GetLogger(LOGGER_TYPE_TRACE_CCL_SUMMARY_REPORT);
         logger_ccl_summary->Log(summary);
       }
       delete itt_collector;
@@ -252,7 +252,7 @@ class UniTracer {
 #endif /* BUILD_WITH_OMP */
 
     if (options_.log_to_file) {
-      std::shared_ptr<Logger> logger = logger_factory_->GetLogger(LOGGER_TYPE_LEGACY_SHARED_TRACE);
+      std::shared_ptr<UniLogger> logger = logger_factory_->GetLogger(LOGGER_TYPE_LEGACY_SHARED_TRACE);
       if (logger && !logger->IsEmpty()) {
         std::cerr << "[INFO] Log is stored in " <<
           logger->GetLogFileName() << std::endl;
@@ -303,7 +303,7 @@ class UniTracer {
 
 #if BUILD_WITH_OPENCL
   static uint64_t CalculateTotalFunctionTime(const ClCollector* collector) {
-    PTI_ASSERT(collector != nullptr);
+    UNITRACE_ASSERT(collector != nullptr);
     uint64_t total_time = 0;
 
     const ClFunctionInfoMap& function_info_map = collector->GetFunctionInfoMap();
@@ -317,7 +317,7 @@ class UniTracer {
   }
 
   static uint64_t CalculateTotalKernelTime(const ClCollector* collector) {
-    PTI_ASSERT(collector != nullptr);
+    UNITRACE_ASSERT(collector != nullptr);
     uint64_t total_time = 0;
 
     const ClKernelInfoMap& kernel_info_map = collector->GetKernelInfoMap();
@@ -331,10 +331,10 @@ class UniTracer {
   }
 #endif /* BUILD_WITH_OPENCL */
 
-  void PrintFunctionTable(std::shared_ptr<Logger> logger,
+  void PrintFunctionTable(std::shared_ptr<UniLogger> logger,
       const ZeCollector* collector, const char* device_type) {
-    PTI_ASSERT(collector != nullptr);
-    PTI_ASSERT(device_type != nullptr);
+    UNITRACE_ASSERT(collector != nullptr);
+    UNITRACE_ASSERT(device_type != nullptr);
 
     uint64_t total_duration = CalculateTotalFunctionTime(collector);
     if (total_duration > 0) {
@@ -345,10 +345,10 @@ class UniTracer {
     }
   }
 
-  void PrintKernelTable(std::shared_ptr<Logger> logger,
+  void PrintKernelTable(std::shared_ptr<UniLogger> logger,
       const ZeCollector* collector, const char* device_type) {
-    PTI_ASSERT(collector != nullptr);
-    PTI_ASSERT(device_type != nullptr);
+    UNITRACE_ASSERT(collector != nullptr);
+    UNITRACE_ASSERT(device_type != nullptr);
 
     uint64_t total_duration = CalculateTotalKernelTime(collector);
     if (total_duration > 0) {
@@ -359,10 +359,10 @@ class UniTracer {
     }
   }
 
-  void PrintSubmissionTable(std::shared_ptr<Logger> logger,
+  void PrintSubmissionTable(std::shared_ptr<UniLogger> logger,
       const ZeCollector* collector, const char* device_type) {
-    PTI_ASSERT(collector != nullptr);
-    PTI_ASSERT(device_type != nullptr);
+    UNITRACE_ASSERT(collector != nullptr);
+    UNITRACE_ASSERT(device_type != nullptr);
 
     uint64_t total_duration = CalculateTotalKernelTime(collector);
     if (total_duration > 0) {
@@ -374,10 +374,10 @@ class UniTracer {
   }
 
 #if BUILD_WITH_OPENCL
-  void PrintFunctionTable(std::shared_ptr<Logger> logger,
+  void PrintFunctionTable(std::shared_ptr<UniLogger> logger,
       const ClCollector* collector, const char* device_type) {
-    PTI_ASSERT(collector != nullptr);
-    PTI_ASSERT(device_type != nullptr);
+    UNITRACE_ASSERT(collector != nullptr);
+    UNITRACE_ASSERT(device_type != nullptr);
 
     uint64_t total_duration = CalculateTotalFunctionTime(collector);
     if (total_duration > 0) {
@@ -388,10 +388,10 @@ class UniTracer {
     }
   }
 
-  void PrintKernelTable(std::shared_ptr<Logger> logger,
+  void PrintKernelTable(std::shared_ptr<UniLogger> logger,
       const ClCollector* collector, const char* device_type) {
-    PTI_ASSERT(collector != nullptr);
-    PTI_ASSERT(device_type != nullptr);
+    UNITRACE_ASSERT(collector != nullptr);
+    UNITRACE_ASSERT(device_type != nullptr);
 
     uint64_t total_duration = CalculateTotalKernelTime(collector);
     if (total_duration > 0) {
@@ -402,10 +402,10 @@ class UniTracer {
     }
   }
 
-  void PrintSubmissionTable(std::shared_ptr<Logger> logger,
+  void PrintSubmissionTable(std::shared_ptr<UniLogger> logger,
       const ClCollector* collector, const char* device_type) {
-    PTI_ASSERT(collector != nullptr);
-    PTI_ASSERT(device_type != nullptr);
+    UNITRACE_ASSERT(collector != nullptr);
+    UNITRACE_ASSERT(device_type != nullptr);
 
     uint64_t total_duration = CalculateTotalKernelTime(collector);
     if (total_duration > 0) {
@@ -495,7 +495,7 @@ class UniTracer {
       }
     }
 #endif /* BUILD_WITH_OPENCL */
-    std::shared_ptr<Logger> timing_logger = (stype == "API") ? 
+    std::shared_ptr<UniLogger> timing_logger = (stype == "API") ? 
                               logger_factory_->GetLogger(LOGGER_TYPE_TRACE_HOST_TIMING) :
                               logger_factory_->GetLogger(LOGGER_TYPE_TRACE_DEVICE_TIMING);
     timing_logger->Log(str);
@@ -583,7 +583,7 @@ class UniTracer {
     }
 #endif /* BUILD_WITH_OPENCL */
 
-    std::shared_ptr<Logger> submission_logger = logger_factory_->GetLogger(LOGGER_TYPE_TRACE_DEVICE_SUBMISSION);
+    std::shared_ptr<UniLogger> submission_logger = logger_factory_->GetLogger(LOGGER_TYPE_TRACE_DEVICE_SUBMISSION);
     submission_logger->Log(str);
 
     if (ze_collector != nullptr) {

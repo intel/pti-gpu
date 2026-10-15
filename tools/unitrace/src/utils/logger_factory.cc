@@ -134,7 +134,7 @@ LoggerFactory* LoggerFactory::Create(uint32_t app_id) {
             std::string log_file;
             if (!value.empty() && value == "1") {
                 log_file = utils::GetEnv("UNITRACE_LogFilename");
-                PTI_ASSERT(!log_file.empty());
+                UNITRACE_ASSERT(!log_file.empty());
             }
             instance = std::make_unique<LegacyLoggerFactory>(app_id, log_file);
         }
@@ -147,7 +147,7 @@ LoggerFactory* LoggerFactory::Create(uint32_t app_id) {
     return instance.get();
 }
 
-std::shared_ptr<Logger> LoggerFactory::GetLoggerImpl(LoggerType type, int32_t device_id, bool lazy_flush, bool lock_free, bool binary) const {
+std::shared_ptr<UniLogger> LoggerFactory::GetLoggerImpl(LoggerType type, int32_t device_id, bool lazy_flush, bool lock_free, bool binary) const {
     std::lock_guard<std::mutex> guard(mutex_);
 
     auto key = std::make_tuple(type, device_id, binary);
@@ -156,7 +156,7 @@ std::shared_ptr<Logger> LoggerFactory::GetLoggerImpl(LoggerType type, int32_t de
         return it->second;
     }
     std::string filename = GenerateLogFileName(type, device_id);
-    auto logger = std::make_shared<Logger>(filename, lazy_flush, lock_free, binary);
+    auto logger = std::make_shared<UniLogger>(filename, lazy_flush, lock_free, binary);
     loggers_[key] = logger;
     return logger;
 }
@@ -177,7 +177,7 @@ void LegacyLoggerFactory::AdjustLoggerTypeAndDeviceId(LoggerType& type, int32_t&
     }
 }
 
-std::shared_ptr<Logger> LegacyLoggerFactory::GetDeviceLogger(LoggerType type, int32_t device_id, bool lazy_flush, bool lock_free, bool binary) const{
+std::shared_ptr<UniLogger> LegacyLoggerFactory::GetDeviceLogger(LoggerType type, int32_t device_id, bool lazy_flush, bool lock_free, bool binary) const{
     AdjustLoggerTypeAndDeviceId(type, device_id);
     return GetLoggerImpl(type, device_id, lazy_flush, lock_free, binary);
 }
@@ -350,7 +350,7 @@ std::string LegacyLoggerFactory::GenerateLogFileName(LoggerType type, int32_t de
         case LOGGER_TYPE_KMD_TRACE:
             return GetLogFileName("oskmd.json", app_id_);
         default:
-            PTI_ASSERT(false);
+            UNITRACE_ASSERT(false);
             return "";
     }
 }
@@ -400,7 +400,7 @@ std::vector<std::string> LegacyLoggerFactory::SearchFilesByType(LoggerType type,
     return result;
 }
 
-std::shared_ptr<Logger> ResultDirLoggerFactory::GetDeviceLogger(LoggerType type, int32_t device_id, bool lazy_flush, bool lock_free, bool binary) const{
+std::shared_ptr<UniLogger> ResultDirLoggerFactory::GetDeviceLogger(LoggerType type, int32_t device_id, bool lazy_flush, bool lock_free, bool binary) const{
     return GetLoggerImpl(type, device_id, lazy_flush, lock_free, binary);
 }
 
@@ -509,7 +509,7 @@ std::string ResultDirLoggerFactory::GenerateLogFileName(LoggerType type, int32_t
                 return GetDataDirPath() + "/" + std::to_string(device_id) + "." + metric_group + "." + std::to_string(app_id_) + ".t";
             }
         default:
-            PTI_ASSERT(false);
+            UNITRACE_ASSERT(false);
             return "";
     }
 }

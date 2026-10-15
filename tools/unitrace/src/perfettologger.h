@@ -10,7 +10,7 @@
 // Perfetto protobuf trace emitter (compiled only when BUILD_WITH_PERFETTO=1).
 //
 // Builds TracePacket messages directly and appends one single-packet Trace per
-// event to a binary Logger; concatenated single-packet Traces are a valid trace,
+// event to a binary UniLogger; concatenated single-packet Traces are a valid trace,
 // so merging per-rank files is byte concatenation.
 
 #include <atomic>
@@ -21,14 +21,14 @@
 #include <string>
 #include <vector>
 
-#include "logger.h"
+#include "utils/unilogger.h"
 #include "perfetto_trace.pb.h"
 
 namespace perfetto_emit {
 
-// The binary Logger this emitter appends to. Set once by the ChromeLogger ctor
-inline std::shared_ptr<Logger>& EmitLogger() {
-  static std::shared_ptr<Logger> logger;
+// The binary UniLogger this emitter appends to. Set once by the ChromeLogger ctor
+inline std::shared_ptr<UniLogger>& EmitLogger() {
+  static std::shared_ptr<UniLogger> logger;
   return logger;
 }
 

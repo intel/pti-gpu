@@ -31,7 +31,7 @@
 #include <level_zero/layers/zel_tracing_api.h>
 #include <level_zero/layers/zel_tracing_register_cb.h>
 
-#include "utils.h"
+#include "utils/utils.h"
 #include "ze_event_cache.h"
 #include "utils_ze.h"
 #include "collector_options.h"
@@ -201,7 +201,7 @@ struct ZeMetricQueryPools {
       return;
     }
     auto it2 = free_pool_.find(it->second);
-    PTI_ASSERT(it2 != free_pool_.end());
+    UNITRACE_ASSERT(it2 != free_pool_.end());
     it2->second.push_back(query);
   }
 
@@ -1335,7 +1335,7 @@ class ZeCollector {
       OnZeFunctionFinishCallback fcallback = nullptr,
       void* callback_data = nullptr) {
     ze_api_version_t version = GetZeVersion();
-    PTI_ASSERT(
+    UNITRACE_ASSERT(
         ZE_MAJOR_VERSION(version) >= 1 &&
         ZE_MINOR_VERSION(version) >= 2);
 
@@ -1479,7 +1479,7 @@ class ZeCollector {
     return total_time;
   }
 
-  void PrintKernelsTable(std::shared_ptr<Logger> logger) const {
+  void PrintKernelsTable(std::shared_ptr<UniLogger> logger) const {
     uint64_t total_time = 0;
     std::vector<std::string> knames;
     size_t max_name_size = 0;
@@ -1589,7 +1589,7 @@ class ZeCollector {
 
   }
 
-  void PrintSubmissionTable(std::shared_ptr<Logger> logger) const {
+  void PrintSubmissionTable(std::shared_ptr<UniLogger> logger) const {
     uint64_t total_submit_time = 0;
     uint64_t total_append_time = 0;
     uint64_t total_device_time = 0;
@@ -1667,7 +1667,7 @@ class ZeCollector {
     // For Windows, level-zero might have been unloaded hence calling zelTracerSetEnabled may have undefined behavior, so skip calling it.
 #ifndef _WIN32
     ze_result_t status = ZE_FUNC(zelTracerSetEnabled)(tracer_, false);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 #endif /* _WIN32 */
   }
 
@@ -1684,7 +1684,7 @@ class ZeCollector {
     return total_time;
   }
 
-  void PrintFunctionsTable(std::shared_ptr<Logger> logger) const {
+  void PrintFunctionsTable(std::shared_ptr<UniLogger> logger) const {
     global_host_time_stats_mutex_.lock();
     std::set<std::pair<uint32_t, ZeFunctionTime>, utils::Comparator> sorted_list(
       global_host_time_stats_->begin(), global_host_time_stats_->end());
@@ -1970,8 +1970,8 @@ class ZeCollector {
 
             ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2};
             ze_result_t status = ZE_FUNC(zeDeviceGetProperties)(device, &props);
-            PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-            PTI_ASSERT(props.timerResolution != 0);
+            UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
+            UNITRACE_ASSERT(props.timerResolution != 0);
 
             desc.device_timer_frequency_ = props.timerResolution;
             desc.device_timer_mask_ = (props.kernelTimestampValidBits == 64) ? (std::numeric_limits<uint64_t>::max)() : ((1ull << props.kernelTimestampValidBits) - 1ull);
@@ -2122,8 +2122,8 @@ class ZeCollector {
 
                 ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2};
                 ze_result_t status = ZE_FUNC(zeDeviceGetProperties)(sub_devices[j], &props);
-                PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-                PTI_ASSERT(props.timerResolution != 0);
+                UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
+                UNITRACE_ASSERT(props.timerResolution != 0);
 
                 sub_desc.device_timer_frequency_ = props.timerResolution;
                 sub_desc.device_timer_mask_ = (props.kernelTimestampValidBits == 64) ? (std::numeric_limits<uint64_t>::max)() : ((1ull << props.kernelTimestampValidBits) - 1ull);
@@ -2210,14 +2210,14 @@ class ZeCollector {
       case ZET_VALUE_TYPE_BOOL8:
         return std::to_string(static_cast<uint32_t>(typed_value.value.b8));
       default:
-        PTI_ASSERT(0);
+        UNITRACE_ASSERT(0);
         break;
     }
     return "";   //in case of error returns empty string.
   }
 
   inline static std::string GetMetricUnits(const char* units) {
-    PTI_ASSERT(units != nullptr);
+    UNITRACE_ASSERT(units != nullptr);
 
     std::string result = units;
     if (result.find("null") != std::string::npos) {
@@ -2230,7 +2230,7 @@ class ZeCollector {
   }
 
   static uint32_t GetMetricCount(zet_metric_group_handle_t group) {
-    PTI_ASSERT(group != nullptr);
+    UNITRACE_ASSERT(group != nullptr);
 
     zet_metric_group_properties_t group_props{};
     group_props.stype = ZET_STRUCTURE_TYPE_METRIC_GROUP_PROPERTIES;
@@ -2244,22 +2244,22 @@ class ZeCollector {
   }
 
   static std::vector<std::string> GetMetricNames(zet_metric_group_handle_t group) {
-    PTI_ASSERT(group != nullptr);
+    UNITRACE_ASSERT(group != nullptr);
 
     uint32_t metric_count = GetMetricCount(group);
-    PTI_ASSERT(metric_count > 0);
+    UNITRACE_ASSERT(metric_count > 0);
 
     std::vector<zet_metric_handle_t> metrics(metric_count);
     ze_result_t status = ZE_FUNC(zetMetricGet)(group, &metric_count, metrics.data());
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    PTI_ASSERT(metric_count == metrics.size());
+    UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
+    UNITRACE_ASSERT(metric_count == metrics.size());
 
     std::vector<std::string> names;
     for (auto metric : metrics) {
       zet_metric_properties_t metric_props{
           ZET_STRUCTURE_TYPE_METRIC_PROPERTIES, };
       status = ZE_FUNC(zetMetricGetProperties)(metric, &metric_props);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
       std::string units = GetMetricUnits(metric_props.resultUnits);
       std::string name = metric_props.name;
@@ -2367,7 +2367,7 @@ class ZeCollector {
       devices_mutex_.unlock_shared();
 
       for (auto& profiles : device_kprofiles) {
-        std::shared_ptr<Logger> ktime_logger = logger_factory_->GetDeviceLogger(LOGGER_TYPE_KTIME, profiles.first, true, true);
+        std::shared_ptr<UniLogger> ktime_logger = logger_factory_->GetDeviceLogger(LOGGER_TYPE_KTIME, profiles.first, true, true);
         if (ktime_logger == nullptr) {
               std::cerr << "[ERROR] Failed to create kernel times data file" << std::endl;
               exit(-1);
@@ -2470,7 +2470,7 @@ class ZeCollector {
 
 #else /* LINUX */
 
-    std::shared_ptr<Logger> metric_logger = nullptr;
+    std::shared_ptr<UniLogger> metric_logger = nullptr;
 
     while (1) {
       if (global_kernel_profiles_.empty()) {
@@ -2509,7 +2509,7 @@ class ZeCollector {
           group = it2->second.metric_group_;
           metric_names = GetMetricNames(it2->second.metric_group_);
           devices_mutex_.unlock_shared();
-          PTI_ASSERT(!metric_names.empty());
+          UNITRACE_ASSERT(!metric_names.empty());
 
           metric_logger = logger_factory_->GetDeviceLogger(LOGGER_TYPE_METRICS_QUERY, did, true, true);
           if (metric_logger == nullptr) {
@@ -2571,7 +2571,7 @@ class ZeCollector {
                               (with_sub_device ? "SubDeviceId, " : "") + counter_header;
             for (uint32_t i = 0; i < num_samples; ++i) {
               uint32_t size = samples[i];
-              PTI_ASSERT(size == metric_names.size());
+              UNITRACE_ASSERT(size == metric_names.size());
 
               // A sample per sub-device, i being the sub-device
               if (with_sub_device) {
@@ -2748,7 +2748,7 @@ class ZeCollector {
     uint64_t kernel_start = 0, kernel_end = 0;
     GetHostTime(command, timestamp, kernel_start, kernel_end);
 
-    PTI_ASSERT(kernel_start <= kernel_end);
+    UNITRACE_ASSERT(kernel_start <= kernel_end);
 
     if (options_.device_timing || options_.kernel_submission) {
       local_device_submissions_.CollectKernelCommandTimeStats(command, kernel_start, kernel_end, tile);
@@ -2834,12 +2834,12 @@ class ZeCollector {
       if (command->implicit_scaling_) { // Implicit Scaling
         uint32_t count = 0;
         ze_result_t status = ZE_FUNC(zeEventQueryTimestampsExp)(command->event_, command->device_, &count, nullptr);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-        PTI_ASSERT(count > 0);
+        UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
+        UNITRACE_ASSERT(count > 0);
 
         std::vector<ze_kernel_timestamp_result_t> timestamps(count);
         status = ZE_FUNC(zeEventQueryTimestampsExp)(command->event_, command->device_, &count, timestamps.data());
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
         if (options_.metric_query || options_.metric_stream) {
           for (uint32_t i = 0; i < count; i++) {
@@ -3135,7 +3135,7 @@ class ZeCollector {
     ze_result_t status;
 
     status = ZE_FUNC(zeDeviceGetGlobalTimestamps)(device, &host_timestamp, &device_timestamp);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
     for (uint32_t i = 0; i < count; i++) {
       ze_command_list_handle_t cmdlist = cmdlists[i];
@@ -3234,7 +3234,7 @@ class ZeCollector {
 
     ze_event_pool_desc_t* profiling_desc = new ze_event_pool_desc_t;
     UniMemory::ExitIfOutOfMemory((void *)(profiling_desc));
-    PTI_ASSERT(profiling_desc != nullptr);
+    UNITRACE_ASSERT(profiling_desc != nullptr);
     profiling_desc->stype = desc->stype;
     profiling_desc->pNext = desc->pNext;
     profiling_desc->flags = desc->flags;
@@ -3412,7 +3412,7 @@ class ZeCollector {
       ze_fence_host_synchronize_params_t *params,
       ze_result_t result, void *global_data, void ** /* instance_data */, std::vector<uint64_t> *kids) {
     if (result == ZE_RESULT_SUCCESS) {
-      PTI_ASSERT(*(params->phFence) != nullptr);
+      UNITRACE_ASSERT(*(params->phFence) != nullptr);
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       collector->ProcessCommandsSubmittedOnFenceSynchronization(*(params->phFence), kids);
     }
@@ -3527,7 +3527,7 @@ class ZeCollector {
 
     if (signal_event == nullptr) {
       signal_event = collector->event_cache_.GetEvent(context);
-      PTI_ASSERT(signal_event != nullptr);
+      UNITRACE_ASSERT(signal_event != nullptr);
     } else {
       collector->events_mutex_.lock();
       if (collector->counter_based_events_.find(signal_event) != collector->counter_based_events_.end()) {
@@ -3552,20 +3552,20 @@ class ZeCollector {
 
       auto it2 = devices_->find(device);
 
-      PTI_ASSERT(it2 != devices_->end());
+      UNITRACE_ASSERT(it2 != devices_->end());
       ze_instance_data.query_ = collector->query_pools_.GetQuery(context, device, it2->second.metric_group_);
 
       devices_mutex_.unlock_shared();
 
       status = ZE_FUNC(zetCommandListAppendMetricQueryBegin)(command_list, ze_instance_data.query_);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
     }
 
     uint64_t host_timestamp;
     uint64_t device_timestamp;  // in ticks
 
     status = ZE_FUNC(zeDeviceGetGlobalTimestamps)(device, &host_timestamp, &device_timestamp);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
     ze_instance_data.timestamp_host = host_timestamp;
     ze_instance_data.timestamp_device = device_timestamp;
@@ -3577,7 +3577,7 @@ class ZeCollector {
     uint64_t device_timestamp;  // in ticks
 
     status = ZE_FUNC(zeDeviceGetGlobalTimestamps)(cl->device_, &host_timestamp, &device_timestamp);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
     ze_instance_data.timestamp_host = host_timestamp;
     ze_instance_data.timestamp_device = device_timestamp;
@@ -3660,7 +3660,7 @@ class ZeCollector {
 
       if (ze_instance_data.in_order_counter_event_ && it->second->in_order_) {
         ze_result_t status = ZE_FUNC(zeCommandListAppendSignalEvent)(command_list, ze_instance_data.in_order_counter_event_);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
       }
 
       if (query != nullptr) {
@@ -3668,7 +3668,7 @@ class ZeCollector {
 
         ze_event_handle_t metric_query_event = event_cache_.GetEvent(context);
         ze_result_t status = ZE_FUNC(zetCommandListAppendMetricQueryEnd)(command_list, query, metric_query_event, 0, nullptr);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
         desc_query->metric_query_event_ = metric_query_event;
         desc_query->metric_query_ = query;
         desc_query->device_ = it->second->device_;
@@ -3810,7 +3810,7 @@ class ZeCollector {
 
       if (ze_instance_data.in_order_counter_event_ && it->second->in_order_) {
         ze_result_t status = ZE_FUNC(zeCommandListAppendSignalEvent)(command_list, ze_instance_data.in_order_counter_event_);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
       }
 
       if (query != nullptr) {
@@ -3818,7 +3818,7 @@ class ZeCollector {
 
         ze_event_handle_t metric_query_event = event_cache_.GetEvent(context);
         ze_result_t status = ZE_FUNC(zetCommandListAppendMetricQueryEnd)(command_list, query, metric_query_event, 0, nullptr);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
         desc_query->metric_query_event_ = metric_query_event;
         desc_query->metric_query_ = query;
         desc_query->device_ = it->second->device_;
@@ -3945,7 +3945,7 @@ class ZeCollector {
 
       if (ze_instance_data.in_order_counter_event_ && it->second->in_order_) {
         ze_result_t status = ZE_FUNC(zeCommandListAppendSignalEvent)(command_list, ze_instance_data.in_order_counter_event_);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
       }
 
       if (query != nullptr) {
@@ -3953,7 +3953,7 @@ class ZeCollector {
 
         ze_event_handle_t metric_query_event = event_cache_.GetEvent(context);
         ze_result_t status = ZE_FUNC(zetCommandListAppendMetricQueryEnd)(command_list, query, metric_query_event, 0, nullptr);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
         desc_query->metric_query_ = query;
         desc_query->metric_query_event_ = metric_query_event;
       }
@@ -4082,7 +4082,7 @@ class ZeCollector {
 
       if (ze_instance_data.in_order_counter_event_ && it->second->in_order_) {
         ze_result_t status = ZE_FUNC(zeCommandListAppendSignalEvent)(command_list, ze_instance_data.in_order_counter_event_);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
       }
 
       if (query != nullptr) {
@@ -4090,7 +4090,7 @@ class ZeCollector {
 
         ze_event_handle_t metric_query_event = event_cache_.GetEvent(context);
         ze_result_t status = ZE_FUNC(zetCommandListAppendMetricQueryEnd)(command_list, query, metric_query_event, 0, nullptr);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
         desc_query->metric_query_ = query;
         desc_query->metric_query_event_ = metric_query_event;
       }
@@ -4205,7 +4205,7 @@ class ZeCollector {
 
       if (ze_instance_data.in_order_counter_event_ && it->second->in_order_) {
         ze_result_t status = ZE_FUNC(zeCommandListAppendSignalEvent)(command_list, ze_instance_data.in_order_counter_event_);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
       }
 
       if (query != nullptr) {
@@ -4215,7 +4215,7 @@ class ZeCollector {
         desc_query->metric_query_ = query;
         desc_query->metric_query_event_ = metric_query_event;
         ze_result_t status = ZE_FUNC(zetCommandListAppendMetricQueryEnd)(command_list, query, metric_query_event, 0, nullptr);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
       }
 
       uint64_t host_timestamp = ze_instance_data.timestamp_host;
@@ -4745,7 +4745,7 @@ class ZeCollector {
     uint64_t device_timestamp = 0;
 
     ze_result_t status = ZE_FUNC(zeDeviceGetGlobalTimestamps)(device, &host_timestamp, &device_timestamp);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
     // Get graph captured commands and clone them for this execution
     graphs_mutex_.lock_shared();
@@ -4981,7 +4981,7 @@ class ZeCollector {
     if (src_context != nullptr && src != nullptr) {
       ze_memory_allocation_properties_t props{ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES,};
       ze_result_t status = ZE_FUNC(zeMemGetAllocProperties)(src_context, src, &props, nullptr);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
       switch (props.type) {
         case ZE_MEMORY_TYPE_HOST:
@@ -5014,7 +5014,7 @@ class ZeCollector {
     if (src_context != nullptr && src != nullptr) {
       ze_memory_allocation_properties_t props{ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES,};
       ze_result_t status = ZE_FUNC(zeMemGetAllocProperties)(src_context, src, &props, nullptr);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
       switch (props.type) {
         case ZE_MEMORY_TYPE_HOST:
@@ -5040,7 +5040,7 @@ class ZeCollector {
     if (dst_context != nullptr && dst != nullptr) {
       ze_memory_allocation_properties_t props{ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES,};
       ze_result_t status = ZE_FUNC(zeMemGetAllocProperties)(dst_context, dst, &props, nullptr);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
       switch (props.type) {
         case ZE_MEMORY_TYPE_HOST:
@@ -5572,7 +5572,7 @@ class ZeCollector {
       void* global_data,
       void** /* instance_data */) {
     if (result == ZE_RESULT_SUCCESS) {
-      PTI_ASSERT(**params->pphCommandList != nullptr);
+      UNITRACE_ASSERT(**params->pphCommandList != nullptr);
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       ze_device_handle_t* hDevice = params->phDevice;
       if (hDevice == nullptr) {
@@ -5599,7 +5599,7 @@ class ZeCollector {
     ze_result_t result, void* global_data, void** /* instance_data */) {
 
     if (result == ZE_RESULT_SUCCESS) {
-      PTI_ASSERT(*params->phCommandList != nullptr);
+      UNITRACE_ASSERT(*params->phCommandList != nullptr);
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       collector->ProcessCommandsSubmitted(nullptr);
       collector->DestroyCommandList(*params->phCommandList);
@@ -5663,7 +5663,7 @@ class ZeCollector {
 
   static void OnExitCommandListReset(ze_command_list_reset_params_t* params, ze_result_t result, void* global_data, void** /* instance_data */) {
     if (result == ZE_RESULT_SUCCESS) {
-      PTI_ASSERT(*params->phCommandList != nullptr);
+      UNITRACE_ASSERT(*params->phCommandList != nullptr);
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       collector->ProcessCommandsSubmitted(nullptr);
       collector->ResetCommandList(*params->phCommandList);
@@ -5918,7 +5918,7 @@ typedef struct _zex_kernel_register_file_size_exp_t {
           char* kname = (char*) malloc(kname_size);
           if (kname != nullptr) {
             status = ZE_FUNC(zeKernelGetName)(kernel, &kname_size, kname);
-            PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+            UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
             desc.name_ = std::string(kname);
             free(kname);
           }
@@ -5940,7 +5940,7 @@ typedef struct _zex_kernel_register_file_size_exp_t {
       kprops.pNext = (void *)&regsize;
 
       status = ZE_FUNC(zeKernelGetProperties)(kernel, &kprops);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
       desc.simd_width_ = kprops.maxSubgroupSize;
       desc.nargs_ = kprops.numKernelArgs;
       desc.nsubgrps_ = kprops.maxNumSubgroups;
@@ -5993,7 +5993,7 @@ typedef struct _zex_kernel_register_file_size_exp_t {
       if (collector->options_.stall_sampling && base_addr != 0 && !desc.skip_) {
         // Not lock-free: concurrent zeKernelCreate calls would splice records. Lazy flush:
         // an abnormal exit loses at most a partial last record, which the reader drops.
-        std::shared_ptr<Logger> kprops_logger =
+        std::shared_ptr<UniLogger> kprops_logger =
             collector->logger_factory_->GetDeviceLogger(LOGGER_TYPE_KPROPS, did, true, false);
         if (kprops_logger) {
           // One line each: quoted mangled name (which has no quote or newline to escape),
@@ -6023,7 +6023,7 @@ typedef struct _zex_kernel_register_file_size_exp_t {
         kernel_command_properties_mutex_.lock();
 
         auto it = active_kernel_properties_->find(*(params->phKernel));
-        PTI_ASSERT(it != active_kernel_properties_->end());
+        UNITRACE_ASSERT(it != active_kernel_properties_->end());
         if ((it->second.group_size_.x != group_size.x) || (it->second.group_size_.y != group_size.y) ||
           (it->second.group_size_.z != group_size.z)) {
           // new group size
@@ -6331,8 +6331,8 @@ typedef struct _zex_kernel_register_file_size_exp_t {
 
  private: // Data
   LoggerFactory* logger_factory_;
-  std::shared_ptr<Logger> logger_;
-  std::shared_ptr<Logger> logger_device_timeline_;
+  std::shared_ptr<UniLogger> logger_;
+  std::shared_ptr<UniLogger> logger_device_timeline_;
   CollectorOptions options_;
   OnZeKernelFinishCallback kcallback_ = nullptr;
   OnZeFunctionFinishCallback fcallback_ = nullptr;

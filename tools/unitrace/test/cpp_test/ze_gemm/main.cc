@@ -10,7 +10,7 @@
 #include <chrono>
 #include <iostream>
 
-#include "ze_utils.h"
+#include "utils/ze_utils.h"
 
 #define ALIGN 64
 

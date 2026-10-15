@@ -11,7 +11,15 @@ endif()
 
 project(UnitraceTest C CXX)
 
-find_package(PythonInterp 3.9 REQUIRED)
+# Unitrace's own cmake modules, included once so every workload can use them:
+# the pinned Level Zero headers (HeaderFetch) and, on Windows, the loader
+# import library (LevelZero).
+include("${PROJECT_SOURCE_DIR}/../../cmake/HeaderFetch.cmake")
+if(WIN32)
+  include("${PROJECT_SOURCE_DIR}/../../cmake/LevelZero.cmake")
+endif()
+
+find_package(Python 3.9 COMPONENTS Interpreter REQUIRED)
 
 # Some compiler distributions ship an IntelSYCLConfig.cmake whose SYCL
 # feature test fails even though icpx -fsycl works. With this option ON,

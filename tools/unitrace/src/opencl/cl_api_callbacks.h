@@ -13,11 +13,11 @@ static thread_local cl_int current_error = CL_SUCCESS;
 
 static void clGetSupportedImageFormatsOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clGetSupportedImageFormats* params =
     reinterpret_cast<const cl_params_clGetSupportedImageFormats*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -42,7 +42,7 @@ static void clGetSupportedImageFormatsOnEnter(
 static void clGetSupportedImageFormatsOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -54,7 +54,7 @@ static void clGetSupportedImageFormatsOnExit(
   log_msg += " [" + std::to_string(end - start) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -66,11 +66,11 @@ static void clGetSupportedImageFormatsOnExit(
 
 static void clGetKernelInfoOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clGetKernelInfo* params =
     reinterpret_cast<const cl_params_clGetKernelInfo*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -94,7 +94,7 @@ static void clGetKernelInfoOnEnter(
 static void clGetKernelInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -106,7 +106,7 @@ static void clGetKernelInfoOnExit(
   log_msg += " [" + std::to_string(end - start) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -118,11 +118,11 @@ static void clGetKernelInfoOnExit(
 
 static void clCompileProgramOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clCompileProgram* params =
     reinterpret_cast<const cl_params_clCompileProgram*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -156,7 +156,7 @@ static void clCompileProgramOnEnter(
 static void clCompileProgramOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -168,7 +168,7 @@ static void clCompileProgramOnExit(
   log_msg += " [" + std::to_string(end - start) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -180,11 +180,11 @@ static void clCompileProgramOnExit(
 
 static void clSetEventCallbackOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clSetEventCallback* params =
     reinterpret_cast<const cl_params_clSetEventCallback*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -208,7 +208,7 @@ static void clSetEventCallbackOnEnter(
 static void clSetEventCallbackOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -220,7 +220,7 @@ static void clSetEventCallbackOnExit(
   log_msg += " [" + std::to_string(end - start) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -232,11 +232,11 @@ static void clSetEventCallbackOnExit(
 
 static void clUnloadPlatformCompilerOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clUnloadPlatformCompiler* params =
     reinterpret_cast<const cl_params_clUnloadPlatformCompiler*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -256,7 +256,7 @@ static void clUnloadPlatformCompilerOnEnter(
 static void clUnloadPlatformCompilerOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -268,7 +268,7 @@ static void clUnloadPlatformCompilerOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -280,11 +280,11 @@ static void clUnloadPlatformCompilerOnExit(
 
 static void clGetPlatformIDsOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clGetPlatformIDs* params =
     reinterpret_cast<const cl_params_clGetPlatformIDs*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -306,7 +306,7 @@ static void clGetPlatformIDsOnEnter(
 static void clGetPlatformIDsOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -318,7 +318,7 @@ static void clGetPlatformIDsOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -330,11 +330,11 @@ static void clGetPlatformIDsOnExit(
 
 static void clUnloadCompilerOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clUnloadCompiler* params =
     reinterpret_cast<const cl_params_clUnloadCompiler*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -353,7 +353,7 @@ static void clUnloadCompilerOnEnter(
 static void clUnloadCompilerOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -365,7 +365,7 @@ static void clUnloadCompilerOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -377,11 +377,11 @@ static void clUnloadCompilerOnExit(
 
 static void clEnqueueBarrierWithWaitListOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueBarrierWithWaitList* params =
     reinterpret_cast<const cl_params_clEnqueueBarrierWithWaitList*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -404,7 +404,7 @@ static void clEnqueueBarrierWithWaitListOnEnter(
 static void clEnqueueBarrierWithWaitListOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -416,7 +416,7 @@ static void clEnqueueBarrierWithWaitListOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -428,11 +428,11 @@ static void clEnqueueBarrierWithWaitListOnExit(
 
 static void clEnqueueMapBufferOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueMapBuffer* params =
     reinterpret_cast<const cl_params_clEnqueueMapBuffer*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -465,7 +465,7 @@ static void clEnqueueMapBufferOnEnter(
 static void clEnqueueMapBufferOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -479,14 +479,14 @@ static void clEnqueueMapBufferOnExit(
   const cl_params_clEnqueueMapBuffer* params =
     reinterpret_cast<const cl_params_clEnqueueMapBuffer*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   void ** result =
     reinterpret_cast<void **>(data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
-  PTI_ASSERT(*(params->errcodeRet) != nullptr);
+  UNITRACE_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
   log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
@@ -497,11 +497,11 @@ static void clEnqueueMapBufferOnExit(
 
 static void clCreateImage3DOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clCreateImage3D* params =
     reinterpret_cast<const cl_params_clCreateImage3D*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -534,7 +534,7 @@ static void clCreateImage3DOnEnter(
 static void clCreateImage3DOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -548,14 +548,14 @@ static void clCreateImage3DOnExit(
   const cl_params_clCreateImage3D* params =
     reinterpret_cast<const cl_params_clCreateImage3D*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
-  PTI_ASSERT(*(params->errcodeRet) != nullptr);
+  UNITRACE_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
   log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
@@ -566,11 +566,11 @@ static void clCreateImage3DOnExit(
 
 static void clGetKernelArgInfoOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clGetKernelArgInfo* params =
     reinterpret_cast<const cl_params_clGetKernelArgInfo*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -595,7 +595,7 @@ static void clGetKernelArgInfoOnEnter(
 static void clGetKernelArgInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -607,7 +607,7 @@ static void clGetKernelArgInfoOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -619,11 +619,11 @@ static void clGetKernelArgInfoOnExit(
 
 static void clEnqueueSVMFreeOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueSVMFree* params =
     reinterpret_cast<const cl_params_clEnqueueSVMFree*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -650,7 +650,7 @@ static void clEnqueueSVMFreeOnEnter(
 static void clEnqueueSVMFreeOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -662,7 +662,7 @@ static void clEnqueueSVMFreeOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -674,11 +674,11 @@ static void clEnqueueSVMFreeOnExit(
 
 static void clEnqueueCopyImageToBufferOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueCopyImageToBuffer* params =
     reinterpret_cast<const cl_params_clEnqueueCopyImageToBuffer*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -706,7 +706,7 @@ static void clEnqueueCopyImageToBufferOnEnter(
 static void clEnqueueCopyImageToBufferOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -718,7 +718,7 @@ static void clEnqueueCopyImageToBufferOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -730,11 +730,11 @@ static void clEnqueueCopyImageToBufferOnExit(
 
 static void clGetContextInfoOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clGetContextInfo* params =
     reinterpret_cast<const cl_params_clGetContextInfo*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -758,7 +758,7 @@ static void clGetContextInfoOnEnter(
 static void clGetContextInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -770,7 +770,7 @@ static void clGetContextInfoOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -782,11 +782,11 @@ static void clGetContextInfoOnExit(
 
 static void clRetainCommandQueueOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clRetainCommandQueue* params =
     reinterpret_cast<const cl_params_clRetainCommandQueue*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -806,7 +806,7 @@ static void clRetainCommandQueueOnEnter(
 static void clRetainCommandQueueOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -818,7 +818,7 @@ static void clRetainCommandQueueOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -830,11 +830,11 @@ static void clRetainCommandQueueOnExit(
 
 static void clEnqueueWriteImageOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueWriteImage* params =
     reinterpret_cast<const cl_params_clEnqueueWriteImage*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -864,7 +864,7 @@ static void clEnqueueWriteImageOnEnter(
 static void clEnqueueWriteImageOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -876,7 +876,7 @@ static void clEnqueueWriteImageOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -888,11 +888,11 @@ static void clEnqueueWriteImageOnExit(
 
 static void clEnqueueWaitForEventsOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueWaitForEvents* params =
     reinterpret_cast<const cl_params_clEnqueueWaitForEvents*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -914,7 +914,7 @@ static void clEnqueueWaitForEventsOnEnter(
 static void clEnqueueWaitForEventsOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -926,7 +926,7 @@ static void clEnqueueWaitForEventsOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -938,11 +938,11 @@ static void clEnqueueWaitForEventsOnExit(
 
 static void clEnqueueSVMUnmapOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueSVMUnmap* params =
     reinterpret_cast<const cl_params_clEnqueueSVMUnmap*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -966,7 +966,7 @@ static void clEnqueueSVMUnmapOnEnter(
 static void clEnqueueSVMUnmapOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -978,7 +978,7 @@ static void clEnqueueSVMUnmapOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -990,11 +990,11 @@ static void clEnqueueSVMUnmapOnExit(
 
 static void clCreateProgramWithBinaryOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clCreateProgramWithBinary* params =
     reinterpret_cast<const cl_params_clCreateProgramWithBinary*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -1024,7 +1024,7 @@ static void clCreateProgramWithBinaryOnEnter(
 static void clCreateProgramWithBinaryOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -1038,14 +1038,14 @@ static void clCreateProgramWithBinaryOnExit(
   const cl_params_clCreateProgramWithBinary* params =
     reinterpret_cast<const cl_params_clCreateProgramWithBinary*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   cl_program* result =
     reinterpret_cast<cl_program*>(data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
-  PTI_ASSERT(*(params->errcodeRet) != nullptr);
+  UNITRACE_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
   log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
@@ -1056,11 +1056,11 @@ static void clCreateProgramWithBinaryOnExit(
 
 static void clEnqueueFillImageOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueFillImage* params =
     reinterpret_cast<const cl_params_clEnqueueFillImage*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -1087,7 +1087,7 @@ static void clEnqueueFillImageOnEnter(
 static void clEnqueueFillImageOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -1099,7 +1099,7 @@ static void clEnqueueFillImageOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -1111,11 +1111,11 @@ static void clEnqueueFillImageOnExit(
 
 static void clCreateFromGLTexture2DOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clCreateFromGLTexture2D* params =
     reinterpret_cast<const cl_params_clCreateFromGLTexture2D*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -1144,7 +1144,7 @@ static void clCreateFromGLTexture2DOnEnter(
 static void clCreateFromGLTexture2DOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -1158,14 +1158,14 @@ static void clCreateFromGLTexture2DOnExit(
   const cl_params_clCreateFromGLTexture2D* params =
     reinterpret_cast<const cl_params_clCreateFromGLTexture2D*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
-  PTI_ASSERT(*(params->errcodeRet) != nullptr);
+  UNITRACE_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
   log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
@@ -1176,11 +1176,11 @@ static void clCreateFromGLTexture2DOnExit(
 
 static void clSetKernelExecInfoOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clSetKernelExecInfo* params =
     reinterpret_cast<const cl_params_clSetKernelExecInfo*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -1203,7 +1203,7 @@ static void clSetKernelExecInfoOnEnter(
 static void clSetKernelExecInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -1215,7 +1215,7 @@ static void clSetKernelExecInfoOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -1227,11 +1227,11 @@ static void clSetKernelExecInfoOnExit(
 
 static void clEnqueueReleaseGLObjectsOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueReleaseGLObjects* params =
     reinterpret_cast<const cl_params_clEnqueueReleaseGLObjects*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -1256,7 +1256,7 @@ static void clEnqueueReleaseGLObjectsOnEnter(
 static void clEnqueueReleaseGLObjectsOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -1268,7 +1268,7 @@ static void clEnqueueReleaseGLObjectsOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -1280,11 +1280,11 @@ static void clEnqueueReleaseGLObjectsOnExit(
 
 static void clGetDeviceIDsOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clGetDeviceIDs* params =
     reinterpret_cast<const cl_params_clGetDeviceIDs*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -1308,7 +1308,7 @@ static void clGetDeviceIDsOnEnter(
 static void clGetDeviceIDsOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -1320,7 +1320,7 @@ static void clGetDeviceIDsOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -1332,11 +1332,11 @@ static void clGetDeviceIDsOnExit(
 
 static void clReleaseMemObjectOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clReleaseMemObject* params =
     reinterpret_cast<const cl_params_clReleaseMemObject*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -1356,7 +1356,7 @@ static void clReleaseMemObjectOnEnter(
 static void clReleaseMemObjectOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -1368,7 +1368,7 @@ static void clReleaseMemObjectOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -1380,11 +1380,11 @@ static void clReleaseMemObjectOnExit(
 
 static void clGetGLObjectInfoOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clGetGLObjectInfo* params =
     reinterpret_cast<const cl_params_clGetGLObjectInfo*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -1406,7 +1406,7 @@ static void clGetGLObjectInfoOnEnter(
 static void clGetGLObjectInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -1418,7 +1418,7 @@ static void clGetGLObjectInfoOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -1430,11 +1430,11 @@ static void clGetGLObjectInfoOnExit(
 
 static void clCreateFromGLRenderbufferOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clCreateFromGLRenderbuffer* params =
     reinterpret_cast<const cl_params_clCreateFromGLRenderbuffer*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -1461,7 +1461,7 @@ static void clCreateFromGLRenderbufferOnEnter(
 static void clCreateFromGLRenderbufferOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -1475,14 +1475,14 @@ static void clCreateFromGLRenderbufferOnExit(
   const cl_params_clCreateFromGLRenderbuffer* params =
     reinterpret_cast<const cl_params_clCreateFromGLRenderbuffer*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
-  PTI_ASSERT(*(params->errcodeRet) != nullptr);
+  UNITRACE_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
   log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
@@ -1493,11 +1493,11 @@ static void clCreateFromGLRenderbufferOnExit(
 
 static void clReleaseContextOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clReleaseContext* params =
     reinterpret_cast<const cl_params_clReleaseContext*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -1517,7 +1517,7 @@ static void clReleaseContextOnEnter(
 static void clReleaseContextOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -1529,7 +1529,7 @@ static void clReleaseContextOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -1541,11 +1541,11 @@ static void clReleaseContextOnExit(
 
 static void clEnqueueUnmapMemObjectOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueUnmapMemObject* params =
     reinterpret_cast<const cl_params_clEnqueueUnmapMemObject*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -1570,7 +1570,7 @@ static void clEnqueueUnmapMemObjectOnEnter(
 static void clEnqueueUnmapMemObjectOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -1582,7 +1582,7 @@ static void clEnqueueUnmapMemObjectOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -1594,11 +1594,11 @@ static void clEnqueueUnmapMemObjectOnExit(
 
 static void clCreateContextOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clCreateContext* params =
     reinterpret_cast<const cl_params_clCreateContext*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -1627,7 +1627,7 @@ static void clCreateContextOnEnter(
 static void clCreateContextOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -1641,14 +1641,14 @@ static void clCreateContextOnExit(
   const cl_params_clCreateContext* params =
     reinterpret_cast<const cl_params_clCreateContext*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   cl_context* result =
     reinterpret_cast<cl_context*>(data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
-  PTI_ASSERT(*(params->errcodeRet) != nullptr);
+  UNITRACE_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
   log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
@@ -1659,11 +1659,11 @@ static void clCreateContextOnExit(
 
 static void clGetHostTimerOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clGetHostTimer* params =
     reinterpret_cast<const cl_params_clGetHostTimer*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -1684,7 +1684,7 @@ static void clGetHostTimerOnEnter(
 static void clGetHostTimerOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -1696,7 +1696,7 @@ static void clGetHostTimerOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -1708,11 +1708,11 @@ static void clGetHostTimerOnExit(
 
 static void clGetPipeInfoOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clGetPipeInfo* params =
     reinterpret_cast<const cl_params_clGetPipeInfo*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -1736,7 +1736,7 @@ static void clGetPipeInfoOnEnter(
 static void clGetPipeInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -1748,7 +1748,7 @@ static void clGetPipeInfoOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -1760,11 +1760,11 @@ static void clGetPipeInfoOnExit(
 
 static void clEnqueueAcquireGLObjectsOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueAcquireGLObjects* params =
     reinterpret_cast<const cl_params_clEnqueueAcquireGLObjects*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -1789,7 +1789,7 @@ static void clEnqueueAcquireGLObjectsOnEnter(
 static void clEnqueueAcquireGLObjectsOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -1801,7 +1801,7 @@ static void clEnqueueAcquireGLObjectsOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -1813,11 +1813,11 @@ static void clEnqueueAcquireGLObjectsOnExit(
 
 static void clGetKernelWorkGroupInfoOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clGetKernelWorkGroupInfo* params =
     reinterpret_cast<const cl_params_clGetKernelWorkGroupInfo*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -1842,7 +1842,7 @@ static void clGetKernelWorkGroupInfoOnEnter(
 static void clGetKernelWorkGroupInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -1854,7 +1854,7 @@ static void clGetKernelWorkGroupInfoOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -1866,11 +1866,11 @@ static void clGetKernelWorkGroupInfoOnExit(
 
 static void clCreateImage2DOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clCreateImage2D* params =
     reinterpret_cast<const cl_params_clCreateImage2D*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -1901,7 +1901,7 @@ static void clCreateImage2DOnEnter(
 static void clCreateImage2DOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -1915,14 +1915,14 @@ static void clCreateImage2DOnExit(
   const cl_params_clCreateImage2D* params =
     reinterpret_cast<const cl_params_clCreateImage2D*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
-  PTI_ASSERT(*(params->errcodeRet) != nullptr);
+  UNITRACE_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
   log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
@@ -1933,11 +1933,11 @@ static void clCreateImage2DOnExit(
 
 static void clCreateContextFromTypeOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clCreateContextFromType* params =
     reinterpret_cast<const cl_params_clCreateContextFromType*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -1965,7 +1965,7 @@ static void clCreateContextFromTypeOnEnter(
 static void clCreateContextFromTypeOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -1979,14 +1979,14 @@ static void clCreateContextFromTypeOnExit(
   const cl_params_clCreateContextFromType* params =
     reinterpret_cast<const cl_params_clCreateContextFromType*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   cl_context* result =
     reinterpret_cast<cl_context*>(data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
-  PTI_ASSERT(*(params->errcodeRet) != nullptr);
+  UNITRACE_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
   log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
@@ -1997,11 +1997,11 @@ static void clCreateContextFromTypeOnExit(
 
 static void clRetainProgramOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clRetainProgram* params =
     reinterpret_cast<const cl_params_clRetainProgram*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -2021,7 +2021,7 @@ static void clRetainProgramOnEnter(
 static void clRetainProgramOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -2033,7 +2033,7 @@ static void clRetainProgramOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -2045,11 +2045,11 @@ static void clRetainProgramOnExit(
 
 static void clCreateProgramWithSourceOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clCreateProgramWithSource* params =
     reinterpret_cast<const cl_params_clCreateProgramWithSource*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -2077,7 +2077,7 @@ static void clCreateProgramWithSourceOnEnter(
 static void clCreateProgramWithSourceOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -2091,14 +2091,14 @@ static void clCreateProgramWithSourceOnExit(
   const cl_params_clCreateProgramWithSource* params =
     reinterpret_cast<const cl_params_clCreateProgramWithSource*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   cl_program* result =
     reinterpret_cast<cl_program*>(data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
-  PTI_ASSERT(*(params->errcodeRet) != nullptr);
+  UNITRACE_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
   log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
@@ -2109,11 +2109,11 @@ static void clCreateProgramWithSourceOnExit(
 
 static void clGetMemObjectInfoOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clGetMemObjectInfo* params =
     reinterpret_cast<const cl_params_clGetMemObjectInfo*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -2137,7 +2137,7 @@ static void clGetMemObjectInfoOnEnter(
 static void clGetMemObjectInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -2149,7 +2149,7 @@ static void clGetMemObjectInfoOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -2161,11 +2161,11 @@ static void clGetMemObjectInfoOnExit(
 
 static void clLinkProgramOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clLinkProgram* params =
     reinterpret_cast<const cl_params_clLinkProgram*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -2203,7 +2203,7 @@ static void clLinkProgramOnEnter(
 static void clLinkProgramOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -2217,14 +2217,14 @@ static void clLinkProgramOnExit(
   const cl_params_clLinkProgram* params =
     reinterpret_cast<const cl_params_clLinkProgram*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   cl_program* result =
     reinterpret_cast<cl_program*>(data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
-  PTI_ASSERT(*(params->errcodeRet) != nullptr);
+  UNITRACE_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
   log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
@@ -2235,11 +2235,11 @@ static void clLinkProgramOnExit(
 
 static void clCreateSamplerWithPropertiesOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clCreateSamplerWithProperties* params =
     reinterpret_cast<const cl_params_clCreateSamplerWithProperties*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -2265,7 +2265,7 @@ static void clCreateSamplerWithPropertiesOnEnter(
 static void clCreateSamplerWithPropertiesOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -2279,14 +2279,14 @@ static void clCreateSamplerWithPropertiesOnExit(
   const cl_params_clCreateSamplerWithProperties* params =
     reinterpret_cast<const cl_params_clCreateSamplerWithProperties*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   cl_sampler* result =
     reinterpret_cast<cl_sampler*>(data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
-  PTI_ASSERT(*(params->errcodeRet) != nullptr);
+  UNITRACE_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
   log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
@@ -2297,11 +2297,11 @@ static void clCreateSamplerWithPropertiesOnExit(
 
 static void clRetainSamplerOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clRetainSampler* params =
     reinterpret_cast<const cl_params_clRetainSampler*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -2321,7 +2321,7 @@ static void clRetainSamplerOnEnter(
 static void clRetainSamplerOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -2333,7 +2333,7 @@ static void clRetainSamplerOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -2345,11 +2345,11 @@ static void clRetainSamplerOnExit(
 
 static void clCreateFromGLTexture3DOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clCreateFromGLTexture3D* params =
     reinterpret_cast<const cl_params_clCreateFromGLTexture3D*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -2378,7 +2378,7 @@ static void clCreateFromGLTexture3DOnEnter(
 static void clCreateFromGLTexture3DOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -2392,14 +2392,14 @@ static void clCreateFromGLTexture3DOnExit(
   const cl_params_clCreateFromGLTexture3D* params =
     reinterpret_cast<const cl_params_clCreateFromGLTexture3D*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
-  PTI_ASSERT(*(params->errcodeRet) != nullptr);
+  UNITRACE_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
   log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
@@ -2410,11 +2410,11 @@ static void clCreateFromGLTexture3DOnExit(
 
 static void clEnqueueMapImageOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueMapImage* params =
     reinterpret_cast<const cl_params_clEnqueueMapImage*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -2449,7 +2449,7 @@ static void clEnqueueMapImageOnEnter(
 static void clEnqueueMapImageOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -2463,14 +2463,14 @@ static void clEnqueueMapImageOnExit(
   const cl_params_clEnqueueMapImage* params =
     reinterpret_cast<const cl_params_clEnqueueMapImage*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   void ** result =
     reinterpret_cast<void **>(data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
-  PTI_ASSERT(*(params->errcodeRet) != nullptr);
+  UNITRACE_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
   log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
@@ -2481,11 +2481,11 @@ static void clEnqueueMapImageOnExit(
 
 static void clEnqueueWriteBufferOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueWriteBuffer* params =
     reinterpret_cast<const cl_params_clEnqueueWriteBuffer*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -2513,7 +2513,7 @@ static void clEnqueueWriteBufferOnEnter(
 static void clEnqueueWriteBufferOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
 
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
@@ -2526,7 +2526,7 @@ static void clEnqueueWriteBufferOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -2538,11 +2538,11 @@ static void clEnqueueWriteBufferOnExit(
 
 static void clEnqueueCopyImageOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueCopyImage* params =
     reinterpret_cast<const cl_params_clEnqueueCopyImage*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -2570,7 +2570,7 @@ static void clEnqueueCopyImageOnEnter(
 static void clEnqueueCopyImageOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -2582,7 +2582,7 @@ static void clEnqueueCopyImageOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -2594,11 +2594,11 @@ static void clEnqueueCopyImageOnExit(
 
 static void clGetExtensionFunctionAddressOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clGetExtensionFunctionAddress* params =
     reinterpret_cast<const cl_params_clGetExtensionFunctionAddress*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -2624,7 +2624,7 @@ static void clGetExtensionFunctionAddressOnEnter(
 static void clGetExtensionFunctionAddressOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -2637,7 +2637,7 @@ static void clGetExtensionFunctionAddressOnExit(
 
   void** result =
     reinterpret_cast<void**>(data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
   log_msg += "\n";
 
@@ -2646,11 +2646,11 @@ static void clGetExtensionFunctionAddressOnExit(
 
 static void clEnqueueReadBufferRectOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueReadBufferRect* params =
     reinterpret_cast<const cl_params_clEnqueueReadBufferRect*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -2683,7 +2683,7 @@ static void clEnqueueReadBufferRectOnEnter(
 static void clEnqueueReadBufferRectOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -2695,7 +2695,7 @@ static void clEnqueueReadBufferRectOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -2707,11 +2707,11 @@ static void clEnqueueReadBufferRectOnExit(
 
 static void clCreateSubDevicesOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clCreateSubDevices* params =
     reinterpret_cast<const cl_params_clCreateSubDevices*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -2735,7 +2735,7 @@ static void clCreateSubDevicesOnEnter(
 static void clCreateSubDevicesOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -2747,7 +2747,7 @@ static void clCreateSubDevicesOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -2759,11 +2759,11 @@ static void clCreateSubDevicesOnExit(
 
 static void clGetDeviceAndHostTimerOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clGetDeviceAndHostTimer* params =
     reinterpret_cast<const cl_params_clGetDeviceAndHostTimer*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -2785,7 +2785,7 @@ static void clGetDeviceAndHostTimerOnEnter(
 static void clGetDeviceAndHostTimerOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -2797,7 +2797,7 @@ static void clGetDeviceAndHostTimerOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -2809,11 +2809,11 @@ static void clGetDeviceAndHostTimerOnExit(
 
 static void clReleaseSamplerOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clReleaseSampler* params =
     reinterpret_cast<const cl_params_clReleaseSampler*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -2833,7 +2833,7 @@ static void clReleaseSamplerOnEnter(
 static void clReleaseSamplerOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -2845,7 +2845,7 @@ static void clReleaseSamplerOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -2857,11 +2857,11 @@ static void clReleaseSamplerOnExit(
 
 static void clEnqueueTaskOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueTask* params =
     reinterpret_cast<const cl_params_clEnqueueTask*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -2892,7 +2892,7 @@ static void clEnqueueTaskOnEnter(
 static void clEnqueueTaskOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -2904,7 +2904,7 @@ static void clEnqueueTaskOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -2916,11 +2916,11 @@ static void clEnqueueTaskOnExit(
 
 static void clFinishOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clFinish* params =
     reinterpret_cast<const cl_params_clFinish*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -2940,7 +2940,7 @@ static void clFinishOnEnter(
 static void clFinishOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -2952,7 +2952,7 @@ static void clFinishOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -2964,11 +2964,11 @@ static void clFinishOnExit(
 
 static void clGetEventInfoOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clGetEventInfo* params =
     reinterpret_cast<const cl_params_clGetEventInfo*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -2992,7 +2992,7 @@ static void clGetEventInfoOnEnter(
 static void clGetEventInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -3004,7 +3004,7 @@ static void clGetEventInfoOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -3016,11 +3016,11 @@ static void clGetEventInfoOnExit(
 
 static void clGetEventProfilingInfoOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clGetEventProfilingInfo* params =
     reinterpret_cast<const cl_params_clGetEventProfilingInfo*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -3044,7 +3044,7 @@ static void clGetEventProfilingInfoOnEnter(
 static void clGetEventProfilingInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -3056,7 +3056,7 @@ static void clGetEventProfilingInfoOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -3068,11 +3068,11 @@ static void clGetEventProfilingInfoOnExit(
 
 static void clSetKernelArgSVMPointerOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clSetKernelArgSVMPointer* params =
     reinterpret_cast<const cl_params_clSetKernelArgSVMPointer*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -3094,7 +3094,7 @@ static void clSetKernelArgSVMPointerOnEnter(
 static void clSetKernelArgSVMPointerOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -3106,7 +3106,7 @@ static void clSetKernelArgSVMPointerOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -3118,11 +3118,11 @@ static void clSetKernelArgSVMPointerOnExit(
 
 static void clCreateImageOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clCreateImage* params =
     reinterpret_cast<const cl_params_clCreateImage*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -3151,7 +3151,7 @@ static void clCreateImageOnEnter(
 static void clCreateImageOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -3165,14 +3165,14 @@ static void clCreateImageOnExit(
   const cl_params_clCreateImage* params =
     reinterpret_cast<const cl_params_clCreateImage*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
-  PTI_ASSERT(*(params->errcodeRet) != nullptr);
+  UNITRACE_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
   log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
@@ -3183,11 +3183,11 @@ static void clCreateImageOnExit(
 
 static void clEnqueueSVMMemcpyOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueSVMMemcpy* params =
     reinterpret_cast<const cl_params_clEnqueueSVMMemcpy*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -3214,7 +3214,7 @@ static void clEnqueueSVMMemcpyOnEnter(
 static void clEnqueueSVMMemcpyOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -3226,7 +3226,7 @@ static void clEnqueueSVMMemcpyOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -3238,11 +3238,11 @@ static void clEnqueueSVMMemcpyOnExit(
 
 static void clReleaseKernelOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clReleaseKernel* params =
     reinterpret_cast<const cl_params_clReleaseKernel*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -3262,7 +3262,7 @@ static void clReleaseKernelOnEnter(
 static void clReleaseKernelOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -3274,7 +3274,7 @@ static void clReleaseKernelOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -3286,11 +3286,11 @@ static void clReleaseKernelOnExit(
 
 static void clEnqueueNativeKernelOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueNativeKernel* params =
     reinterpret_cast<const cl_params_clEnqueueNativeKernel*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -3319,7 +3319,7 @@ static void clEnqueueNativeKernelOnEnter(
 static void clEnqueueNativeKernelOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -3331,7 +3331,7 @@ static void clEnqueueNativeKernelOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -3343,11 +3343,11 @@ static void clEnqueueNativeKernelOnExit(
 
 static void clCreateKernelsInProgramOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clCreateKernelsInProgram* params =
     reinterpret_cast<const cl_params_clCreateKernelsInProgram*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -3370,7 +3370,7 @@ static void clCreateKernelsInProgramOnEnter(
 static void clCreateKernelsInProgramOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -3382,7 +3382,7 @@ static void clCreateKernelsInProgramOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -3394,11 +3394,11 @@ static void clCreateKernelsInProgramOnExit(
 
 static void clSetCommandQueuePropertyOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clSetCommandQueueProperty* params =
     reinterpret_cast<const cl_params_clSetCommandQueueProperty*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -3421,7 +3421,7 @@ static void clSetCommandQueuePropertyOnEnter(
 static void clSetCommandQueuePropertyOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -3433,7 +3433,7 @@ static void clSetCommandQueuePropertyOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -3445,11 +3445,11 @@ static void clSetCommandQueuePropertyOnExit(
 
 static void clGetDeviceInfoOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clGetDeviceInfo* params =
     reinterpret_cast<const cl_params_clGetDeviceInfo*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -3473,7 +3473,7 @@ static void clGetDeviceInfoOnEnter(
 static void clGetDeviceInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -3485,7 +3485,7 @@ static void clGetDeviceInfoOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -3497,11 +3497,11 @@ static void clGetDeviceInfoOnExit(
 
 static void clEnqueueNDRangeKernelOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueNDRangeKernel* params =
     reinterpret_cast<const cl_params_clEnqueueNDRangeKernel*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -3557,7 +3557,7 @@ static void clEnqueueNDRangeKernelOnEnter(
 static void clEnqueueNDRangeKernelOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
 
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
@@ -3570,7 +3570,7 @@ static void clEnqueueNDRangeKernelOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -3582,11 +3582,11 @@ static void clEnqueueNDRangeKernelOnExit(
 
 static void clReleaseProgramOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clReleaseProgram* params =
     reinterpret_cast<const cl_params_clReleaseProgram*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -3606,7 +3606,7 @@ static void clReleaseProgramOnEnter(
 static void clReleaseProgramOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -3618,7 +3618,7 @@ static void clReleaseProgramOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -3630,11 +3630,11 @@ static void clReleaseProgramOnExit(
 
 static void clCreateFromGLBufferOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clCreateFromGLBuffer* params =
     reinterpret_cast<const cl_params_clCreateFromGLBuffer*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -3661,7 +3661,7 @@ static void clCreateFromGLBufferOnEnter(
 static void clCreateFromGLBufferOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -3675,14 +3675,14 @@ static void clCreateFromGLBufferOnExit(
   const cl_params_clCreateFromGLBuffer* params =
     reinterpret_cast<const cl_params_clCreateFromGLBuffer*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
-  PTI_ASSERT(*(params->errcodeRet) != nullptr);
+  UNITRACE_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
   log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
@@ -3693,11 +3693,11 @@ static void clCreateFromGLBufferOnExit(
 
 static void clGetGLTextureInfoOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clGetGLTextureInfo* params =
     reinterpret_cast<const cl_params_clGetGLTextureInfo*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -3721,7 +3721,7 @@ static void clGetGLTextureInfoOnEnter(
 static void clGetGLTextureInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -3733,7 +3733,7 @@ static void clGetGLTextureInfoOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -3745,11 +3745,11 @@ static void clGetGLTextureInfoOnExit(
 
 static void clSetDefaultDeviceCommandQueueOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clSetDefaultDeviceCommandQueue* params =
     reinterpret_cast<const cl_params_clSetDefaultDeviceCommandQueue*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -3771,7 +3771,7 @@ static void clSetDefaultDeviceCommandQueueOnEnter(
 static void clSetDefaultDeviceCommandQueueOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -3783,7 +3783,7 @@ static void clSetDefaultDeviceCommandQueueOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -3795,11 +3795,11 @@ static void clSetDefaultDeviceCommandQueueOnExit(
 
 static void clCreatePipeOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clCreatePipe* params =
     reinterpret_cast<const cl_params_clCreatePipe*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -3828,7 +3828,7 @@ static void clCreatePipeOnEnter(
 static void clCreatePipeOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -3842,14 +3842,14 @@ static void clCreatePipeOnExit(
   const cl_params_clCreatePipe* params =
     reinterpret_cast<const cl_params_clCreatePipe*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
-  PTI_ASSERT(*(params->errcodeRet) != nullptr);
+  UNITRACE_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
   log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
@@ -3860,11 +3860,11 @@ static void clCreatePipeOnExit(
 
 static void clGetPlatformInfoOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clGetPlatformInfo* params =
     reinterpret_cast<const cl_params_clGetPlatformInfo*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -3888,7 +3888,7 @@ static void clGetPlatformInfoOnEnter(
 static void clGetPlatformInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -3900,7 +3900,7 @@ static void clGetPlatformInfoOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -3912,11 +3912,11 @@ static void clGetPlatformInfoOnExit(
 
 static void clEnqueueReadBufferOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueReadBuffer* params =
     reinterpret_cast<const cl_params_clEnqueueReadBuffer*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -3944,7 +3944,7 @@ static void clEnqueueReadBufferOnEnter(
 static void clEnqueueReadBufferOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
 
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
@@ -3957,7 +3957,7 @@ static void clEnqueueReadBufferOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -3969,11 +3969,11 @@ static void clEnqueueReadBufferOnExit(
 
 static void clSetMemObjectDestructorCallbackOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clSetMemObjectDestructorCallback* params =
     reinterpret_cast<const cl_params_clSetMemObjectDestructorCallback*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -3995,7 +3995,7 @@ static void clSetMemObjectDestructorCallbackOnEnter(
 static void clSetMemObjectDestructorCallbackOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -4007,7 +4007,7 @@ static void clSetMemObjectDestructorCallbackOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -4019,11 +4019,11 @@ static void clSetMemObjectDestructorCallbackOnExit(
 
 static void clGetKernelSubGroupInfoOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clGetKernelSubGroupInfo* params =
     reinterpret_cast<const cl_params_clGetKernelSubGroupInfo*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -4050,7 +4050,7 @@ static void clGetKernelSubGroupInfoOnEnter(
 static void clGetKernelSubGroupInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -4062,7 +4062,7 @@ static void clGetKernelSubGroupInfoOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -4074,11 +4074,11 @@ static void clGetKernelSubGroupInfoOnExit(
 
 static void clEnqueueCopyBufferRectOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueCopyBufferRect* params =
     reinterpret_cast<const cl_params_clEnqueueCopyBufferRect*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -4110,7 +4110,7 @@ static void clEnqueueCopyBufferRectOnEnter(
 static void clEnqueueCopyBufferRectOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -4122,7 +4122,7 @@ static void clEnqueueCopyBufferRectOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -4134,11 +4134,11 @@ static void clEnqueueCopyBufferRectOnExit(
 
 static void clWaitForEventsOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clWaitForEvents* params =
     reinterpret_cast<const cl_params_clWaitForEvents*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -4159,7 +4159,7 @@ static void clWaitForEventsOnEnter(
 static void clWaitForEventsOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -4171,7 +4171,7 @@ static void clWaitForEventsOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -4183,11 +4183,11 @@ static void clWaitForEventsOnExit(
 
 static void clEnqueueSVMMigrateMemOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueSVMMigrateMem* params =
     reinterpret_cast<const cl_params_clEnqueueSVMMigrateMem*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -4214,7 +4214,7 @@ static void clEnqueueSVMMigrateMemOnEnter(
 static void clEnqueueSVMMigrateMemOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -4226,7 +4226,7 @@ static void clEnqueueSVMMigrateMemOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -4238,11 +4238,11 @@ static void clEnqueueSVMMigrateMemOnExit(
 
 static void clRetainKernelOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clRetainKernel* params =
     reinterpret_cast<const cl_params_clRetainKernel*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -4262,7 +4262,7 @@ static void clRetainKernelOnEnter(
 static void clRetainKernelOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -4274,7 +4274,7 @@ static void clRetainKernelOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -4286,11 +4286,11 @@ static void clRetainKernelOnExit(
 
 static void clCreateCommandQueueWithPropertiesOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clCreateCommandQueueWithProperties* params =
     reinterpret_cast<const cl_params_clCreateCommandQueueWithProperties*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -4317,7 +4317,7 @@ static void clCreateCommandQueueWithPropertiesOnEnter(
 static void clCreateCommandQueueWithPropertiesOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -4331,14 +4331,14 @@ static void clCreateCommandQueueWithPropertiesOnExit(
   const cl_params_clCreateCommandQueueWithProperties* params =
     reinterpret_cast<const cl_params_clCreateCommandQueueWithProperties*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   cl_command_queue* result =
     reinterpret_cast<cl_command_queue*>(data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
-  PTI_ASSERT(*(params->errcodeRet) != nullptr);
+  UNITRACE_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
   log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
@@ -4349,11 +4349,11 @@ static void clCreateCommandQueueWithPropertiesOnExit(
 
 static void clCreateProgramWithBuiltInKernelsOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clCreateProgramWithBuiltInKernels* params =
     reinterpret_cast<const cl_params_clCreateProgramWithBuiltInKernels*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -4387,7 +4387,7 @@ static void clCreateProgramWithBuiltInKernelsOnEnter(
 static void clCreateProgramWithBuiltInKernelsOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -4401,14 +4401,14 @@ static void clCreateProgramWithBuiltInKernelsOnExit(
   const cl_params_clCreateProgramWithBuiltInKernels* params =
     reinterpret_cast<const cl_params_clCreateProgramWithBuiltInKernels*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   cl_program* result =
     reinterpret_cast<cl_program*>(data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
-  PTI_ASSERT(*(params->errcodeRet) != nullptr);
+  UNITRACE_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
   log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
@@ -4419,11 +4419,11 @@ static void clCreateProgramWithBuiltInKernelsOnExit(
 
 static void clCreateBufferOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clCreateBuffer* params =
     reinterpret_cast<const cl_params_clCreateBuffer*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -4451,7 +4451,7 @@ static void clCreateBufferOnEnter(
 static void clCreateBufferOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -4465,14 +4465,14 @@ static void clCreateBufferOnExit(
   const cl_params_clCreateBuffer* params =
     reinterpret_cast<const cl_params_clCreateBuffer*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
-  PTI_ASSERT(*(params->errcodeRet) != nullptr);
+  UNITRACE_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
   log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
@@ -4483,11 +4483,11 @@ static void clCreateBufferOnExit(
 
 static void clGetProgramBuildInfoOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clGetProgramBuildInfo* params =
     reinterpret_cast<const cl_params_clGetProgramBuildInfo*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -4512,7 +4512,7 @@ static void clGetProgramBuildInfoOnEnter(
 static void clGetProgramBuildInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -4524,7 +4524,7 @@ static void clGetProgramBuildInfoOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -4536,11 +4536,11 @@ static void clGetProgramBuildInfoOnExit(
 
 static void clEnqueueFillBufferOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueFillBuffer* params =
     reinterpret_cast<const cl_params_clEnqueueFillBuffer*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -4568,7 +4568,7 @@ static void clEnqueueFillBufferOnEnter(
 static void clEnqueueFillBufferOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -4580,7 +4580,7 @@ static void clEnqueueFillBufferOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -4592,11 +4592,11 @@ static void clEnqueueFillBufferOnExit(
 
 static void clEnqueueReadImageOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueReadImage* params =
     reinterpret_cast<const cl_params_clEnqueueReadImage*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -4626,7 +4626,7 @@ static void clEnqueueReadImageOnEnter(
 static void clEnqueueReadImageOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -4638,7 +4638,7 @@ static void clEnqueueReadImageOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -4650,11 +4650,11 @@ static void clEnqueueReadImageOnExit(
 
 static void clEnqueueWriteBufferRectOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueWriteBufferRect* params =
     reinterpret_cast<const cl_params_clEnqueueWriteBufferRect*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -4687,7 +4687,7 @@ static void clEnqueueWriteBufferRectOnEnter(
 static void clEnqueueWriteBufferRectOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -4699,7 +4699,7 @@ static void clEnqueueWriteBufferRectOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -4711,11 +4711,11 @@ static void clEnqueueWriteBufferRectOnExit(
 
 static void clEnqueueCopyBufferToImageOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueCopyBufferToImage* params =
     reinterpret_cast<const cl_params_clEnqueueCopyBufferToImage*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -4743,7 +4743,7 @@ static void clEnqueueCopyBufferToImageOnEnter(
 static void clEnqueueCopyBufferToImageOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -4755,7 +4755,7 @@ static void clEnqueueCopyBufferToImageOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -4767,12 +4767,12 @@ static void clEnqueueCopyBufferToImageOnExit(
 
 static void clGetExtensionFunctionAddressForPlatformOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clGetExtensionFunctionAddressForPlatform* params =
     reinterpret_cast<
       const cl_params_clGetExtensionFunctionAddressForPlatform*>(
           data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -4799,7 +4799,7 @@ static void clGetExtensionFunctionAddressForPlatformOnEnter(
 static void clGetExtensionFunctionAddressForPlatformOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -4812,7 +4812,7 @@ static void clGetExtensionFunctionAddressForPlatformOnExit(
 
   void** result =
     reinterpret_cast<void**>(data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
   log_msg += "\n";
 
@@ -4821,11 +4821,11 @@ static void clGetExtensionFunctionAddressForPlatformOnExit(
 
 static void clSetKernelArgOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clSetKernelArg* params =
     reinterpret_cast<const cl_params_clSetKernelArg*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -4848,7 +4848,7 @@ static void clSetKernelArgOnEnter(
 static void clSetKernelArgOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -4860,7 +4860,7 @@ static void clSetKernelArgOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -4872,11 +4872,11 @@ static void clSetKernelArgOnExit(
 
 static void clReleaseDeviceOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clReleaseDevice* params =
     reinterpret_cast<const cl_params_clReleaseDevice*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -4896,7 +4896,7 @@ static void clReleaseDeviceOnEnter(
 static void clReleaseDeviceOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -4908,7 +4908,7 @@ static void clReleaseDeviceOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -4920,11 +4920,11 @@ static void clReleaseDeviceOnExit(
 
 static void clCreateSubBufferOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clCreateSubBuffer* params =
     reinterpret_cast<const cl_params_clCreateSubBuffer*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -4952,7 +4952,7 @@ static void clCreateSubBufferOnEnter(
 static void clCreateSubBufferOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -4966,14 +4966,14 @@ static void clCreateSubBufferOnExit(
   const cl_params_clCreateSubBuffer* params =
     reinterpret_cast<const cl_params_clCreateSubBuffer*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
-  PTI_ASSERT(*(params->errcodeRet) != nullptr);
+  UNITRACE_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
   log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
@@ -4984,11 +4984,11 @@ static void clCreateSubBufferOnExit(
 
 static void clEnqueueMigrateMemObjectsOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueMigrateMemObjects* params =
     reinterpret_cast<const cl_params_clEnqueueMigrateMemObjects*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -5014,7 +5014,7 @@ static void clEnqueueMigrateMemObjectsOnEnter(
 static void clEnqueueMigrateMemObjectsOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -5026,7 +5026,7 @@ static void clEnqueueMigrateMemObjectsOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -5038,11 +5038,11 @@ static void clEnqueueMigrateMemObjectsOnExit(
 
 static void clCreateCommandQueueOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clCreateCommandQueue* params =
     reinterpret_cast<const cl_params_clCreateCommandQueue*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -5069,7 +5069,7 @@ static void clCreateCommandQueueOnEnter(
 static void clCreateCommandQueueOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -5083,14 +5083,14 @@ static void clCreateCommandQueueOnExit(
   const cl_params_clCreateCommandQueue* params =
     reinterpret_cast<const cl_params_clCreateCommandQueue*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   cl_command_queue* result =
     reinterpret_cast<cl_command_queue*>(data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
-  PTI_ASSERT(*(params->errcodeRet) != nullptr);
+  UNITRACE_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
   log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
@@ -5101,11 +5101,11 @@ static void clCreateCommandQueueOnExit(
 
 static void clEnqueueSVMMemFillOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueSVMMemFill* params =
     reinterpret_cast<const cl_params_clEnqueueSVMMemFill*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -5132,7 +5132,7 @@ static void clEnqueueSVMMemFillOnEnter(
 static void clEnqueueSVMMemFillOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -5144,7 +5144,7 @@ static void clEnqueueSVMMemFillOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -5156,11 +5156,11 @@ static void clEnqueueSVMMemFillOnExit(
 
 static void clReleaseCommandQueueOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clReleaseCommandQueue* params =
     reinterpret_cast<const cl_params_clReleaseCommandQueue*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -5180,7 +5180,7 @@ static void clReleaseCommandQueueOnEnter(
 static void clReleaseCommandQueueOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -5192,7 +5192,7 @@ static void clReleaseCommandQueueOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -5204,11 +5204,11 @@ static void clReleaseCommandQueueOnExit(
 
 static void clEnqueueCopyBufferOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueCopyBuffer* params =
     reinterpret_cast<const cl_params_clEnqueueCopyBuffer*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -5236,7 +5236,7 @@ static void clEnqueueCopyBufferOnEnter(
 static void clEnqueueCopyBufferOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -5248,7 +5248,7 @@ static void clEnqueueCopyBufferOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -5260,11 +5260,11 @@ static void clEnqueueCopyBufferOnExit(
 
 static void clGetCommandQueueInfoOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clGetCommandQueueInfo* params =
     reinterpret_cast<const cl_params_clGetCommandQueueInfo*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -5288,7 +5288,7 @@ static void clGetCommandQueueInfoOnEnter(
 static void clGetCommandQueueInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -5300,7 +5300,7 @@ static void clGetCommandQueueInfoOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -5312,11 +5312,11 @@ static void clGetCommandQueueInfoOnExit(
 
 static void clBuildProgramOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clBuildProgram* params =
     reinterpret_cast<const cl_params_clBuildProgram*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -5347,7 +5347,7 @@ static void clBuildProgramOnEnter(
 static void clBuildProgramOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -5359,7 +5359,7 @@ static void clBuildProgramOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -5371,11 +5371,11 @@ static void clBuildProgramOnExit(
 
 static void clRetainContextOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clRetainContext* params =
     reinterpret_cast<const cl_params_clRetainContext*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -5395,7 +5395,7 @@ static void clRetainContextOnEnter(
 static void clRetainContextOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -5407,7 +5407,7 @@ static void clRetainContextOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -5419,11 +5419,11 @@ static void clRetainContextOnExit(
 
 static void clEnqueueBarrierOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueBarrier* params =
     reinterpret_cast<const cl_params_clEnqueueBarrier*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -5443,7 +5443,7 @@ static void clEnqueueBarrierOnEnter(
 static void clEnqueueBarrierOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -5455,7 +5455,7 @@ static void clEnqueueBarrierOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -5467,11 +5467,11 @@ static void clEnqueueBarrierOnExit(
 
 static void clRetainDeviceOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clRetainDevice* params =
     reinterpret_cast<const cl_params_clRetainDevice*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -5491,7 +5491,7 @@ static void clRetainDeviceOnEnter(
 static void clRetainDeviceOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -5503,7 +5503,7 @@ static void clRetainDeviceOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -5515,11 +5515,11 @@ static void clRetainDeviceOnExit(
 
 static void clEnqueueSVMMapOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueSVMMap* params =
     reinterpret_cast<const cl_params_clEnqueueSVMMap*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -5546,7 +5546,7 @@ static void clEnqueueSVMMapOnEnter(
 static void clEnqueueSVMMapOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -5558,7 +5558,7 @@ static void clEnqueueSVMMapOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -5570,11 +5570,11 @@ static void clEnqueueSVMMapOnExit(
 
 static void clRetainMemObjectOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clRetainMemObject* params =
     reinterpret_cast<const cl_params_clRetainMemObject*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -5594,7 +5594,7 @@ static void clRetainMemObjectOnEnter(
 static void clRetainMemObjectOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -5606,7 +5606,7 @@ static void clRetainMemObjectOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -5618,11 +5618,11 @@ static void clRetainMemObjectOnExit(
 
 static void clSetUserEventStatusOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clSetUserEventStatus* params =
     reinterpret_cast<const cl_params_clSetUserEventStatus*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -5643,7 +5643,7 @@ static void clSetUserEventStatusOnEnter(
 static void clSetUserEventStatusOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -5655,7 +5655,7 @@ static void clSetUserEventStatusOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -5667,11 +5667,11 @@ static void clSetUserEventStatusOnExit(
 
 static void clCreateUserEventOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clCreateUserEvent* params =
     reinterpret_cast<const cl_params_clCreateUserEvent*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -5696,7 +5696,7 @@ static void clCreateUserEventOnEnter(
 static void clCreateUserEventOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -5710,14 +5710,14 @@ static void clCreateUserEventOnExit(
   const cl_params_clCreateUserEvent* params =
     reinterpret_cast<const cl_params_clCreateUserEvent*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   cl_event* result =
     reinterpret_cast<cl_event*>(data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
-  PTI_ASSERT(*(params->errcodeRet) != nullptr);
+  UNITRACE_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
   log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
@@ -5728,11 +5728,11 @@ static void clCreateUserEventOnExit(
 
 static void clGetSamplerInfoOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clGetSamplerInfo* params =
     reinterpret_cast<const cl_params_clGetSamplerInfo*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -5756,7 +5756,7 @@ static void clGetSamplerInfoOnEnter(
 static void clGetSamplerInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -5768,7 +5768,7 @@ static void clGetSamplerInfoOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -5780,11 +5780,11 @@ static void clGetSamplerInfoOnExit(
 
 static void clEnqueueMarkerOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueMarker* params =
     reinterpret_cast<const cl_params_clEnqueueMarker*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -5805,7 +5805,7 @@ static void clEnqueueMarkerOnEnter(
 static void clEnqueueMarkerOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -5817,7 +5817,7 @@ static void clEnqueueMarkerOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -5829,11 +5829,11 @@ static void clEnqueueMarkerOnExit(
 
 static void clCreateKernelOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clCreateKernel* params =
     reinterpret_cast<const cl_params_clCreateKernel*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -5868,7 +5868,7 @@ static void clCreateKernelOnEnter(
 static void clCreateKernelOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -5882,14 +5882,14 @@ static void clCreateKernelOnExit(
   const cl_params_clCreateKernel* params =
     reinterpret_cast<const cl_params_clCreateKernel*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   cl_kernel* result =
     reinterpret_cast<cl_kernel*>(data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
-  PTI_ASSERT(*(params->errcodeRet) != nullptr);
+  UNITRACE_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
   log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
@@ -5900,11 +5900,11 @@ static void clCreateKernelOnExit(
 
 static void clGetProgramInfoOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clGetProgramInfo* params =
     reinterpret_cast<const cl_params_clGetProgramInfo*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -5928,7 +5928,7 @@ static void clGetProgramInfoOnEnter(
 static void clGetProgramInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -5940,7 +5940,7 @@ static void clGetProgramInfoOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -5952,11 +5952,11 @@ static void clGetProgramInfoOnExit(
 
 static void clSVMAllocOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clSVMAlloc* params =
     reinterpret_cast<const cl_params_clSVMAlloc*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -5979,7 +5979,7 @@ static void clSVMAllocOnEnter(
 static void clSVMAllocOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -5993,7 +5993,7 @@ static void clSVMAllocOnExit(
   void ** result =
     reinterpret_cast<void **>(
         data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
   log_msg += "\n";
 
@@ -6002,11 +6002,11 @@ static void clSVMAllocOnExit(
 
 static void clRetainEventOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clRetainEvent* params =
     reinterpret_cast<const cl_params_clRetainEvent*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -6026,7 +6026,7 @@ static void clRetainEventOnEnter(
 static void clRetainEventOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -6038,7 +6038,7 @@ static void clRetainEventOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -6050,11 +6050,11 @@ static void clRetainEventOnExit(
 
 static void clCloneKernelOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clCloneKernel* params =
     reinterpret_cast<const cl_params_clCloneKernel*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -6079,7 +6079,7 @@ static void clCloneKernelOnEnter(
 static void clCloneKernelOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -6093,14 +6093,14 @@ static void clCloneKernelOnExit(
   const cl_params_clCloneKernel* params =
     reinterpret_cast<const cl_params_clCloneKernel*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   cl_kernel* result =
     reinterpret_cast<cl_kernel*>(data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
-  PTI_ASSERT(*(params->errcodeRet) != nullptr);
+  UNITRACE_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
   log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
@@ -6111,11 +6111,11 @@ static void clCloneKernelOnExit(
 
 static void clGetImageInfoOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clGetImageInfo* params =
     reinterpret_cast<const cl_params_clGetImageInfo*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -6139,7 +6139,7 @@ static void clGetImageInfoOnEnter(
 static void clGetImageInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -6151,7 +6151,7 @@ static void clGetImageInfoOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -6163,11 +6163,11 @@ static void clGetImageInfoOnExit(
 
 static void clFlushOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clFlush* params =
     reinterpret_cast<const cl_params_clFlush*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -6187,7 +6187,7 @@ static void clFlushOnEnter(
 static void clFlushOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -6199,7 +6199,7 @@ static void clFlushOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -6211,11 +6211,11 @@ static void clFlushOnExit(
 
 static void clEnqueueMarkerWithWaitListOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clEnqueueMarkerWithWaitList* params =
     reinterpret_cast<const cl_params_clEnqueueMarkerWithWaitList*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -6238,7 +6238,7 @@ static void clEnqueueMarkerWithWaitListOnEnter(
 static void clEnqueueMarkerWithWaitListOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -6250,7 +6250,7 @@ static void clEnqueueMarkerWithWaitListOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -6262,11 +6262,11 @@ static void clEnqueueMarkerWithWaitListOnExit(
 
 static void clCreateProgramWithILOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clCreateProgramWithIL* params =
     reinterpret_cast<const cl_params_clCreateProgramWithIL*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -6293,7 +6293,7 @@ static void clCreateProgramWithILOnEnter(
 static void clCreateProgramWithILOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -6307,14 +6307,14 @@ static void clCreateProgramWithILOnExit(
   const cl_params_clCreateProgramWithIL* params =
     reinterpret_cast<const cl_params_clCreateProgramWithIL*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   cl_program* result =
     reinterpret_cast<cl_program*>(data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
-  PTI_ASSERT(*(params->errcodeRet) != nullptr);
+  UNITRACE_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
   log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
@@ -6325,11 +6325,11 @@ static void clCreateProgramWithILOnExit(
 
 static void clCreateSamplerOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clCreateSampler* params =
     reinterpret_cast<const cl_params_clCreateSampler*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -6357,7 +6357,7 @@ static void clCreateSamplerOnEnter(
 static void clCreateSamplerOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -6371,14 +6371,14 @@ static void clCreateSamplerOnExit(
   const cl_params_clCreateSampler* params =
     reinterpret_cast<const cl_params_clCreateSampler*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   cl_sampler* result =
     reinterpret_cast<cl_sampler*>(data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
-  PTI_ASSERT(*(params->errcodeRet) != nullptr);
+  UNITRACE_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
   log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
@@ -6389,11 +6389,11 @@ static void clCreateSamplerOnExit(
 
 static void clCreateFromGLTextureOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clCreateFromGLTexture* params =
     reinterpret_cast<const cl_params_clCreateFromGLTexture*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -6422,7 +6422,7 @@ static void clCreateFromGLTextureOnEnter(
 static void clCreateFromGLTextureOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -6436,14 +6436,14 @@ static void clCreateFromGLTextureOnExit(
   const cl_params_clCreateFromGLTexture* params =
     reinterpret_cast<const cl_params_clCreateFromGLTexture*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
-  PTI_ASSERT(result != nullptr);
+  UNITRACE_ASSERT(result != nullptr);
   log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
-  PTI_ASSERT(*(params->errcodeRet) != nullptr);
+  UNITRACE_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
   log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
@@ -6454,11 +6454,11 @@ static void clCreateFromGLTextureOnExit(
 
 static void clSVMFreeOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clSVMFree* params =
     reinterpret_cast<const cl_params_clSVMFree*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -6479,7 +6479,7 @@ static void clSVMFreeOnEnter(
 static void clSVMFreeOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -6497,11 +6497,11 @@ static void clSVMFreeOnExit(
 
 static void clReleaseEventOnEnter(
     cl_callback_data* data, uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   const cl_params_clReleaseEvent* params =
     reinterpret_cast<const cl_params_clReleaseEvent*>(
         data->functionParams);
-  PTI_ASSERT(params != nullptr);
+  UNITRACE_ASSERT(params != nullptr);
 
   std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
@@ -6521,7 +6521,7 @@ static void clReleaseEventOnEnter(
 static void clReleaseEventOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
     log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
@@ -6533,7 +6533,7 @@ static void clReleaseEventOnExit(
   log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  PTI_ASSERT(error != nullptr);
+  UNITRACE_ASSERT(error != nullptr);
 
   log_msg += " -> ";
   log_msg += utils::cl::GetErrorString(*error);
@@ -6546,7 +6546,7 @@ static void clReleaseEventOnExit(
 void OnEnterFunction(
     ClFunctionId function, cl_callback_data* data,
     uint64_t start, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   switch (function) {
     case CL_FUNCTION_clBuildProgram:
       clBuildProgramOnEnter(data, start, collector);
@@ -6910,7 +6910,7 @@ void OnEnterFunction(
 void OnExitFunction(
     ClFunctionId function, cl_callback_data* data,
     uint64_t start, uint64_t end, ClCollector* collector) {
-  PTI_ASSERT(collector != nullptr);
+  UNITRACE_ASSERT(collector != nullptr);
   switch (function) {
     case CL_FUNCTION_clBuildProgram:
       clBuildProgramOnExit(data, start, end, collector);

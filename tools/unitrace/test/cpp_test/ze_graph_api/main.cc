@@ -14,8 +14,8 @@
 #include <utility>
 #include <vector>
 
-#include "shared_library.h"
-#include "ze_utils.h"
+#include "utils/shared_library.h"
+#include "utils/ze_utils.h"
 
 // Test configuration constants
 constexpr int GRAPH_EXECUTION_COUNT = 3;

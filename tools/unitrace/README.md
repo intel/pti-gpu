@@ -25,6 +25,11 @@ Intel(R) GPU applications.
 
 ## Build and Install
 
+Unitrace is self-contained: its common headers live in `utils/`, test-only
+helpers in `test/utils/`, and its CMake helpers and header-fetch scripts in
+`cmake/` and `scripts/`. Nothing under `tools/unitrace` depends on the
+repository-level `utils/`, `tools/utils/` or `build_utils/` directories.
+
 ```sh
 set up Intel(R) oneAPI environment
 set up Intel(R) MPI Environment (optional)

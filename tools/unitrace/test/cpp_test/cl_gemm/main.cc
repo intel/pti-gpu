@@ -12,7 +12,7 @@
 
 #include <CL/cl.h>
 
-#include "cl_utils.h"
+#include "utils/cl_utils.h"
 
 #define A_VALUE 0.128f
 #define B_VALUE 0.256f
@@ -31,7 +31,7 @@ const char* kKernelSource =
   "}";
 
 static float Check(const std::vector<float>& a, float value) {
-  PTI_ASSERT(value > MAX_EPS);
+  UNITRACE_ASSERT(value > MAX_EPS);
 
   float eps = 0.0f;
   for (size_t i = 0; i < a.size(); ++i) {
@@ -46,78 +46,78 @@ static float RunAndCheck(cl_kernel kernel, cl_command_queue queue,
                          const std::vector<float>& b,
                          std::vector<float>& c,
                          unsigned size, float expected_result) {
-  PTI_ASSERT(kernel != nullptr && queue != nullptr);
+  UNITRACE_ASSERT(kernel != nullptr && queue != nullptr);
   
-  PTI_ASSERT(size > 0);
-  PTI_ASSERT(a.size() == size * size);
-  PTI_ASSERT(b.size() == size * size);
-  PTI_ASSERT(c.size() == size * size);
+  UNITRACE_ASSERT(size > 0);
+  UNITRACE_ASSERT(a.size() == size * size);
+  UNITRACE_ASSERT(b.size() == size * size);
+  UNITRACE_ASSERT(c.size() == size * size);
 
   cl_int status = CL_SUCCESS;    
   cl_context context = utils::cl::GetContext(kernel);
-  PTI_ASSERT(context != nullptr);
+  UNITRACE_ASSERT(context != nullptr);
 
   cl_mem dev_a = clCreateBuffer(context, CL_MEM_READ_ONLY,
                                 a.size() * sizeof(float),
                                 nullptr, &status);
-  PTI_ASSERT(status == CL_SUCCESS && dev_a != nullptr);
+  UNITRACE_ASSERT(status == CL_SUCCESS && dev_a != nullptr);
   cl_mem dev_b = clCreateBuffer(context, CL_MEM_READ_ONLY,
                                 b.size() * sizeof(float),
                                 nullptr, &status);
-  PTI_ASSERT(status == CL_SUCCESS && dev_b != nullptr);
+  UNITRACE_ASSERT(status == CL_SUCCESS && dev_b != nullptr);
   cl_mem dev_c = clCreateBuffer(context, CL_MEM_WRITE_ONLY,
                                 c.size() * sizeof(float),
                                 nullptr, &status);
-  PTI_ASSERT(status == CL_SUCCESS && dev_c != nullptr);
+  UNITRACE_ASSERT(status == CL_SUCCESS && dev_c != nullptr);
 
   status = clEnqueueWriteBuffer(queue, dev_a, CL_FALSE, 0,
                                 a.size() * sizeof(float),
                                 a.data(), 0, nullptr, nullptr);
-  PTI_ASSERT(status == CL_SUCCESS);
+  UNITRACE_ASSERT(status == CL_SUCCESS);
   status = clEnqueueWriteBuffer(queue, dev_b, CL_FALSE, 0,
                                 b.size() * sizeof(float),
                                 b.data(), 0, nullptr, nullptr);
-  PTI_ASSERT(status == CL_SUCCESS);
+  UNITRACE_ASSERT(status == CL_SUCCESS);
 
   status = clSetKernelArg(kernel, 0, sizeof(cl_mem), &dev_a);
-  PTI_ASSERT(status == CL_SUCCESS);
+  UNITRACE_ASSERT(status == CL_SUCCESS);
   status = clSetKernelArg(kernel, 1, sizeof(cl_mem), &dev_b);
-  PTI_ASSERT(status == CL_SUCCESS);
+  UNITRACE_ASSERT(status == CL_SUCCESS);
   status = clSetKernelArg(kernel, 2, sizeof(cl_mem), &dev_c);
-  PTI_ASSERT(status == CL_SUCCESS);
+  UNITRACE_ASSERT(status == CL_SUCCESS);
   status = clSetKernelArg(kernel, 3, sizeof(unsigned), &size);
-  PTI_ASSERT(status == CL_SUCCESS);
+  UNITRACE_ASSERT(status == CL_SUCCESS);
 
   size_t global_work_size[]{size, size};
   cl_event event = nullptr;
   status = clEnqueueNDRangeKernel(queue, kernel, 2, nullptr, global_work_size,
                                   nullptr, 0, nullptr, &event);
-  PTI_ASSERT(status == CL_SUCCESS);
+  UNITRACE_ASSERT(status == CL_SUCCESS);
   status = clFinish(queue);
-  PTI_ASSERT(status == CL_SUCCESS);
+  UNITRACE_ASSERT(status == CL_SUCCESS);
 
   status = clEnqueueReadBuffer(queue, dev_c, CL_TRUE, 0,
                                c.size() * sizeof(float),
                                c.data(), 0, nullptr, nullptr);
-  PTI_ASSERT(status == CL_SUCCESS);
+  UNITRACE_ASSERT(status == CL_SUCCESS);
 
   status = clReleaseMemObject(dev_a);
-  PTI_ASSERT(status == CL_SUCCESS);
+  UNITRACE_ASSERT(status == CL_SUCCESS);
   status = clReleaseMemObject(dev_b);
-  PTI_ASSERT(status == CL_SUCCESS);
+  UNITRACE_ASSERT(status == CL_SUCCESS);
   status = clReleaseMemObject(dev_c);
-  PTI_ASSERT(status == CL_SUCCESS);
+  UNITRACE_ASSERT(status == CL_SUCCESS);
   
   cl_ulong start = 0, end = 0;
   status = clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_START,
                                    sizeof(cl_ulong), &start, nullptr);
-  PTI_ASSERT(status == CL_SUCCESS);
+  UNITRACE_ASSERT(status == CL_SUCCESS);
   status = clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_END,
                                    sizeof(cl_ulong), &end, nullptr);
-  PTI_ASSERT(status == CL_SUCCESS);
+  UNITRACE_ASSERT(status == CL_SUCCESS);
 
   status = clReleaseEvent(event);
-  PTI_ASSERT(status == CL_SUCCESS);
+  UNITRACE_ASSERT(status == CL_SUCCESS);
 
   double time = static_cast<double>(end - start) / NSEC_IN_SEC;
   std::cout << "Matrix multiplication time: " << time <<
@@ -130,31 +130,31 @@ static void Compute(cl_device_id device, const std::vector<float>& a,
                     const std::vector<float>& b, std::vector<float>& c,
                     unsigned size, unsigned repeat_count,
                     float expected_result) {
-  PTI_ASSERT(device != nullptr);
+  UNITRACE_ASSERT(device != nullptr);
   cl_int status = CL_SUCCESS;
 
   cl_context context = clCreateContext(nullptr, 1, &device, nullptr,
                                        nullptr, &status);
-  PTI_ASSERT(status == CL_SUCCESS && context != nullptr);
+  UNITRACE_ASSERT(status == CL_SUCCESS && context != nullptr);
 
   cl_queue_properties props[] = { CL_QUEUE_PROPERTIES,
                                   CL_QUEUE_PROFILING_ENABLE, 0 };
   cl_command_queue queue = clCreateCommandQueueWithProperties(
     context, device, props, &status);
-  PTI_ASSERT(status == CL_SUCCESS && queue != nullptr);
+  UNITRACE_ASSERT(status == CL_SUCCESS && queue != nullptr);
 
   cl_program program = clCreateProgramWithSource(context, 1, &kKernelSource,
                                                  nullptr, &status);
-  PTI_ASSERT(status == CL_SUCCESS && program != nullptr);
+  UNITRACE_ASSERT(status == CL_SUCCESS && program != nullptr);
   // Kernel line info comes from the runtime build options, not the host build:
   // -gline-tables-only emits .debug_line, -s names the source built from a string.
   status = clBuildProgram(program, 1, &device,
                           "-gline-tables-only -s cl_gemm_kernel.cl",
                           nullptr, nullptr);
-  PTI_ASSERT(status == CL_SUCCESS);
+  UNITRACE_ASSERT(status == CL_SUCCESS);
 
   cl_kernel kernel = clCreateKernel(program, "GEMM", &status);
-  PTI_ASSERT(status == CL_SUCCESS && kernel != nullptr);
+  UNITRACE_ASSERT(status == CL_SUCCESS && kernel != nullptr);
 
   for (unsigned i = 0; i < repeat_count; ++i) {
     if (i == 0) { // Enable data collection for the first iteration
@@ -171,13 +171,13 @@ static void Compute(cl_device_id device, const std::vector<float>& a,
   }
 
   status = clReleaseKernel(kernel);
-  PTI_ASSERT(status == CL_SUCCESS);
+  UNITRACE_ASSERT(status == CL_SUCCESS);
   status = clReleaseProgram(program);
-  PTI_ASSERT(status == CL_SUCCESS);
+  UNITRACE_ASSERT(status == CL_SUCCESS);
   status = clReleaseCommandQueue(queue);
-  PTI_ASSERT(status == CL_SUCCESS);
+  UNITRACE_ASSERT(status == CL_SUCCESS);
   status = clReleaseContext(context);
-  PTI_ASSERT(status == CL_SUCCESS);
+  UNITRACE_ASSERT(status == CL_SUCCESS);
 }
 
 int main(int argc, char* argv[]) {
