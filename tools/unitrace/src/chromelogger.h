@@ -62,11 +62,13 @@ static std::string EncodeURI(const std::string &input) {
 }
 
 static std::string rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
+// use pid as a dummy rank id
 #ifdef _WIN32
-static uint32_t mpi_rank = rank.empty() ? _getpid() : std::atoi(rank.c_str());  // use pid as a dummy rank id
+#define INIT_MPI_RANK_VAL(rank) rank.empty() ? _getpid() : std::atoi(rank.c_str())
 #else /* _WIN32 */
-static uint32_t mpi_rank = rank.empty() ? getpid() : std::atoi(rank.c_str());  // use pid as a dummy rank id
+#define INIT_MPI_RANK_VAL(rank) rank.empty() ? getpid() : std::atoi(rank.c_str())
 #endif /* _WIN32 */
+static uint32_t mpi_rank = INIT_MPI_RANK_VAL(rank);
 
 static std::string pmi_hostname = GetHostName();
 
@@ -1832,6 +1834,7 @@ class ChromeLogger {
 
       std::string host = GetHostName();
       std::string rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
+      mpi_rank = INIT_MPI_RANK_VAL(rank);
       std::string host_proc_name = rank.empty() ? ("HOST<" + host + ">")
                                                 : ("RANK " + rank + " HOST<" + host + ">");
 
