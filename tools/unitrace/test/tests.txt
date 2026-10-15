@@ -270,6 +270,15 @@ command  = run_test.py ze_gemm 4096
 scenario = -k
 scenario = -q
 
+# Reduced ze_gemm for pre-silicon simulation, where the default case
+# (1024x1024, 4 repeats, full scenario matrix) exceeds a 2 h task timeout.
+[ze_gemm_presi]
+platform = Linux
+command  = run_test.py ze_gemm 128 1
+scenario = -c
+scenario = -h
+scenario = --chrome-kernel-logging
+
 [ze_grph_api]
 platform      = Windows
 command       = run_test.py ze_graph_api
