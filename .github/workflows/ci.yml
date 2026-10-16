@@ -82,7 +82,7 @@ jobs:
           source /opt/intel/oneapi/setvars.sh --include-intel-llvm
           ctest --test-dir build --no-tests=error --output-on-failure \
                 -LE "performance|quarantine" \
-                -E "ZeGraphTestSuite.TestZeUsmGraphExecutionTracingGraphCreation|ZeGraphTestSuite.TestZeUsmGraphExecutionWithoutTracingGraphCreation|test_unitrace"
+                -E "test_unitrace"
 
       - name: Package
         run: |

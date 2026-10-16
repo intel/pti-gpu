@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 #include <level_zero/ze_api.h>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -24,6 +25,16 @@
 #include "utils/ze_symbol_loader.h"
 #include "utils/ze_utils.h"
 #include "ze_graph_workloads.h"
+
+namespace {
+
+template <typename T>
+inline void LeakHandle(T handle) {
+  static std::vector<typename T::pointer> leaked_handles;
+  leaked_handles.push_back(handle.release());
+}
+
+}  // namespace
 
 class ZeGraphTestSuite : public pti::test::utils::RecordCollectionFixture {
  protected:
@@ -82,6 +93,13 @@ class ZeGraphTestSuite : public pti::test::utils::RecordCollectionFixture {
   }
 
   void TearDown() override {
+    DestroyDriverResources();
+    if (ctx_) {
+      EXPECT_EQ(zeContextDestroy(ctx_), ZE_RESULT_SUCCESS);
+    }
+  }
+
+  void DestroyDriverResources() {
     // TODO(PTI): Finish RAII-ifying all resources and simplify this function.
     kernels_ = DotProductKernels{};
     lists_ = DotProductLists{};
@@ -93,12 +111,11 @@ class ZeGraphTestSuite : public pti::test::utils::RecordCollectionFixture {
     events_.clear();
     if (event_pool_) {
       zeEventPoolDestroy(event_pool_);
+      event_pool_ = nullptr;
     }
     if (module_) {
       EXPECT_EQ(zeModuleDestroy(module_), ZE_RESULT_SUCCESS);
-    }
-    if (ctx_) {
-      EXPECT_EQ(zeContextDestroy(ctx_), ZE_RESULT_SUCCESS);
+      module_ = nullptr;
     }
   }
 
@@ -157,9 +174,9 @@ class ZeGraphTestSuite : public pti::test::utils::RecordCollectionFixture {
     return ::CreateDotProductVectors<T>(ctx_, dev_, vector_size);
   }
 
-  ZeGraph CreateGraph() {
+  ZeGraph CreateGraph(ze_context_handle_t ctx) {
     ze_graph_handle_t graph = nullptr;
-    if (ze_graph_create_ext_(ctx_, nullptr, &graph) != ZE_RESULT_SUCCESS || !graph) {
+    if (ze_graph_create_ext_(ctx, nullptr, &graph) != ZE_RESULT_SUCCESS || !graph) {
       throw std::runtime_error("Failed to create graph");
     }
     return ZeGraph{graph, ZeGraphDestroy{this}};
@@ -168,7 +185,14 @@ class ZeGraphTestSuite : public pti::test::utils::RecordCollectionFixture {
   template <typename Func, typename... Args>
   std::pair<ZeGraph, ZeExecutableGraph> CaptureGraph(ze_command_list_handle_t primary_list,
                                                      Func record_func, Args&&... args) {
-    auto graph = CreateGraph();
+    return CaptureGraphInContext(ctx_, primary_list, record_func, std::forward<Args>(args)...);
+  }
+
+  template <typename Func, typename... Args>
+  std::pair<ZeGraph, ZeExecutableGraph> CaptureGraphInContext(ze_context_handle_t ctx,
+                                                              ze_command_list_handle_t primary_list,
+                                                              Func record_func, Args&&... args) {
+    auto graph = CreateGraph(ctx);
     if (ze_command_list_begin_capture_into_graph_ext_(primary_list, graph.get(), nullptr) !=
         ZE_RESULT_SUCCESS) {
       throw std::runtime_error("Failed to begin graph capture");
@@ -353,7 +377,377 @@ TEST_F(ZeGraphTestSuite, TestZeUsmGraphExecutionWithoutTracingGraphCreation) {
   ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
   ParseAllBuffers();
-  // Graph creation not captured, so no records expected.
   EXPECT_EQ(std::size(record_storage_.kernel_records), std::size_t{4});
+  ValidateViewTimestamps(record_storage_.kernel_records);
+}
+
+TEST_F(ZeGraphTestSuite, TestZeUsmGraphExecutionTraceWithExecutableGraphDestroy) {
+  auto vectors =
+      CreateDotProductVectors<Workload::DefaultVectorDataType>(Workload::kDefaultVectorSize);
+  auto& [primary, fork_one, fork_two] = GetDotProductLists();
+
+  auto vec_size = static_cast<std::uint32_t>(Workload::kDefaultVectorSize);
+
+  auto* vector_init_event = GetEvent();
+  ASSERT_NE(vector_init_event, nullptr);
+  auto* vec_add1_event = GetEvent();
+  ASSERT_NE(vec_add1_event, nullptr);
+  auto* vec_add2_event = GetEvent();
+  ASSERT_NE(vec_add2_event, nullptr);
+  auto* graph_finish = GetEvent(ZE_EVENT_SCOPE_FLAG_HOST);
+  ASSERT_NE(graph_finish, nullptr);
+
+  auto [graph, exec_graph] = CaptureGraph(
+      primary.get(), RecordDotProductGraph, primary.get(), fork_one.get(), fork_two.get(),
+      vector_init_event, vec_add1_event, vec_add2_event, kernels_, vectors, &vec_size);
+
+  // Start tracing after graph is captured.
+  ASSERT_EQ(ptiViewSetCallbacks(ProvideBuffer, MarkBuffer), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+
+  ASSERT_NO_FATAL_FAILURE(ExecuteGraph(primary.get(), exec_graph.get(), graph_finish));
+  WaitForGraphExecution(graph_finish);
+
+  exec_graph.reset();  // Destroy the executable graph while tracing is enabled.
+
+  EXPECT_FLOAT_EQ(*std::get<0>(vectors), Workload::Result());
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
+  ParseAllBuffers();
+  EXPECT_EQ(std::size(record_storage_.kernel_records), std::size_t{4});
+  ValidateViewTimestamps(record_storage_.kernel_records);
+}
+
+TEST_F(ZeGraphTestSuite, TestZeUsmGraphExecutionTraceWithContextDestroy) {
+  auto vectors =
+      CreateDotProductVectors<Workload::DefaultVectorDataType>(Workload::kDefaultVectorSize);
+  auto& [primary, fork_one, fork_two] = GetDotProductLists();
+
+  auto vec_size = static_cast<std::uint32_t>(Workload::kDefaultVectorSize);
+
+  auto* vector_init_event = GetEvent();
+  ASSERT_NE(vector_init_event, nullptr);
+  auto* vec_add1_event = GetEvent();
+  ASSERT_NE(vec_add1_event, nullptr);
+  auto* vec_add2_event = GetEvent();
+  ASSERT_NE(vec_add2_event, nullptr);
+  auto* graph_finish = GetEvent(ZE_EVENT_SCOPE_FLAG_HOST);
+  ASSERT_NE(graph_finish, nullptr);
+
+  auto [graph, exec_graph] = CaptureGraph(
+      primary.get(), RecordDotProductGraph, primary.get(), fork_one.get(), fork_two.get(),
+      vector_init_event, vec_add1_event, vec_add2_event, kernels_, vectors, &vec_size);
+
+  ASSERT_EQ(ptiViewSetCallbacks(ProvideBuffer, MarkBuffer), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+
+  ASSERT_NO_FATAL_FAILURE(ExecuteGraph(primary.get(), exec_graph.get(), graph_finish));
+  WaitForGraphExecution(graph_finish);
+
+  EXPECT_FLOAT_EQ(*std::get<0>(vectors), Workload::Result());
+
+  // Before the context is destroyed, the resources derived from that context must be destroyed or
+  // else the test is not valid or the source of the crash will not be from the graph test.
+  // Purposely leak the graph and executable graph to test context destroy behavior.
+  LeakHandle(std::move(exec_graph));
+  LeakHandle(std::move(graph));
+
+  vectors = {};
+  DestroyDriverResources();
+  if (ctx_) {
+    const auto destroy_result = zeContextDestroy(ctx_);
+    ctx_ = nullptr;
+    ASSERT_EQ(destroy_result, ZE_RESULT_SUCCESS);
+  }
+
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
+  ParseAllBuffers();
+  EXPECT_EQ(std::size(record_storage_.kernel_records), std::size_t{4});
+  ValidateViewTimestamps(record_storage_.kernel_records);
+}
+
+// Ensures we're handling state correctly when a graph is destroyed between graph executions within
+// a workload. The graph must have completed: the executable graph must not be executing when
+// destroyed.
+TEST_F(ZeGraphTestSuite, TestZeUsmGraphExecutionTraceWithExecutableGraphHandleDestroyMidExecution) {
+  auto first_vectors =
+      CreateDotProductVectors<Workload::DefaultVectorDataType>(Workload::kDefaultVectorSize);
+  auto second_vectors =
+      CreateDotProductVectors<Workload::DefaultVectorDataType>(Workload::kDefaultVectorSize);
+  auto& [primary, fork_one, fork_two] = GetDotProductLists();
+
+  auto vec_size = static_cast<std::uint32_t>(Workload::kDefaultVectorSize);
+
+  ASSERT_EQ(ptiViewSetCallbacks(ProvideBuffer, MarkBuffer), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+
+  auto [first_graph, first_exec_graph] = CaptureGraph(
+      primary.get(), RecordDotProductGraph, primary.get(), fork_one.get(), fork_two.get(),
+      GetEvent(), GetEvent(), GetEvent(), kernels_, first_vectors, &vec_size);
+  auto* first_graph_finish = GetEvent(ZE_EVENT_SCOPE_FLAG_HOST);
+  ASSERT_NE(first_graph_finish, nullptr);
+  ASSERT_NO_FATAL_FAILURE(ExecuteGraph(primary.get(), first_exec_graph.get(), first_graph_finish));
+  WaitForGraphExecution(first_graph_finish);
+  EXPECT_FLOAT_EQ(*std::get<0>(first_vectors), Workload::Result());
+
+  first_exec_graph.reset();
+  first_graph.reset();
+
+  auto [second_graph, second_exec_graph] = CaptureGraph(
+      primary.get(), RecordDotProductGraph, primary.get(), fork_one.get(), fork_two.get(),
+      GetEvent(), GetEvent(), GetEvent(), kernels_, second_vectors, &vec_size);
+
+  *std::get<0>(second_vectors) = 0;
+  auto* second_graph_finish = GetEvent(ZE_EVENT_SCOPE_FLAG_HOST);
+  ASSERT_NE(second_graph_finish, nullptr);
+  ASSERT_NO_FATAL_FAILURE(
+      ExecuteGraph(primary.get(), second_exec_graph.get(), second_graph_finish));
+  WaitForGraphExecution(second_graph_finish);
+  EXPECT_FLOAT_EQ(*std::get<0>(second_vectors), Workload::Result());
+
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
+  ParseAllBuffers();
+  EXPECT_EQ(std::size(record_storage_.kernel_records), std::size_t{8});
+  ValidateViewTimestamps(record_storage_.kernel_records);
+}
+
+// Ensures destroying an executable graph that was never appended while tracing (so it was never
+// stored or instrumented) does not touch the graph storage.
+TEST_F(ZeGraphTestSuite, TestZeUsmExecutableGraphDestroyWithoutTracedExecution) {
+  auto vectors =
+      CreateDotProductVectors<Workload::DefaultVectorDataType>(Workload::kDefaultVectorSize);
+  auto& [primary, fork_one, fork_two] = GetDotProductLists();
+
+  auto vec_size = static_cast<std::uint32_t>(Workload::kDefaultVectorSize);
+
+  auto [graph, exec_graph] = CaptureGraph(primary.get(), RecordDotProductGraph, primary.get(),
+                                          fork_one.get(), fork_two.get(), GetEvent(), GetEvent(),
+                                          GetEvent(), kernels_, vectors, &vec_size);
+
+  ASSERT_EQ(ptiViewSetCallbacks(ProvideBuffer, MarkBuffer), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+
+  exec_graph.reset();
+  graph.reset();
+
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
+  ParseAllBuffers();
+  EXPECT_EQ(std::size(record_storage_.kernel_records), std::size_t{0});
+}
+
+// Ensures destroying a context only releases the graphs created from that context.
+TEST_F(ZeGraphTestSuite, TestZeUsmGraphExecutionTraceWithOtherContextDestroy) {
+  // Create a graph as normal
+  auto vectors =
+      CreateDotProductVectors<Workload::DefaultVectorDataType>(Workload::kDefaultVectorSize);
+  auto& [primary, fork_one, fork_two] = GetDotProductLists();
+
+  auto vec_size = static_cast<std::uint32_t>(Workload::kDefaultVectorSize);
+
+  ASSERT_EQ(ptiViewSetCallbacks(ProvideBuffer, MarkBuffer), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+
+  auto [graph, exec_graph] = CaptureGraph(primary.get(), RecordDotProductGraph, primary.get(),
+                                          fork_one.get(), fork_two.get(), GetEvent(), GetEvent(),
+                                          GetEvent(), kernels_, vectors, &vec_size);
+  auto* first_graph_finish = GetEvent(ZE_EVENT_SCOPE_FLAG_HOST);
+  ASSERT_NE(first_graph_finish, nullptr);
+  // Execute graph once (as normal)
+  ASSERT_NO_FATAL_FAILURE(ExecuteGraph(primary.get(), exec_graph.get(), first_graph_finish));
+  WaitForGraphExecution(first_graph_finish);
+  EXPECT_FLOAT_EQ(*std::get<0>(vectors), Workload::Result());
+
+  // Create a new context and graph with that new context (will need to re-create other driver
+  // resources with that new context handle)
+  auto* other_ctx = utils::ze::GetContext(drv_);
+  ASSERT_NE(other_ctx, nullptr);
+
+  const ze_module_desc_t module_desc = {ZE_STRUCTURE_TYPE_MODULE_DESC,
+                                        nullptr,
+                                        ZE_MODULE_FORMAT_IL_SPIRV,
+                                        std::size(spirv_binary_),
+                                        std::data(spirv_binary_),
+                                        nullptr,
+                                        nullptr};
+  ze_module_handle_t other_module = nullptr;
+  ASSERT_EQ(zeModuleCreate(other_ctx, dev_, &module_desc, &other_module, nullptr),
+            ZE_RESULT_SUCCESS);
+
+  std::array<ze_event_handle_t, 4> other_events{};
+  constexpr auto kOtherEventCount = static_cast<std::uint32_t>(other_events.size());
+  constexpr auto kHostFlagEventIndex = kOtherEventCount - 1;
+  const ze_event_pool_desc_t event_pool_desc = {ZE_STRUCTURE_TYPE_EVENT_POOL_DESC, nullptr,
+                                                ZE_EVENT_POOL_FLAG_HOST_VISIBLE, kOtherEventCount};
+  ze_event_pool_handle_t other_event_pool = nullptr;
+  ASSERT_EQ(zeEventPoolCreate(other_ctx, &event_pool_desc, 1, &dev_, &other_event_pool),
+            ZE_RESULT_SUCCESS);
+  for (std::uint32_t i = 0; i < kOtherEventCount; ++i) {
+    const auto signal_scope =
+        (i == kHostFlagEventIndex) ? ZE_EVENT_SCOPE_FLAG_HOST : ZE_EVENT_SCOPE_FLAG_SUBDEVICE;
+    const ze_event_desc_t event_desc = {ZE_STRUCTURE_TYPE_EVENT_DESC, nullptr, i, signal_scope,
+                                        ZE_EVENT_SCOPE_FLAG_SUBDEVICE};
+    ASSERT_EQ(zeEventCreate(other_event_pool, &event_desc, &other_events.at(i)), ZE_RESULT_SUCCESS);
+  }
+
+  {
+    // Run the workload with a new context.
+    auto other_lists = CreateDotProductLists(other_ctx, dev_);
+    auto other_kernels = CreateDotProductKernels(other_module);
+    auto other_vectors = ::CreateDotProductVectors<Workload::DefaultVectorDataType>(
+        other_ctx, dev_, Workload::kDefaultVectorSize);
+    auto& [other_primary, other_fork_one, other_fork_two] = other_lists;
+
+    auto [other_graph, other_exec_graph] = CaptureGraphInContext(
+        other_ctx, other_primary.get(), RecordDotProductGraph, other_primary.get(),
+        other_fork_one.get(), other_fork_two.get(), other_events[0], other_events[1],
+        other_events[2], other_kernels, other_vectors, &vec_size);
+    ASSERT_NO_FATAL_FAILURE(
+        ExecuteGraph(other_primary.get(), other_exec_graph.get(), other_events[3]));
+    WaitForGraphExecution(other_events[3]);
+    EXPECT_FLOAT_EQ(*std::get<0>(other_vectors), Workload::Result());
+    LeakHandle(std::move(other_exec_graph));
+    LeakHandle(std::move(other_graph));
+  }
+
+  for (auto* event : other_events) {
+    EXPECT_EQ(zeEventDestroy(event), ZE_RESULT_SUCCESS);
+  }
+  EXPECT_EQ(zeEventPoolDestroy(other_event_pool), ZE_RESULT_SUCCESS);
+  EXPECT_EQ(zeModuleDestroy(other_module), ZE_RESULT_SUCCESS);
+  ASSERT_EQ(zeContextDestroy(other_ctx), ZE_RESULT_SUCCESS);
+
+  *std::get<0>(vectors) = 0;
+  auto* second_graph_finish = GetEvent(ZE_EVENT_SCOPE_FLAG_HOST);
+  ASSERT_NE(second_graph_finish, nullptr);
+  ASSERT_NO_FATAL_FAILURE(ExecuteGraph(primary.get(), exec_graph.get(), second_graph_finish));
+  WaitForGraphExecution(second_graph_finish);
+  EXPECT_FLOAT_EQ(*std::get<0>(vectors), Workload::Result());
+
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
+  ParseAllBuffers();
+  // Two executions of the graph in this context and one in the destroyed context.
+  EXPECT_EQ(std::size(record_storage_.kernel_records), std::size_t{12});
+  ValidateViewTimestamps(record_storage_.kernel_records);
+}
+
+// Excercise start/stop between replays.
+TEST_F(ZeGraphTestSuite, TestZeUsmGraphExecutionTraceAcrossStopAndStartTracing) {
+  constexpr std::size_t kNumberOfStartStopTracingCycles = 2;
+  auto vectors =
+      CreateDotProductVectors<Workload::DefaultVectorDataType>(Workload::kDefaultVectorSize);
+  auto& [primary, fork_one, fork_two] = GetDotProductLists();
+
+  auto vec_size = static_cast<std::uint32_t>(Workload::kDefaultVectorSize);
+
+  auto [graph, exec_graph] = CaptureGraph(primary.get(), RecordDotProductGraph, primary.get(),
+                                          fork_one.get(), fork_two.get(), GetEvent(), GetEvent(),
+                                          GetEvent(), kernels_, vectors, &vec_size);
+
+  ASSERT_EQ(ptiViewSetCallbacks(ProvideBuffer, MarkBuffer), pti_result::PTI_SUCCESS);
+  for (std::size_t i = 0; i < kNumberOfStartStopTracingCycles; ++i) {
+    *std::get<0>(vectors) = 0;
+    auto* graph_finish = GetEvent(ZE_EVENT_SCOPE_FLAG_HOST);
+    ASSERT_NE(graph_finish, nullptr);
+    ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+    ASSERT_NO_FATAL_FAILURE(ExecuteGraph(primary.get(), exec_graph.get(), graph_finish));
+    WaitForGraphExecution(graph_finish);
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+    EXPECT_FLOAT_EQ(*std::get<0>(vectors), Workload::Result());
+  }
+
+  ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
+  ParseAllBuffers();
+  EXPECT_EQ(std::size(record_storage_.kernel_records),
+            std::size_t{4} * kNumberOfStartStopTracingCycles);
+  ValidateViewTimestamps(record_storage_.kernel_records);
+}
+
+TEST_F(ZeGraphTestSuite, TestZeUsmGraphExecutionTraceWithGraphDestroyedWhileTracingStopped) {
+  auto first_vectors =
+      CreateDotProductVectors<Workload::DefaultVectorDataType>(Workload::kDefaultVectorSize);
+  auto second_vectors =
+      CreateDotProductVectors<Workload::DefaultVectorDataType>(Workload::kDefaultVectorSize);
+  auto& [primary, fork_one, fork_two] = GetDotProductLists();
+
+  auto vec_size = static_cast<std::uint32_t>(Workload::kDefaultVectorSize);
+
+  ASSERT_EQ(ptiViewSetCallbacks(ProvideBuffer, MarkBuffer), pti_result::PTI_SUCCESS);
+  {
+    auto [first_graph, first_exec_graph] = CaptureGraph(
+        primary.get(), RecordDotProductGraph, primary.get(), fork_one.get(), fork_two.get(),
+        GetEvent(), GetEvent(), GetEvent(), kernels_, first_vectors, &vec_size);
+    auto* first_graph_finish = GetEvent(ZE_EVENT_SCOPE_FLAG_HOST);
+    ASSERT_NE(first_graph_finish, nullptr);
+    ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+    ASSERT_NO_FATAL_FAILURE(
+        ExecuteGraph(primary.get(), first_exec_graph.get(), first_graph_finish));
+    WaitForGraphExecution(first_graph_finish);
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+    EXPECT_FLOAT_EQ(*std::get<0>(first_vectors), Workload::Result());
+    // Tracing is stopped and the graph is destroyed.
+  }
+
+  auto [second_graph, second_exec_graph] = CaptureGraph(
+      primary.get(), RecordDotProductGraph, primary.get(), fork_one.get(), fork_two.get(),
+      GetEvent(), GetEvent(), GetEvent(), kernels_, second_vectors, &vec_size);
+  *std::get<0>(second_vectors) = 0;
+  auto* second_graph_finish = GetEvent(ZE_EVENT_SCOPE_FLAG_HOST);
+  ASSERT_NE(second_graph_finish, nullptr);
+  ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+  ASSERT_NO_FATAL_FAILURE(
+      ExecuteGraph(primary.get(), second_exec_graph.get(), second_graph_finish));
+  WaitForGraphExecution(second_graph_finish);
+  EXPECT_FLOAT_EQ(*std::get<0>(second_vectors), Workload::Result());
+
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
+  ParseAllBuffers();
+  EXPECT_EQ(std::size(record_storage_.kernel_records), std::size_t{8});
+  ValidateViewTimestamps(record_storage_.kernel_records);
+}
+
+// Stop tracing after the graph has been executed but before the graph event was synchronized.
+TEST_F(ZeGraphTestSuite, TestZeUsmGraphExecutionStopTracingJustBeforeGraphSynchronization) {
+  auto vectors =
+      CreateDotProductVectors<Workload::DefaultVectorDataType>(Workload::kDefaultVectorSize);
+  auto& [primary, fork_one, fork_two] = GetDotProductLists();
+
+  auto vec_size = static_cast<std::uint32_t>(Workload::kDefaultVectorSize);
+
+  auto [graph, exec_graph] = CaptureGraph(primary.get(), RecordDotProductGraph, primary.get(),
+                                          fork_one.get(), fork_two.get(), GetEvent(), GetEvent(),
+                                          GetEvent(), kernels_, vectors, &vec_size);
+  auto* graph_start = GetEvent(ZE_EVENT_SCOPE_FLAG_HOST);
+  ASSERT_NE(graph_start, nullptr);
+  auto* graph_finish = GetEvent(ZE_EVENT_SCOPE_FLAG_HOST);
+  ASSERT_NE(graph_finish, nullptr);
+
+  ASSERT_EQ(ptiViewSetCallbacks(ProvideBuffer, MarkBuffer), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+  ASSERT_NO_FATAL_FAILURE(
+      ExecuteGraph(primary.get(), exec_graph.get(), graph_finish, 1, &graph_start));
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+
+  ASSERT_EQ(zeEventHostSignal(graph_start), ZE_RESULT_SUCCESS);
+  WaitForGraphExecution(graph_finish);
+  EXPECT_FLOAT_EQ(*std::get<0>(vectors), Workload::Result());
+
+  *std::get<0>(vectors) = 0;
+  auto* second_graph_finish = GetEvent(ZE_EVENT_SCOPE_FLAG_HOST);
+  ASSERT_NE(second_graph_finish, nullptr);
+  ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+  ASSERT_NO_FATAL_FAILURE(ExecuteGraph(primary.get(), exec_graph.get(), second_graph_finish));
+  WaitForGraphExecution(second_graph_finish);
+  EXPECT_FLOAT_EQ(*std::get<0>(vectors), Workload::Result());
+
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
+  ParseAllBuffers();
+  // The pending execution's records are delivered once tracing starts again.
+  EXPECT_EQ(std::size(record_storage_.kernel_records), std::size_t{8});
   ValidateViewTimestamps(record_storage_.kernel_records);
 }

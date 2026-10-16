@@ -545,6 +545,40 @@ TEST_F(LocalModeZeGemmTest, TestStartTracingExecuteCommandQueueWithoutVisitorExt
   ValidateGemmKernel();
 }
 
+TEST_F(LocalModeZeGemmTest, TestExecuteCommandListResetWhileTracingStopped) {
+  InitializeDrivers();
+  if (!command_list_visit_supported_) {
+    GTEST_SKIP() << "Command list visiting is not supported. Skipping test.";
+  }
+  InitializeEvents(1);
+  InitializeQueue();
+  CreateKernel();
+  SetKernelGroupSize();
+  SetKernelArguments();
+  PrepareCommandList();
+
+  EnableView(PTI_VIEW_DEVICE_GPU_KERNEL);
+  ASSERT_EQ(zeCommandQueueExecuteCommandLists(cmd_q_, 1, &cmd_list_, nullptr), ZE_RESULT_SUCCESS);
+  ASSERT_EQ(zeCommandQueueSynchronize(cmd_q_, UINT64_MAX), ZE_RESULT_SUCCESS);
+  DisableAndFlushAllViews();
+  ValidateGemmKernel();
+
+  // Keep the first result buffer alive so the new recording copies to a different address.
+  std::vector<float> first_result(size_ * size_, 0);
+  result_vector_.swap(first_result);
+  ASSERT_EQ(zeCommandListReset(cmd_list_), ZE_RESULT_SUCCESS);
+  ASSERT_EQ(zeEventHostReset(evts_[0]), ZE_RESULT_SUCCESS);
+  PrepareCommandList();
+
+  EnableView(PTI_VIEW_DEVICE_GPU_KERNEL);
+  ASSERT_EQ(zeCommandQueueExecuteCommandLists(cmd_q_, 1, &cmd_list_, nullptr), ZE_RESULT_SUCCESS);
+  ASSERT_EQ(zeCommandQueueSynchronize(cmd_q_, UINT64_MAX), ZE_RESULT_SUCCESS);
+  DisableAndFlushAllViews();
+
+  EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_kernels, static_cast<size_t>(2));
+  ValidateGemmKernel();
+}
+
 TEST_F(LocalModeZeGemmTest, TestStartTracingPrepareCommandList) {
   // Leaving out of Constructor / SetUp for now to allow extending to more test
   // cases.

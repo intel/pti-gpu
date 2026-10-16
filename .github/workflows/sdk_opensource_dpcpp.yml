@@ -155,10 +155,9 @@ jobs:
           # onemkl_gemm_exe and omp_vec_add report Not Run: their samples skip
           # themselves at configure time without oneMKL / icx, but the tests are
           # still registered.
-          # TODO(PTI-480): Fix Graph Tests on Latest Driver Set
           ctest --output-on-failure --preset ${{ matrix.preset }} \
             -LE "performance|quarantine" \
-            -E "run-onemkl_gemm_exe|run-omp_vec_add|ZeGraphTestSuite.TestZeUsmGraphExecutionTracingGraphCreation|ZeGraphTestSuite.TestZeUsmGraphExecutionWithoutTracingGraphCreation"
+            -E "run-onemkl_gemm_exe|run-omp_vec_add"
 
       - name: Quarantined tests # performance and flaky tests
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}

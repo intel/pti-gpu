@@ -282,13 +282,15 @@ struct PtiViewRecordHandler {
       } catch (...) {
         SPDLOG_ERROR("Unknown Exception in {}", __FUNCTION__);
       }
-#if defined(_WIN32)
-      // TODO(PTI-446): Add a public function to manually release the collector and reset any PTI
-      // resources. E.g., ptiViewShutdown, ptiShutdown, or something like that.
-      collector_.release();
-#else
-      collector_.reset();
+      if (collector_) {
+#if !defined(_WIN32)
+        collector_->DisableTracer();
 #endif
+        // TODO(PTI-446): Add a public function to manually release the collector and reset any PTI
+        // resources. E.g., ptiViewShutdown, ptiShutdown, or something like that.
+        // Use static pointer to avoid leak detectors complaining.
+        [[maybe_unused]] static auto* const released_collector = collector_.release();
+      }
       deinit_ = true;
     }
   }

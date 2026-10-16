@@ -164,7 +164,7 @@ struct ZeGraphInfo {
 };
 
 struct ZeGraphAppendInstanceData {
-  ZeGraphInfo* graph_info = nullptr;
+  std::shared_ptr<ZeGraphInfo> graph_info;
   ze_event_handle_t user_graph_signal_event = nullptr;  // User's signal event they passed to the
                                                         // graph append call.
   ze_event_handle_t graph_completion_event =

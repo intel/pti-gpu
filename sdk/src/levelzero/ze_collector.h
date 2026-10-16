@@ -398,9 +398,9 @@ class ZeCollector {
     // In the past: pre- oneAPI 2025.2 and old L0, on Windows due to not specified DLLs unload order
     // we had issues here.
     // Now this works and prevents from receiving L0 Callbacks when the process is winding down.
-    overhead::Init();
-    [[maybe_unused]] ze_result_t status = zelTracerSetEnabled(tracer_, false);
-    overhead_fini(zelTracerSetEnabled_id);
+    overhead::ScopedOverheadCollector overhead_fini(zelTracerSetEnabled_id);
+    [[maybe_unused]] const auto status =
+        zelTracerSetEnabled(tracer_, static_cast<ze_bool_t>(false));
     SPDLOG_DEBUG("In {}, zelTracerSetEnabled(.., false) returns: {:x}", __func__,
                  static_cast<uint32_t>(status));
   }
@@ -3329,6 +3329,17 @@ class ZeCollector {
     }
   }
 
+  static void OnEnterExecutableGraphDestroyExt(ze_executable_graph_destroy_ext_params_t* params,
+                                               void* global_data, void** /*instance_data*/) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
+    auto* const collector = static_cast<ZeCollector*>(global_data);
+    collector->ProcessCommandsAndReturnCommandExecutionsRecordsToUser(nullptr, nullptr);
+    auto removed_instrumented_graph = collector->graph_storage_.Remove(*params->phGraph);
+    if (removed_instrumented_graph) {
+      collector->ReleaseInstrumentedGraph(*removed_instrumented_graph);
+    }
+  }
+
   static void OnExitKernelSetGroupSize(ze_kernel_set_group_size_params_t* params,
                                        ze_result_t result, void* global_data,
                                        void** /*instance_data*/) {
@@ -3464,17 +3475,27 @@ class ZeCollector {
     }
   }
 
+  static void OnEnterContextDestroy(ze_context_destroy_params_t* params, void* global_data,
+                                    void** /*instance_data*/) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
+    auto* const ctx = *(params->phContext);
+    if (!ctx) {
+      return;
+    }
+    auto* const collector = static_cast<ZeCollector*>(global_data);
+    for (const auto& graph_info : collector->graph_storage_.RemoveContext(ctx)) {
+      collector->ReleaseInstrumentedGraph(*graph_info);
+    }
+    collector->ProcessCommandsAndReturnCommandExecutionsRecordsToUser(nullptr, nullptr);
+    collector->event_cache_.ReleaseContext(*(params->phContext));
+    collector->event_pool_manager_.Clear(*(params->phContext));
+  }
+
   static void OnExitContextDestroy(ze_context_destroy_params_t* params, ze_result_t result,
                                    void* global_data, void** /*instance_data*/) {
     SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-      {
-        const std::lock_guard<std::mutex> lock(collector->lock_);
-        collector->ProcessCalls(nullptr, nullptr, nullptr);
-      }
-      collector->event_cache_.ReleaseContext(*(params->phContext));
-      collector->event_pool_manager_.Clear(*(params->phContext));
       collector->event_pools_observer_.ClearContext(*(params->phContext));
     }
   }
@@ -3668,12 +3689,51 @@ class ZeCollector {
     return true;
   }
 
+  void ReleaseInstrumentedGraph(ZeGraphInfo& graph_info) {
+    const std::lock_guard<std::mutex> lock(graph_info.execution_mutex);
+    auto& execution = graph_info.execution;
+    if (!execution.instrumented_graph && !execution.instrumented_executable_graph) {
+      return;
+    }
+
+    if (!SynchronizePreviousExecution(&graph_info).second) {
+      SPDLOG_WARN("Leaking instrumented graphs of graph {}: previous execution did not complete",
+                  static_cast<const void*>(graph_info.graph));
+      return;
+    }
+
+    if (execution.instrumented_executable_graph) {
+      overhead::ScopedOverheadCollector overhead_collector{zeExecutableGraphDestroyExt_id};
+      auto result =
+          l0_wrapper_.w_zeExecutableGraphDestroyExt(execution.instrumented_executable_graph);
+      if (result != ZE_RESULT_SUCCESS) {
+        SPDLOG_ERROR("Failed to destroy instrumented executable graph {}, result: {:x}",
+                     static_cast<const void*>(execution.instrumented_executable_graph),
+                     static_cast<uint32_t>(result));
+        return;
+      }
+      execution.instrumented_executable_graph = nullptr;
+    }
+
+    if (execution.instrumented_graph) {
+      overhead::ScopedOverheadCollector overhead_collector{zeGraphDestroyExt_id};
+      auto result = l0_wrapper_.w_zeGraphDestroyExt(execution.instrumented_graph);
+      if (result != ZE_RESULT_SUCCESS) {
+        SPDLOG_ERROR("Failed to destroy instrumented graph {}, result: {:x}",
+                     static_cast<const void*>(execution.instrumented_graph),
+                     static_cast<uint32_t>(result));
+        return;
+      }
+      execution.instrumented_graph = nullptr;
+    }
+  }
+
   static void OnEnterCommandListAppendGraphExt(ze_command_list_append_graph_ext_params_t* params,
                                                void* global_data, void** instance_data) {
     SPDLOG_TRACE("In {}", __FUNCTION__);
     auto* const collector = static_cast<ZeCollector*>(global_data);
 
-    auto* const graph_info = collector->graph_storage_.GetInfo(*params->phGraph);
+    const auto graph_info = collector->graph_storage_.GetInfo(*params->phGraph);
     if (!graph_info) {
       SPDLOG_ERROR("Failed to get graph info");
       return;
@@ -3688,7 +3748,8 @@ class ZeCollector {
     // instrumented graph for overlapping executions. Executions records should be processed again
     // to make sure all timestamps are collected.
     // Check graph
-    auto [graph_completion_event, success] = collector->SynchronizePreviousExecution(graph_info);
+    auto [graph_completion_event, success] =
+        collector->SynchronizePreviousExecution(graph_info.get());
     if (!success) {
       SPDLOG_WARN(
           "Skipping replay trace due to failed synchronization of previous execution of graph {} "
@@ -3879,8 +3940,6 @@ class ZeCollector {
         ref_count++;
         return ref_count;
       }
-      // NOTE: Re-enable ClearCommandListMap() if stale command list info becomes an issue. For now,
-      // keep the same behavior (pre-On-Demand SYCL Graph tracing).
       if (parent_collector_->options_.disabled_mode) {
         ze_result_t status = parent_collector_->l0_wrapper_.w_zelEnableTracingLayer();
         if (ZE_RESULT_SUCCESS == status) {
@@ -3926,6 +3985,17 @@ class ZeCollector {
       parent_collector_->cb_enabled_.fcallback = false;
       if (ZeCollectionMode::kHybrid == parent_collector_->collection_mode_)
         parent_collector_->options_.hybrid_mode = true;
+      if (ZeCollectionMode::kFull != parent_collector_->collection_mode_) {
+        // On Hybrid and Local modes, there's a chance that the graph will be destroyed and the
+        // handle re-used while tracing is off. This alleviates this issue by
+        // clearing the stored commands to prevents to prevent stale command
+        // list and graph handles from being used.
+        parent_collector_->ClearCommandListMap();
+        for (const auto& [executable_graph, graph_info] :
+             parent_collector_->graph_storage_.RemoveAll()) {
+          parent_collector_->ReleaseInstrumentedGraph(*graph_info);
+        }
+      }
       return ref_count;
     }
 

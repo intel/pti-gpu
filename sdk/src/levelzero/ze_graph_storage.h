@@ -13,6 +13,8 @@
 #include <mutex>
 #include <shared_mutex>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include "overhead_kinds.h"
 #include "ze_gpu_command.h"
@@ -22,28 +24,63 @@ class ZeGraphStorage {
  public:
   explicit ZeGraphStorage(Level0Wrapper* wrapper) : loader_(wrapper) {}
 
-  ZeGraphInfo* GetInfo(ze_executable_graph_handle_t executable_graph_handle) {
+  std::shared_ptr<ZeGraphInfo> GetInfo(ze_executable_graph_handle_t executable_graph_handle) {
     {
       std::shared_lock lock(mutex_);
       auto graph_it = graph_info_map_.find(executable_graph_handle);
       if (graph_it != graph_info_map_.end()) {
-        return graph_it->second.get();
+        return graph_it->second;
       }
     }
 
     auto graph_info = CreateGraphInfo(executable_graph_handle);
-
     if (!graph_info) {
       return nullptr;
     }
 
     std::unique_lock lock(mutex_);
-    return graph_info_map_.emplace(executable_graph_handle, std::move(graph_info))
-        .first->second.get();
+    return graph_info_map_.try_emplace(executable_graph_handle, std::move(graph_info))
+        .first->second;
+  }
+
+  [[nodiscard]] std::vector<std::shared_ptr<ZeGraphInfo>> RemoveContext(
+      ze_context_handle_t context_handle) {
+    std::vector<std::shared_ptr<ZeGraphInfo>> removed;
+    {
+      std::unique_lock lock(mutex_);
+      for (auto graph_info_it = graph_info_map_.begin(); graph_info_it != graph_info_map_.end();) {
+        if (graph_info_it->second->context == context_handle) {
+          removed.push_back(std::move(graph_info_it->second));
+          graph_info_it = graph_info_map_.erase(graph_info_it);
+        } else {
+          ++graph_info_it;
+        }
+      }
+    }
+    return removed;
+  }
+
+  [[nodiscard]] std::shared_ptr<ZeGraphInfo> Remove(
+      ze_executable_graph_handle_t executable_graph_handle) {
+    std::shared_ptr<ZeGraphInfo> removed;
+    {
+      std::unique_lock lock(mutex_);
+      auto graph_info_it = graph_info_map_.find(executable_graph_handle);
+      if (graph_info_it != graph_info_map_.end()) {
+        removed = std::move(graph_info_it->second);
+        graph_info_map_.erase(graph_info_it);
+      }
+    }
+    return removed;
+  }
+
+  [[nodiscard]] auto RemoveAll() {
+    std::unique_lock lock(mutex_);
+    return std::exchange(graph_info_map_, {});
   }
 
  private:
-  std::unique_ptr<ZeGraphInfo> CreateGraphInfo(
+  std::shared_ptr<ZeGraphInfo> CreateGraphInfo(
       ze_executable_graph_handle_t executable_graph_handle) {
     auto result = ZE_RESULT_SUCCESS;
     ze_graph_handle_t graph_handle = nullptr;
@@ -83,7 +120,7 @@ class ZeGraphStorage {
       }
     }
 
-    auto graph_info = std::make_unique<ZeGraphInfo>();
+    auto graph_info = std::make_shared<ZeGraphInfo>();
     graph_info->graph = graph_handle;
     graph_info->executable_graph = executable_graph_handle;
     graph_info->primary_command_list = command_list_handle;
@@ -94,7 +131,7 @@ class ZeGraphStorage {
 
   Level0Wrapper* loader_;
   mutable std::shared_mutex mutex_;
-  std::unordered_map<ze_executable_graph_handle_t, std::unique_ptr<ZeGraphInfo>> graph_info_map_;
+  std::unordered_map<ze_executable_graph_handle_t, std::shared_ptr<ZeGraphInfo>> graph_info_map_;
 };
 
 #endif  // PTI_LEVELZERO_ZE_GRAPH_STORAGE_H_
