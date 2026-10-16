@@ -88,6 +88,7 @@ set(CODE_COVERAGE_BASE_CMD
     --objects
     ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
     ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
+    "$<TARGET_FILE_DIR:pti>"
     --data
     ${PTI_PROFDATA_MERGE_OUTPUT}
     --sources
