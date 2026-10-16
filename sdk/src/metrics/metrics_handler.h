@@ -674,7 +674,10 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
       }
 
       // Reset initialization flag before launching thread
-      it->second->profiling_thread_initialized_ = false;
+      {
+        std::lock_guard<std::mutex> lock(it->second->profiling_thread_start_mutex_);
+        it->second->profiling_thread_initialized_ = false;
+      }
       it->second->profiling_thread_ = std::make_unique<std::thread>(
           &PtiStreamMetricsProfiler::PerDeviceStreamMetricsProfilingThread, this, it->second,
           sampling_interval_, start_paused);
