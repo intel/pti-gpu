@@ -159,31 +159,30 @@ def gen_api_name_list(out_file, l0_func_list, l0_rt_func_list, ext_func_list, oc
 
 def gen_symbol_func(file_handle):
   file_handle.write("\n#include \"cl_intel_ext.h\"\n")
-  file_handle.write("\n\nstatic std::string get_symbol(API_TRACING_ID id){\n")
-  file_handle.write("    constexpr size_t tracing_api_name_size = sizeof(tracing_api_name) / sizeof(tracing_api_name[0]);\n")
-  file_handle.write("    if (id == UnknownTracingId || static_cast<size_t>(id) >= tracing_api_name_size) {\n")
-  file_handle.write("      return \"UnknownAPIName\";\n")
-  file_handle.write("    } else if ((id > L0StartTracingId) && (id < L0EndTracingId)) {\n")
+  # The id is an API_TRACING_ID or, for the OpenCL Intel extensions, a
+  # cl_ext_api_id (ClExtApiStart and up), so it is taken as a plain int. Each
+  # range maps to its own slice of tracing_api_name, which holds API names only
+  # (no marker or reserved ids), so ids cannot be bounded by its size.
+  file_handle.write("\n\nstatic std::string get_symbol(int id){\n")
+  file_handle.write("    constexpr int l0_count = L0EndTracingId - L0StartTracingId - 1;\n")
+  file_handle.write("    constexpr int ext_count = ExtEndTracingId - ExtStartTracingId - 1;\n")
+  file_handle.write("    constexpr int tracing_api_name_size = static_cast<int>(sizeof(tracing_api_name) / sizeof(tracing_api_name[0]));\n")
+  file_handle.write("    int index;\n")
+  file_handle.write("    if ((id > L0StartTracingId) && (id < L0EndTracingId)) {\n")
   file_handle.write("      // L0+RT APIs: array starts at index 0\n")
-  file_handle.write("      auto index = id - L0StartTracingId - 1;\n")
-  file_handle.write("      return tracing_api_name[index];\n")
+  file_handle.write("      index = id - L0StartTracingId - 1;\n")
   file_handle.write("    } else if ((id > ExtStartTracingId) && (id < ExtEndTracingId)) {\n")
   file_handle.write("      // Extension APIs: array starts after L0+RT APIs\n")
-  file_handle.write("      constexpr auto l0_count = L0EndTracingId - L0StartTracingId - 1;\n")
-  file_handle.write("      auto index = l0_count + (id - ExtStartTracingId - 1);\n")
-  file_handle.write("      return tracing_api_name[index];\n")
+  file_handle.write("      index = l0_count + (id - ExtStartTracingId - 1);\n")
   file_handle.write("    } else if ((id >= OCLStartTracingId) && (id < OCLEndTracingId)) {\n")
   file_handle.write("      // OCL APIs: array starts after L0+RT and Extension APIs\n")
-  file_handle.write("      constexpr auto l0_count = L0EndTracingId - L0StartTracingId - 1;\n")
-  file_handle.write("      constexpr auto ext_count = ExtEndTracingId - ExtStartTracingId - 1;\n")
-  file_handle.write("      auto index = l0_count + ext_count + (id - OCLStartTracingId);\n")
-  file_handle.write("      return tracing_api_name[index];\n")
-  file_handle.write("    } else if (((cl_ext_api_id)id >= ClExtApiStart) && ((cl_ext_api_id)id < ClExtApiEnd)) {\n")
+  file_handle.write("      index = l0_count + ext_count + (id - OCLStartTracingId);\n")
+  file_handle.write("    } else if ((id >= ClExtApiStart) && (id < ClExtApiEnd)) {\n")
   file_handle.write("      return cl_ext_api[id - ClExtApiStart];\n")
   file_handle.write("    } else {\n")
-  file_handle.write("      // Error: never come here\n")
   file_handle.write("      return \"UnknownAPIName\";\n")
   file_handle.write("    }\n")
+  file_handle.write("    return (index < tracing_api_name_size) ? tracing_api_name[index] : \"UnknownAPIName\";\n")
   file_handle.write("  }\n")
 
 def main():
