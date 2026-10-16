@@ -8,6 +8,8 @@
 #define PTI_TOOLS_UNITRACE_UTILS_SHARED_MEMORY_H_
 
 #include <cctype>
+#include <cstdio>
+#include <cstring>
 #include <memory>
 #include <string>
 
@@ -19,7 +21,6 @@
 #include <sys/types.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <cstring>
 #endif /* _WIN32 */
 
 #include <iostream>
@@ -90,7 +91,14 @@ private:
     HANDLE hMapFile_ = nullptr;
 #endif /* _WIN32 */
     bool ValidateSessionName(const char* session) {
-        const size_t max_len = SHM_NAME_MAX - strlen(SHM_NAME_PREFIX) - GetShmUserTag().size() - 1;
+        // Prefix and user tag must leave room for at least one session
+        // character and the terminator; checked first so max_len cannot wrap.
+        const size_t fixed_len = strlen(SHM_NAME_PREFIX) + GetShmUserTag().size();
+        if (fixed_len + 2 > SHM_NAME_MAX) {
+            std::cerr << "[ERROR] User name is too long for a session identifier" << std::endl;
+            return false;
+        }
+        const size_t max_len = SHM_NAME_MAX - fixed_len - 1;
         if (strlen(session) > max_len) {
             std::cerr << "[ERROR] Session identifier is too long (maximum " << max_len << " }" << std::endl;
             return false;
@@ -104,10 +112,13 @@ private:
             return false;
         }
 
+        const int len = snprintf(shm_name_, sizeof(shm_name_), "%s%s%s",
+                                 SHM_NAME_PREFIX, GetShmUserTag().c_str(), session);
+        if (len < 0 || static_cast<size_t>(len) >= sizeof(shm_name_)) {
+            shm_name_[0] = '\0';
+            return false;
+        }
         shm_size_ = size;
-        strcpy(shm_name_, SHM_NAME_PREFIX);
-        strcat(shm_name_, GetShmUserTag().c_str());
-        strcat(shm_name_, session);
         return true;
     }
 
