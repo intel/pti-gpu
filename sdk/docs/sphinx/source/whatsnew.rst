@@ -5,10 +5,17 @@ What's New
 .. warning::
    **DRAFT DOCUMENTATION** - This documentation is currently in draft status and subject to change.
 
-Version 1.2.0
+Version 1.2.1
 ---------------
 
 *Current release*
+
+**Updates in this release:**
+
+* Fix a crash in applications that use ``std::filesystem`` and link a ``libpti_view.so`` built with GCC 8.5 on Rocky Linux 8.
+
+Version 1.2.0
+---------------
 
 **Updates in this release:**
 
