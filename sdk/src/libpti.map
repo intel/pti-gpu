@@ -1,0 +1,14 @@
+{
+  global:
+    pti*;     /* Public API */
+    Pti*;     /* Private but exported symbols (used by pti_view) */
+    itt*;     /* Private but exported symbols (ITT collector, used by pti_view) */
+    Itt*;     /* Private but exported symbols (ITT collector, used by pti_view) */
+    xpti*;    /* Used by SYCL collector (XPTI tracing) */
+    extern "C++" {
+      SyclCollector::TpCallback*;  /* XPTI tracepoint callback */
+    };
+
+  local:
+    *;
+};

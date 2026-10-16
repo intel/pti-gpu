@@ -1,0 +1,9 @@
+{
+  global:
+    pti*;     /* Public API */
+    __itt*;   /* Used to collect data for Intel® ITT */
+    xpti*;    /* Used by SYCL collector (XPTI tracing) */
+
+  local:
+    *;
+};

@@ -1449,3 +1449,29 @@ endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   add_subdirectory(itt_lib_env)
 endif()
+
+# Symbols exported by libpti(_view).so should be limited to PTI and a few
+# symbols required by XPTI and ITT APIs needed for collection.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_NM)
+  set(PTI_SYMBOL_TEST_DISABLED
+      "$<NOT:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>>")
+
+  add_test(NAME pti_view_exported_symbols
+           COMMAND ${CMAKE_NM} -D --defined-only $<TARGET_FILE:Pti::pti_view>)
+  # This regex matches the nm line. The symbol name must begin with a specific
+  # prefix e.g., pti or __itt. If new symbols are added that don't match the
+  # pattern, add the symbol's prefix here (ditto for pti).
+  set_tests_properties(pti_view_exported_symbols PROPERTIES
+    PASS_REGULAR_EXPRESSION "^([0-9a-f]+ (A |[A-Za-z] (pti|__itt|xpti))[^\n]*\n?)+$"
+    DISABLED "${PTI_SYMBOL_TEST_DISABLED}"
+    LABELS "functional;integration;symbols")
+
+  add_test(NAME pti_exported_symbols
+           COMMAND ${CMAKE_NM} -D --defined-only $<TARGET_FILE:Pti::pti>)
+
+  set_tests_properties(pti_exported_symbols PROPERTIES
+    PASS_REGULAR_EXPRESSION
+    "^([0-9a-f]+ (A |[A-Za-z] (pti|Pti|itt|Itt|xpti|_ZN13SyclCollector10TpCallback))[^\n]*\n?)+$"
+    DISABLED "${PTI_SYMBOL_TEST_DISABLED}"
+    LABELS "functional;integration;symbols")
+endif()

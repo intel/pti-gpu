@@ -142,6 +142,7 @@ set(PTI_API_SOVERSION "${PROJECT_VERSION_MAJOR}")
 CheckSOVersion(${PTI_API_SOVERSION})
 CheckExperimentalFilesystem()
 PtiCheckLinkerFlag(EXCLUDE_LIBS_ALL "LINKER:--exclude-libs,ALL")
+PtiCheckLinkerFlag(NODELETE "LINKER:-z,nodelete")
 
 # Check and Get Dependencies
 GetSpdlog()
@@ -298,7 +299,10 @@ target_link_libraries(
 
 target_compile_options(pti PRIVATE ${PTI_INTEL_LLVM_EXCLUDE_LIBS})
 
-target_link_options(pti PRIVATE ${PTI_INTEL_LLVM_EXCLUDE_LIBS} ${PTI_EXCLUDE_LIBS_ALL})
+# Since PTI provides callbacks to Level Zero tracing and XPTI framework, it
+# should not be unloaded; therefore, marking it NODELETE.
+target_link_options(pti PRIVATE ${PTI_INTEL_LLVM_EXCLUDE_LIBS} ${PTI_EXCLUDE_LIBS_ALL} ${PTI_NODELETE})
+PtiAddVersionScript(pti "${PROJECT_SOURCE_DIR}/src/libpti.map")
 
 FindTracedLibrariesHeaderPaths(
   pti "${PROJECT_SOURCE_DIR}/src/gen_tracing_callbacks.py"
@@ -363,6 +367,7 @@ target_link_libraries(
 target_compile_options(pti_view PRIVATE ${PTI_INTEL_LLVM_EXCLUDE_LIBS})
 
 target_link_options(pti_view PRIVATE ${PTI_INTEL_LLVM_EXCLUDE_LIBS} ${PTI_EXCLUDE_LIBS_ALL})
+PtiAddVersionScript(pti_view "${PROJECT_SOURCE_DIR}/src/libpti_view.map")
 
 target_link_libraries(
   pti_all INTERFACE Pti::pti_view)
