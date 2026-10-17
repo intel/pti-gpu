@@ -4340,10 +4340,13 @@ class ZeCollector {
   }
 
   // Stores a command into a graph during capture mode and tracks the signal event.
+  // A graph's contents are guarded by graphs_mutex_ (always taken after
+  // command_lists_mutex_ when both are needed).
   void StoreCommandInGraph(ZeGraph* graph, ZeCommand* desc,
                            ZeCommandMetricQuery* desc_query, uint64_t host_timestamp,
                            ze_event_handle_t signal_event,
                            ze_command_list_handle_t command_list) {
+    std::lock_guard<std::shared_mutex> graph_lock(graphs_mutex_);
     desc->immediate_ = true;
     desc->graph_command_ = true;
     desc->append_time_ = host_timestamp;
@@ -4373,19 +4376,8 @@ class ZeCollector {
       uint32_t num_wait_events, ze_event_handle_t* wait_events) {
     if (wait_events == nullptr || num_wait_events == 0) return;
 
-    bool already_capturing = false;
-    ZeGraph* existing_target = nullptr;
-    {
-      std::shared_lock<std::shared_mutex> lock(command_lists_mutex_);
-      auto clit = command_lists_.find(command_list);
-      if (clit == command_lists_.end()) {
-        return;
-      }
-      already_capturing = clit->second->graph_capturing_;
-      existing_target = clit->second->graph_capture_target_;
-    }
-
-    // Find the graph whose captured signal events match a wait event
+    // Find the graph whose captured signal events match a wait event (cheap
+    // shared-lock pass; the common case is no match)
     ZeGraph* target = nullptr;
     {
       std::shared_lock<std::shared_mutex> lock(graphs_mutex_);
@@ -4402,10 +4394,33 @@ class ZeCollector {
 
     if (target == nullptr) return;
 
+    // Decide and apply under both exclusive locks: the search above released
+    // its lock, so re-check that the graph is still tracked and still matches
+    // a wait event, and read the command list state here.
+    std::lock_guard<std::shared_mutex> cmd_lock(command_lists_mutex_);
+    std::lock_guard<std::shared_mutex> graph_lock(graphs_mutex_);
+    auto clit = command_lists_.find(command_list);
+    if (clit == command_lists_.end()) {
+      return;
+    }
+    const bool already_capturing = clit->second->graph_capturing_;
+    ZeGraph* const existing_target = clit->second->graph_capture_target_;
+    bool target_matches = false;
+    for (auto& [gh, ginfo] : graphs_) {
+      if (ginfo == target) {
+        for (uint32_t i = 0; i < num_wait_events; ++i) {
+          if (target->event_to_cmdlist_.count(wait_events[i])) {
+            target_matches = true;
+            break;
+          }
+        }
+        break;
+      }
+    }
+    if (!target_matches) return;
+
     // --- Join: primary waits on fork events → end capture on those forks ---
     if (already_capturing && command_list == target->primary_command_list_) {
-      std::lock_guard<std::shared_mutex> cmd_lock(command_lists_mutex_);
-      std::lock_guard<std::shared_mutex> graph_lock(graphs_mutex_);
       for (uint32_t i = 0; i < num_wait_events; ++i) {
         auto evt_it = target->event_to_cmdlist_.find(wait_events[i]);
         if (evt_it == target->event_to_cmdlist_.end()) continue;
@@ -4432,18 +4447,11 @@ class ZeCollector {
     }
 
     // --- Fork: auto-transition this cmdlist into capture mode ---
-    {
-      std::lock_guard<std::shared_mutex> lock(command_lists_mutex_);
-      auto it = command_lists_.find(command_list);
-      if (it != command_lists_.end() && !it->second->graph_capturing_) {
-        it->second->graph_capturing_ = true;
-        it->second->graph_capture_target_ = target;
-      }
+    if (!already_capturing) {
+      clit->second->graph_capturing_ = true;
+      clit->second->graph_capture_target_ = target;
     }
-    {
-      std::lock_guard<std::shared_mutex> lock(graphs_mutex_);
-      target->forked_command_lists_.insert(command_list);
-    }
+    target->forked_command_lists_.insert(command_list);
   }
 
   // Called when zeGraphDestroyExp succeeds - cleanup graph tracking
@@ -4561,38 +4569,30 @@ class ZeCollector {
 
   // Called when zeCommandListBeginCaptureIntoGraphExp succeeds - start tracking captures
   void OnBeginGraphCapture(ze_command_list_handle_t command_list, ze_graph_handle_t graph) {
-    {
-      std::shared_lock<std::shared_mutex> lock(command_lists_mutex_);
-      if (command_lists_.find(command_list) == command_lists_.end()) {
-        return;
-      }
+    // One critical section, so the command list cannot go away and the graph
+    // cannot be reset or destroyed between the check and the update.
+    std::lock_guard<std::shared_mutex> cmd_lock(command_lists_mutex_);
+    std::lock_guard<std::shared_mutex> graph_lock(graphs_mutex_);
+    auto it = command_lists_.find(command_list);
+    if (it == command_lists_.end()) {
+      return;
     }
 
     // Create or update the graph entry and reset capture state
-    ZeGraph* graph_info = nullptr;
-    {
-      std::lock_guard<std::shared_mutex> lock(graphs_mutex_);
-      auto git = graphs_.try_emplace(graph, nullptr).first;
-      if (git->second == nullptr) {
-        git->second = new ZeGraph();
-      }
-      graph_info = git->second;
-      graph_info->commands_.clear();
-      graph_info->metric_queries_.clear();
-      graph_info->primary_command_list_ = command_list;
-      graph_info->forked_command_lists_.clear();
-      graph_info->event_to_cmdlist_.clear();
+    auto git = graphs_.try_emplace(graph, nullptr).first;
+    if (git->second == nullptr) {
+      git->second = new ZeGraph();
     }
+    ZeGraph* graph_info = git->second;
+    graph_info->commands_.clear();
+    graph_info->metric_queries_.clear();
+    graph_info->primary_command_list_ = command_list;
+    graph_info->forked_command_lists_.clear();
+    graph_info->event_to_cmdlist_.clear();
 
     // Mark command list as in graph capture mode with pointer to graph in graphs_ map
-    {
-      std::lock_guard<std::shared_mutex> lock(command_lists_mutex_);
-      auto it = command_lists_.find(command_list);
-      if (it != command_lists_.end()) {
-        it->second->graph_capturing_ = true;
-        it->second->graph_capture_target_ = graph_info;
-      }
-    }
+    it->second->graph_capturing_ = true;
+    it->second->graph_capture_target_ = graph_info;
   }
 
   // Called when zeCommandListEndGraphCaptureExp succeeds - stop tracking captures
@@ -4600,9 +4600,13 @@ class ZeCollector {
     // Get pending capture (if any) and reset capture state on command list
     ZeGraph* pending = nullptr;
 
+    // One critical section: the target graph's fork and event sets are graph
+    // contents (graphs_mutex_), and the pending graph is adopted atomically.
+    std::lock_guard<std::shared_mutex> cmd_lock(command_lists_mutex_);
+    std::lock_guard<std::shared_mutex> graph_lock(graphs_mutex_);
+
     // Reset capture state on primary and all forked command lists
     {
-      std::lock_guard<std::shared_mutex> lock(command_lists_mutex_);
       auto it = command_lists_.find(command_list);
       if (it != command_lists_.end()) {
         pending = it->second->pending_graph_capture_;
@@ -4630,7 +4634,6 @@ class ZeCollector {
     }
 
     {
-      std::lock_guard<std::shared_mutex> lock(graphs_mutex_);
       auto git = graphs_.find(graph);
       if (git == graphs_.end()) {
         // BeginGraphCaptureExp path: adopt the pending capture into graphs_
@@ -5531,6 +5534,7 @@ class ZeCollector {
       if (it != collector->command_lists_.end() && it->second->graph_capturing_) {
         ZeGraph* graph = it->second->graph_capture_target_;
         if (graph != nullptr) {
+          std::lock_guard<std::shared_mutex> graph_lock(graphs_mutex_);
           graph->event_to_cmdlist_[*(params->phEvent)] = *(params->phCommandList);
         }
       }
