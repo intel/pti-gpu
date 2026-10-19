@@ -254,7 +254,10 @@ def run(path, option):
   dataJson = parseJsonResults(stderr)
   if len(dataJson.keys()) == 0: return "No data found in the output"
 
-  return None # skip other tests due to issue with SIMD active lanes calculation
+  # The checks below need correct SIMD active lanes, which are not calculated
+  # reliably yet, so they run only with PTI_MEMACCESS_CONSISTENCY_CHECKS=1.
+  if os.environ.get("PTI_MEMACCESS_CONSISTENCY_CHECKS") != "1":
+    return None
 
   # check equality of text and json results from different runs
   if dataTxt != dataJson:
