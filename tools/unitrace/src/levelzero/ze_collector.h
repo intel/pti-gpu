@@ -3654,7 +3654,6 @@ class ZeCollector {
 
       // Read graph capture state before releasing the lock
       bool graph_capturing = it->second->graph_capturing_;
-      ZeGraph* graph_capture_target = it->second->graph_capture_target_;
 
       command_lists_mutex_.unlock_shared();
 
@@ -3676,10 +3675,10 @@ class ZeCollector {
 
       uint64_t host_timestamp = ze_instance_data.timestamp_host;
 
-      // Check if command list is in graph capture mode
-      ZeGraph* capture_graph = graph_capturing ? graph_capture_target : nullptr;
-      if (capture_graph) {
-        StoreCommandInGraph(capture_graph, desc, desc_query, host_timestamp, event_to_signal, command_list);
+      // In graph capture mode the command goes into the capture target; the
+      // target is re-read under the locks in StoreCommandInGraph (capture may
+      // have ended since graph_capturing was read).
+      if (graph_capturing && StoreCommandInGraph(command_list, desc, desc_query, host_timestamp, event_to_signal)) {
       } else if (it->second->immediate_) {
         desc->immediate_ = true;
         desc->instance_id_ = UniKernelInstanceId::GetKernelInstanceId();
@@ -3790,7 +3789,6 @@ class ZeCollector {
 
       // Read graph capture state before releasing the lock
       bool graph_capturing = it->second->graph_capturing_;
-      ZeGraph* graph_capture_target = it->second->graph_capture_target_;
 
       command_lists_mutex_.unlock_shared();
 
@@ -3826,10 +3824,10 @@ class ZeCollector {
 
       uint64_t host_timestamp = ze_instance_data.timestamp_host;
 
-      // Check if command list is in graph capture mode
-      ZeGraph* capture_graph = graph_capturing ? graph_capture_target : nullptr;
-      if (capture_graph) {
-        StoreCommandInGraph(capture_graph, desc, desc_query, host_timestamp, event_to_signal, command_list);
+      // In graph capture mode the command goes into the capture target; the
+      // target is re-read under the locks in StoreCommandInGraph (capture may
+      // have ended since graph_capturing was read).
+      if (graph_capturing && StoreCommandInGraph(command_list, desc, desc_query, host_timestamp, event_to_signal)) {
       } else if (it->second->immediate_) {
         desc->immediate_ = true;
         desc->instance_id_ = UniKernelInstanceId::GetKernelInstanceId();
@@ -3925,7 +3923,6 @@ class ZeCollector {
 
       // Read graph capture state before releasing the lock
       bool graph_capturing = it->second->graph_capturing_;
-      ZeGraph* graph_capture_target = it->second->graph_capture_target_;
 
       command_lists_mutex_.unlock_shared();
 
@@ -3960,10 +3957,10 @@ class ZeCollector {
 
       uint64_t host_timestamp = ze_instance_data.timestamp_host;
 
-      // Check if command list is in graph capture mode
-      ZeGraph* capture_graph = graph_capturing ? graph_capture_target : nullptr;
-      if (capture_graph) {
-        StoreCommandInGraph(capture_graph, desc, desc_query, host_timestamp, event_to_signal, command_list);
+      // In graph capture mode the command goes into the capture target; the
+      // target is re-read under the locks in StoreCommandInGraph (capture may
+      // have ended since graph_capturing was read).
+      if (graph_capturing && StoreCommandInGraph(command_list, desc, desc_query, host_timestamp, event_to_signal)) {
       } else if (it->second->immediate_) {
         desc->immediate_ = true;
         desc->instance_id_ = UniKernelInstanceId::GetKernelInstanceId();
@@ -4060,7 +4057,6 @@ class ZeCollector {
 
       // Read graph capture state before releasing the lock
       bool graph_capturing = it->second->graph_capturing_;
-      ZeGraph* graph_capture_target = it->second->graph_capture_target_;
 
       command_lists_mutex_.unlock_shared();
 
@@ -4097,10 +4093,10 @@ class ZeCollector {
 
       uint64_t host_timestamp = ze_instance_data.timestamp_host;
 
-      // Check if command list is in graph capture mode
-      ZeGraph* capture_graph = graph_capturing ? graph_capture_target : nullptr;
-      if (capture_graph) {
-        StoreCommandInGraph(capture_graph, desc, desc_query, host_timestamp, event_to_signal, command_list);
+      // In graph capture mode the command goes into the capture target; the
+      // target is re-read under the locks in StoreCommandInGraph (capture may
+      // have ended since graph_capturing was read).
+      if (graph_capturing && StoreCommandInGraph(command_list, desc, desc_query, host_timestamp, event_to_signal)) {
       } else if (it->second->immediate_) {
         desc->immediate_ = true;
         desc->instance_id_ = UniKernelInstanceId::GetKernelInstanceId();
@@ -4183,7 +4179,6 @@ class ZeCollector {
 
       // Read graph capture state before releasing the lock
       bool graph_capturing = it->second->graph_capturing_;
-      ZeGraph* graph_capture_target = it->second->graph_capture_target_;
 
       command_lists_mutex_.unlock_shared();
 
@@ -4220,10 +4215,10 @@ class ZeCollector {
 
       uint64_t host_timestamp = ze_instance_data.timestamp_host;
 
-      // Check if command list is in graph capture mode
-      ZeGraph* capture_graph = graph_capturing ? graph_capture_target : nullptr;
-      if (capture_graph) {
-        StoreCommandInGraph(capture_graph, desc, desc_query, host_timestamp, event_to_signal, command_list);
+      // In graph capture mode the command goes into the capture target; the
+      // target is re-read under the locks in StoreCommandInGraph (capture may
+      // have ended since graph_capturing was read).
+      if (graph_capturing && StoreCommandInGraph(command_list, desc, desc_query, host_timestamp, event_to_signal)) {
       } else if (it->second->immediate_) {
         desc->immediate_ = true;
         desc->instance_id_ = UniKernelInstanceId::GetKernelInstanceId();
@@ -4339,14 +4334,24 @@ class ZeCollector {
     }
   }
 
-  // Stores a command into a graph during capture mode and tracks the signal event.
-  // A graph's contents are guarded by graphs_mutex_ (always taken after
-  // command_lists_mutex_ when both are needed).
-  void StoreCommandInGraph(ZeGraph* graph, ZeCommand* desc,
+  // Stores a command into the graph that command_list is capturing into and
+  // tracks the signal event. The capture target is read here, under
+  // command_lists_mutex_ (shared) and graphs_mutex_ (graph contents, always taken
+  // after command_lists_mutex_), so it cannot change or be destroyed between the
+  // check and the store. Returns false if the command list is no longer
+  // capturing; the caller then handles the command as a regular one.
+  bool StoreCommandInGraph(ze_command_list_handle_t command_list, ZeCommand* desc,
                            ZeCommandMetricQuery* desc_query, uint64_t host_timestamp,
-                           ze_event_handle_t signal_event,
-                           ze_command_list_handle_t command_list) {
+                           ze_event_handle_t signal_event) {
+    std::shared_lock<std::shared_mutex> cmd_lock(command_lists_mutex_);
     std::lock_guard<std::shared_mutex> graph_lock(graphs_mutex_);
+    auto it = command_lists_.find(command_list);
+    if (it == command_lists_.end() || !it->second->graph_capturing_ ||
+        it->second->graph_capture_target_ == nullptr) {
+      return false;
+    }
+    ZeGraph* graph = it->second->graph_capture_target_;
+
     desc->immediate_ = true;
     desc->graph_command_ = true;
     desc->append_time_ = host_timestamp;
@@ -4362,6 +4367,7 @@ class ZeCollector {
     if (signal_event != nullptr) {
       graph->event_to_cmdlist_[signal_event] = command_list;
     }
+    return true;
   }
 
   // Detects fork and join transitions during graph capture.
@@ -4553,6 +4559,9 @@ class ZeCollector {
   // into it.  OnEndGraphCapture will adopt this into graphs_ under the real handle.
   void OnBeginGraphCaptureNoGraph(ze_command_list_handle_t command_list) {
     std::lock_guard<std::shared_mutex> lock(command_lists_mutex_);
+    // The new graph becomes reachable through graph_capture_target_; its
+    // contents are guarded by graphs_mutex_ like every other graph's.
+    std::lock_guard<std::shared_mutex> graph_lock(graphs_mutex_);
     auto it = command_lists_.find(command_list);
     if (it == command_lists_.end()) {
       return;
