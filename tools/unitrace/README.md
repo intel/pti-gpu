@@ -86,6 +86,8 @@ In addition to BUILD_WITH_MPI, one or more of the following settings can also be
 **BUILD_WITH_OPENCL=<1/0>** to enable/disable OpenCL profiling support (enabled by default),\
 **BUILD_WITH_L0=<1/0>** to enable/disable Level Zero profiling support (enabled by default).
 
+All of these settings also accept ON/OFF (case-insensitive).
+
 Example:
 
 ```

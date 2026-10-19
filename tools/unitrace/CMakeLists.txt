@@ -36,25 +36,28 @@ else()
   )
 endif()
 
-if (NOT DEFINED BUILD_WITH_L0)
-  set(BUILD_WITH_L0 1) # Defaul value is 1
-endif()
+# These flags are forwarded to the compiler as macros, so they must be 0 or 1.
+# 1/ON/TRUE/YES and 0/OFF/FALSE/NO are accepted (case-insensitive).
+macro(normalize_build_flag flag default_value)
+  if (NOT DEFINED ${flag})
+    set(${flag} ${default_value})
+  else()
+    string(TOUPPER "${${flag}}" _flag_value)
+    if (_flag_value MATCHES "^(1|ON|TRUE|YES)$")
+      set(${flag} 1)
+    elseif (_flag_value MATCHES "^(0|OFF|FALSE|NO)$")
+      set(${flag} 0)
+    else()
+      message(FATAL_ERROR "${flag}=${${flag}} is invalid. Use 1/ON or 0/OFF.")
+    endif()
+  endif()
+endmacro()
 
-if (NOT DEFINED BUILD_WITH_ITT)
-  set(BUILD_WITH_ITT 1) # Defaul value is 1
-endif()
-
-if (NOT DEFINED BUILD_WITH_XPTI)
-  set(BUILD_WITH_XPTI 1) # Defaul value is 1
-endif()
-
-if (NOT DEFINED BUILD_WITH_OPENCL)
-  set(BUILD_WITH_OPENCL 1) # Defaul value is 1
-endif()
-
-if (NOT DEFINED BUILD_WITH_OMP)
-  set(BUILD_WITH_OMP 1) # Default value is 1 - Enable OpenMP tracing
-endif()
+normalize_build_flag(BUILD_WITH_L0 1)
+normalize_build_flag(BUILD_WITH_ITT 1)
+normalize_build_flag(BUILD_WITH_XPTI 1)
+normalize_build_flag(BUILD_WITH_OPENCL 1)
+normalize_build_flag(BUILD_WITH_OMP 1) # OpenMP tracing
 
 if (BUILD_WITH_MPI AND BUILD_WITH_ITT STREQUAL "0")
   message(FATAL_ERROR "BUILD_WITH_ITT=0 and BUILD_WITH_MPI=1 is not a valid configuration for unitrace tool.")
