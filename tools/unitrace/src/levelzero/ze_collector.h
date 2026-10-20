@@ -4382,26 +4382,12 @@ class ZeCollector {
       uint32_t num_wait_events, ze_event_handle_t* wait_events) {
     if (wait_events == nullptr || num_wait_events == 0) return;
 
-    // Find the graph whose captured signal events match a wait event (cheap
-    // shared-lock pass; the common case is no match)
-    ZeGraph* target = nullptr;
-    {
-      std::shared_lock<std::shared_mutex> lock(graphs_mutex_);
-      for (auto& [gh, ginfo] : graphs_) {
-        for (uint32_t i = 0; i < num_wait_events; ++i) {
-          if (ginfo->event_to_cmdlist_.count(wait_events[i])) {
-            target = ginfo;
-            break;
-          }
-        }
-        if (target) break;
-      }
-    }
-
+    // Cheap shared-lock pass first; the common case is no match
+    ZeGraph* target = FindForkSourceGraph(num_wait_events, wait_events);
     if (target == nullptr) return;
 
     // Decide and apply under both exclusive locks: the search above released
-    // its lock, so re-check that the graph is still tracked and still matches
+    // its locks, so re-check that the graph is still tracked and still matches
     // a wait event, and read the command list state here.
     std::lock_guard<std::shared_mutex> cmd_lock(command_lists_mutex_);
     std::lock_guard<std::shared_mutex> graph_lock(graphs_mutex_);
@@ -4497,16 +4483,27 @@ class ZeCollector {
   // is paused, before its graph_capturing_ flag has been flipped.
   bool WouldTriggerGraphCapture(uint32_t num_wait_events,
                                 ze_event_handle_t* wait_events) {
-    if (wait_events == nullptr || num_wait_events == 0) return false;
-    std::shared_lock<std::shared_mutex> lock(graphs_mutex_);
+    return FindForkSourceGraph(num_wait_events, wait_events) != nullptr;
+  }
+
+  // Returns the graph whose captured signal events include one of the wait
+  // events, or nullptr. Takes the same locks, in the same order, as the
+  // writers of event_to_cmdlist_ (command_lists_mutex_, then graphs_mutex_),
+  // both shared. The result is only a hint: callers that act on it must
+  // re-check under the exclusive locks.
+  ZeGraph* FindForkSourceGraph(uint32_t num_wait_events,
+                               ze_event_handle_t* wait_events) {
+    if (wait_events == nullptr || num_wait_events == 0) return nullptr;
+    std::shared_lock<std::shared_mutex> cmd_lock(command_lists_mutex_);
+    std::shared_lock<std::shared_mutex> graph_lock(graphs_mutex_);
     for (auto& [gh, ginfo] : graphs_) {
       for (uint32_t i = 0; i < num_wait_events; ++i) {
         if (ginfo->event_to_cmdlist_.count(wait_events[i])) {
-          return true;
+          return ginfo;
         }
       }
     }
-    return false;
+    return nullptr;
   }
 
   // Whether an append on this command list should be instrumented. Always
@@ -5541,9 +5538,10 @@ class ZeCollector {
       std::shared_lock<std::shared_mutex> lock(collector->command_lists_mutex_);
       auto it = collector->command_lists_.find(*(params->phCommandList));
       if (it != collector->command_lists_.end() && it->second->graph_capturing_) {
+        // The capture target is read under graphs_mutex_ like everywhere else
+        std::lock_guard<std::shared_mutex> graph_lock(graphs_mutex_);
         ZeGraph* graph = it->second->graph_capture_target_;
         if (graph != nullptr) {
-          std::lock_guard<std::shared_mutex> graph_lock(graphs_mutex_);
           graph->event_to_cmdlist_[*(params->phEvent)] = *(params->phCommandList);
         }
       }
