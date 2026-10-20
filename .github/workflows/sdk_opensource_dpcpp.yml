@@ -7,6 +7,11 @@ name: sdk-opensource-dpcpp-build-and-test
 
 on:
   push:
+    branches: [ "master" ]
+    paths:
+      - .github/workflows/sdk_opensource_dpcpp.yml
+  pull_request:
+    branches: [ "master" ]
     paths:
       - .github/workflows/sdk_opensource_dpcpp.yml
   workflow_dispatch:

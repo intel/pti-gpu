@@ -2,13 +2,22 @@ name: nightly-build-and-test
 
 on:
   push:
+    branches: [ "master" ]
     paths:
-    - .github/workflows/nightly_build_and_test.yml
-    - .github/actions/linuxTest/action.yml
-
+      - .github/workflows/nightly_build_and_test.yml
+      - .github/actions/linuxTest/action.yml
+  pull_request:
+    branches: [ "master" ]
+    paths:
+      - .github/workflows/nightly_build_and_test.yml
+      - .github/actions/linuxTest/action.yml
   workflow_dispatch:
   schedule:
     - cron: '30 5 * * *' # Daily 5:30 AM UTC / 12:30 AM EST
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 defaults:
   run:
