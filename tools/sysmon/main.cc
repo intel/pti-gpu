@@ -1,7 +1,10 @@
+#include <array>
 #include <bitset>
+#include <cstdio>
 #include <iomanip>
 #include <iostream>
 #include <map>
+#include <ostream>
 #include <string>
 #include <vector>
 
@@ -75,6 +78,16 @@ static std::string GetDriverString(uint32_t version) {
     std::to_string(rev);
 }
 
+static std::ostream &operator<<(
+    std::ostream &os, const zes_pci_properties_t &pci_props) {
+  std::array<char, 64> pci_buf{};
+  std::snprintf(pci_buf.data(), pci_buf.size(), "%04x:%02x:%02x.%01x",
+    pci_props.address.domain, pci_props.address.bus,
+    pci_props.address.device, pci_props.address.function);
+  os << pci_buf.data();
+  return os;
+}
+
 static uint64_t GetDeviceMemSize(ze_device_handle_t device) {
   PTI_ASSERT(device != nullptr);
   ze_result_t status = ZE_RESULT_SUCCESS;
@@ -123,11 +136,7 @@ static void PrintShorInfo(
   status = zesDevicePciGetProperties(device, &pci_props);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-  std::cout << "PCI Bus: " << std::hex << std::setfill('0') <<
-    std::setw(4) << pci_props.address.domain << ":" <<
-    std::setw(2) << pci_props.address.bus << ":" <<
-    std::setw(2) << pci_props.address.device << "." <<
-    std::setw(1) << pci_props.address.function << std::dec << std::endl;
+  std::cout << "PCI Bus: " << pci_props << std::endl;
 
   ze_driver_properties_t driver_props{ZE_STRUCTURE_TYPE_DRIVER_PROPERTIES, };
   status = zeDriverGetProperties(driver, &driver_props);
@@ -1165,13 +1174,8 @@ static void PrintDetails(ze_driver_handle_t driver,
   status = zesDevicePciGetProperties(device, &pci_props);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-  std::cout << std::setw(TEXT_WIDTH) << "PCI Bus," <<
-    std::hex << std::setfill('0') <<
-    std::setw(4) << pci_props.address.domain << ":" <<
-    std::setw(2) << pci_props.address.bus << ":" <<
-    std::setw(2) << pci_props.address.device << "." <<
-    std::setw(1) << pci_props.address.function << std::dec <<
-    std::setfill(' ')<< std::endl;
+  std::cout << std::setw(TEXT_WIDTH) << std::left <<
+    "PCI Bus," << pci_props << std::endl;
 
   std::cout << std::setw(TEXT_WIDTH) << std::left <<
     "PCI Generation," << ((pci_props.maxSpeed.gen == -1) ?
