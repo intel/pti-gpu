@@ -105,6 +105,7 @@ typedef enum {
   PTI_ERROR_PC_SAMPLING_NOT_STOPPED = 256,  //!< collection is not stopped yet
   PTI_ERROR_PC_SAMPLING_UNSUPPORTED = 257,  //!< PC sampling is not supported on the current system configuration (e.g. no devices with EUStallSampling support found)
   PTI_ERROR_PC_SAMPLING_CONFIGURATION_FAIL = 258,  //!< PC sampling configuration failed, e.g. none of the requested devices supports PC sampling
+  PTI_WARN_PC_SAMPLING_NO_DATA_COLLECTED = 259,  //!< Warning: collection stopped, but no EU stall data was received; the profiling window may be too short
 
   PTI_RESULT_FORCE_UINT32 = 0x7fffffff
 } pti_result;

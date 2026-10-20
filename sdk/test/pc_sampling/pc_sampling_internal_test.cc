@@ -158,7 +158,7 @@ TEST_F(PcSamplingTest, StartWithoutConfigureAppliesDefaultDeviceAndSamplingPerio
   ASSERT_EQ(handle->configured_devices_.size(), 1u);
   EXPECT_EQ(handle->configured_devices_.front(), handle->supported_devices_.front());
 
-  ASSERT_EQ(ptiPcSamplingStopCollection(handle), PTI_SUCCESS);
+  ASSERT_TRUE(IsStopSuccess(ptiPcSamplingStopCollection(handle)));
   EXPECT_EQ(ptiPcSamplingDisable(handle), PTI_SUCCESS);
 }
 
@@ -180,7 +180,7 @@ TEST_F(PcSamplingTest, StartKeepsExplicitConfigurationInsteadOfDefaults) {
   ASSERT_EQ(handle->configured_devices_.size(), 1u);
   EXPECT_EQ(handle->configured_devices_.front(), device_handle[0]);
 
-  ASSERT_EQ(ptiPcSamplingStopCollection(handle), PTI_SUCCESS);
+  ASSERT_TRUE(IsStopSuccess(ptiPcSamplingStopCollection(handle)));
   EXPECT_EQ(ptiPcSamplingDisable(handle), PTI_SUCCESS);
 }
 
@@ -216,7 +216,7 @@ TEST_F(PcSamplingTest, StartCollectionRejectsStartedAndStoppedStates) {
   EXPECT_EQ(ptiPcSamplingStartCollection(handle), PTI_ERROR_PC_SAMPLING_ALREADY_STARTED);
   EXPECT_EQ(handle->state_, pti::pc_sampling::PcSamplingState::kStarted);
 
-  ASSERT_EQ(ptiPcSamplingStopCollection(handle), PTI_SUCCESS);
+  ASSERT_TRUE(IsStopSuccess(ptiPcSamplingStopCollection(handle)));
   ASSERT_EQ(handle->state_, pti::pc_sampling::PcSamplingState::kStopped);
 
   EXPECT_EQ(ptiPcSamplingStartCollection(handle), PTI_ERROR_PC_SAMPLING_ALREADY_STOPPED);

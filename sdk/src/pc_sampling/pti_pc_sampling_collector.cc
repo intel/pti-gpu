@@ -105,6 +105,14 @@ pti_result PtiPcSamplingDataCollector::Stop() {
 
   handles_.Reset();
   state_.store(State::kStopped, std::memory_order_release);
+
+  if (raw_data_.size() == 0) {
+    SPDLOG_WARN(
+        "{}: no EU stall data received from device {}; likely the profiling window was too short. "
+        "Please try profiling longer or decrease the sampling period.",
+        __FUNCTION__, static_cast<const void*>(device_));
+    return PTI_WARN_PC_SAMPLING_NO_DATA_COLLECTED;
+  }
   return PTI_SUCCESS;
 }
 

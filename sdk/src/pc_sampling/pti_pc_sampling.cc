@@ -150,13 +150,13 @@ pti_result ptiPcSamplingStopCollection(pti_pc_sampling_handle_t handle) {
   }
 
   const pti_result stop_status = handle->collector->Stop();
-  if (stop_status != PTI_SUCCESS) {
+  if (stop_status != PTI_SUCCESS && stop_status != PTI_WARN_PC_SAMPLING_NO_DATA_COLLECTED) {
     return stop_status;
   }
 
   handle->collector.reset();
   handle->state_ = pti::pc_sampling::PcSamplingState::kStopped;
-  return PTI_SUCCESS;
+  return stop_status;
 }
 
 pti_result ptiPcSamplingGetStallReasons(pti_pc_sampling_handle_t handle,
@@ -351,7 +351,7 @@ pti_result ptiPcSamplingDisable(pti_pc_sampling_handle_t handle) {
     // Attempt to stop collection if it's still running before destroying handle
     if (handle->state_ == pti::pc_sampling::PcSamplingState::kStarted) {
       handle_status = ptiPcSamplingStopCollection(handle);
-      if (handle_status != PTI_SUCCESS) {
+      if (handle_status != PTI_SUCCESS && handle_status != PTI_WARN_PC_SAMPLING_NO_DATA_COLLECTED) {
         SPDLOG_WARN("{}: failed to stop collection before destroying handle, status: {:#x}",
                     __FUNCTION__, static_cast<uint32_t>(handle_status));
       }

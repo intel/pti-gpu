@@ -29,15 +29,32 @@ inline void BufferCompleted(unsigned char* buf, size_t /*size*/, size_t /*used*/
 
 // Macro for conditionally skipping tests if PC sampling is unsupported on the current system.
 // Note that using a helper function does not skip the test, so we use a macro instead.
-#define ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(HANDLE, EXPECTED_RESULT)                           \
-  do {                                                                                          \
-    ASSERT_NE((HANDLE), nullptr) << "Invalid handle pointer passed to AssertEnableResult";      \
-    pti_result status = ptiPcSamplingEnable((HANDLE));                                          \
-    if (status == PTI_ERROR_PC_SAMPLING_UNSUPPORTED) {                                          \
-      GTEST_SKIP() << "PC sampling unsupported by the installed driver - skipping";             \
-    }                                                                                           \
-    ASSERT_EQ(status, (EXPECTED_RESULT)) << "Failed to enable PC sampling, status = " << status \
-                                         << " (expected = " << (EXPECTED_RESULT) << ")";        \
+#define ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(HANDLE, EXPECTED_RESULT)                      \
+  do {                                                                                     \
+    ASSERT_NE((HANDLE), nullptr) << "Invalid handle pointer passed to AssertEnableResult"; \
+    pti_result status = ptiPcSamplingEnable((HANDLE));                                     \
+    if (status == PTI_ERROR_PC_SAMPLING_UNSUPPORTED) {                                     \
+      GTEST_SKIP() << "PC sampling unsupported by the installed driver - skipping";        \
+    }                                                                                      \
+    ASSERT_EQ(status, (EXPECTED_RESULT))                                                   \
+        << "Failed to enable PC sampling, status = " << ptiResultTypeToString(status)      \
+        << " (expected = " << ptiResultTypeToString(EXPECTED_RESULT) << ")";               \
+  } while (0)
+
+// For tests that do not require collected data.
+inline bool IsStopSuccess(pti_result result) {
+  return result == PTI_SUCCESS || result == PTI_WARN_PC_SAMPLING_NO_DATA_COLLECTED;
+}
+
+#define ASSERT_PC_SAMPLING_STOP_SUCCESS(HANDLE)                                     \
+  do {                                                                              \
+    pti_result stop_status = ptiPcSamplingStopCollection((HANDLE));                 \
+    if (stop_status != PTI_SUCCESS) {                                               \
+      ptiPcSamplingDisable((HANDLE));                                               \
+      GTEST_FAIL() << "Failed to stop PC sampling collection, status = "            \
+                   << ptiResultTypeToString(stop_status)                            \
+                   << " (expected = " << ptiResultTypeToString(PTI_SUCCESS) << ")"; \
+    }                                                                               \
   } while (0)
 
 class PcSamplingTest : public ::testing::Test {

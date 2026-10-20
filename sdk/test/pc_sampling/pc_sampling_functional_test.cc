@@ -8,20 +8,27 @@
 //
 // =============================================================
 
+#include <random>
 #include <sycl/sycl.hpp>
 
 #include "pc_sampling_test_fixture.h"
 
 namespace {
 
-constexpr size_t kElementCount = 1 << 18;
-constexpr uint32_t kKernelLaunchCount = 12;
-constexpr uint32_t kInnerIterations = 2048;
+constexpr size_t kElementCount = 1 << 22;
+constexpr uint32_t kKernelLaunchCount = 256;
+constexpr uint32_t kInnerIterations = 64;
+constexpr uint32_t kSamplingPeriodNs = 10'000;
 
 class PcSamplingCollectionKernel;
 class PcSamplingCollectionKernelAlt;
 
+// Odd, so repeated multiplication never collapses the value to zero.
+uint32_t RuntimeMultiplier() { return static_cast<uint32_t>(std::random_device{}()) | 1u; }
+
+// These workloads are only intended to run long enough to generate PC samples.
 void RunLargeKernelWorkload(sycl::queue& queue) {
+  const uint32_t multiplier = RuntimeMultiplier();
   std::vector<uint32_t> values(kElementCount);
   for (size_t i = 0; i < values.size(); ++i) {
     values[i] = static_cast<uint32_t>(i + 1);
@@ -37,9 +44,10 @@ void RunLargeKernelWorkload(sycl::queue& queue) {
               uint32_t value = values_acc[index];
               const uint32_t lane = static_cast<uint32_t>(index[0]);
               for (uint32_t iteration = 0; iteration < kInnerIterations; ++iteration) {
+                // Some arbitrary arithmetic to generate PC samples.
                 value = value * 1664525u + 1013904223u + lane + iteration;
                 value ^= value >> 15;
-                value *= 2246822519u;
+                value *= multiplier;
               }
               values_acc[index] = value;
             });
@@ -51,6 +59,7 @@ void RunLargeKernelWorkload(sycl::queue& queue) {
 }
 
 void RunAlternateKernelWorkload(sycl::queue& queue) {
+  const uint32_t multiplier = RuntimeMultiplier();
   std::vector<uint32_t> values(kElementCount);
   for (size_t i = 0; i < values.size(); ++i) {
     values[i] = static_cast<uint32_t>((i % 97) + 3);
@@ -66,9 +75,11 @@ void RunAlternateKernelWorkload(sycl::queue& queue) {
               uint32_t value = values_acc[index];
               const uint32_t lane = static_cast<uint32_t>(index[0]);
               for (uint32_t iteration = 0; iteration < kInnerIterations; ++iteration) {
+                // Some arbitrary arithmetic to generate PC samples.
                 value += (lane ^ iteration) + 0x9e3779b9u;
                 value = (value << 7) | (value >> 25);
                 value ^= lane * 40503u + iteration;
+                value *= multiplier;
               }
               values_acc[index] = value;
             });
@@ -165,7 +176,7 @@ TEST_F(PcSamplingTest, LifecycleSupportsEmptyQueries) {
   ASSERT_EQ(ptiPcSamplingConfigure(handle, device_handle, device_count, 0), PTI_SUCCESS);
   // No kernels profiled, we expect a valid, empty results.
   ASSERT_EQ(ptiPcSamplingStartCollection(handle), PTI_SUCCESS);
-  ASSERT_EQ(ptiPcSamplingStopCollection(handle), PTI_SUCCESS);
+  ASSERT_TRUE(IsStopSuccess(ptiPcSamplingStopCollection(handle)));
 
   // After a real collection the stall-reason table is derived from the
   // EuStallSampling metric group and must be non-empty.
@@ -224,7 +235,7 @@ TEST_F(PcSamplingTest, RejectsInvalidOrdering) {
   EXPECT_EQ(ptiPcSamplingGetProfiledDevices(handle, nullptr, &device_count),
             PTI_ERROR_PC_SAMPLING_NOT_STOPPED);
 
-  ASSERT_EQ(ptiPcSamplingStopCollection(handle), PTI_SUCCESS);
+  ASSERT_TRUE(IsStopSuccess(ptiPcSamplingStopCollection(handle)));
   EXPECT_EQ(ptiPcSamplingStopCollection(handle), PTI_ERROR_PC_SAMPLING_ALREADY_STOPPED);
   EXPECT_EQ(ptiPcSamplingConfigure(handle, nullptr, 0, 0),
             PTI_ERROR_PC_SAMPLING_ALREADY_CONFIGURED);
@@ -250,7 +261,7 @@ TEST_F(PcSamplingTest, StartAppliesDefaultConfigurationWhenConfigureSkipped) {
             PTI_ERROR_PC_SAMPLING_ALREADY_CONFIGURED);
   EXPECT_EQ(ptiPcSamplingStartCollection(handle), PTI_ERROR_PC_SAMPLING_ALREADY_STARTED);
 
-  ASSERT_EQ(ptiPcSamplingStopCollection(handle), PTI_SUCCESS);
+  ASSERT_TRUE(IsStopSuccess(ptiPcSamplingStopCollection(handle)));
   EXPECT_EQ(ptiPcSamplingConfigure(handle, nullptr, 0, 0),
             PTI_ERROR_PC_SAMPLING_ALREADY_CONFIGURED);
 
@@ -286,7 +297,7 @@ TEST_F(PcSamplingTest, CollectsDataWhenConfigureSkipped) {
 
   ASSERT_EQ(ptiPcSamplingStartCollection(handle), PTI_SUCCESS);
   RunLargeKernelWorkload(queue);
-  ASSERT_EQ(ptiPcSamplingStopCollection(handle), PTI_SUCCESS);
+  ASSERT_PC_SAMPLING_STOP_SUCCESS(handle);
 
   size_t device_count = 0;
   ASSERT_EQ(ptiPcSamplingGetProfiledDevices(handle, nullptr, &device_count), PTI_SUCCESS);
@@ -340,7 +351,7 @@ TEST_F(PcSamplingTest, ReturnsEmptyAllDeviceQueryAfterStoppedCollection) {
   ASSERT_EQ(ptiPcSamplingConfigure(handle, device_handle, device_count, 0), PTI_SUCCESS);
 
   ASSERT_EQ(ptiPcSamplingStartCollection(handle), PTI_SUCCESS);
-  ASSERT_EQ(ptiPcSamplingStopCollection(handle), PTI_SUCCESS);
+  ASSERT_TRUE(IsStopSuccess(ptiPcSamplingStopCollection(handle)));
 
   size_t profiled_device_count = 1;
   EXPECT_EQ(ptiPcSamplingGetProfiledDevices(handle, nullptr, &profiled_device_count), PTI_SUCCESS);
@@ -356,7 +367,7 @@ TEST_F(PcSamplingTest, ReturnsConfiguredDeviceAfterStoppedCollection) {
   pti_device_handle_t device_handle[1] = {reinterpret_cast<pti_device_handle_t>(devices_.front())};
   ASSERT_EQ(ptiPcSamplingConfigure(handle, device_handle, 1, 0), PTI_SUCCESS);
   ASSERT_EQ(ptiPcSamplingStartCollection(handle), PTI_SUCCESS);
-  ASSERT_EQ(ptiPcSamplingStopCollection(handle), PTI_SUCCESS);
+  ASSERT_TRUE(IsStopSuccess(ptiPcSamplingStopCollection(handle)));
 
   size_t profiled_device_count = 1;
   EXPECT_EQ(ptiPcSamplingGetProfiledDevices(handle, nullptr, &profiled_device_count), PTI_SUCCESS);
@@ -371,11 +382,11 @@ TEST_F(PcSamplingTest, AggregatesPerKernelAndPerInstructionData) {
   pti_pc_sampling_handle_t handle = nullptr;
   ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
   ASSERT_NE(handle, nullptr);
-  ASSERT_EQ(ptiPcSamplingConfigure(handle, nullptr, 0, 0), PTI_SUCCESS);
+  ASSERT_EQ(ptiPcSamplingConfigure(handle, nullptr, 0, kSamplingPeriodNs), PTI_SUCCESS);
 
   ASSERT_EQ(ptiPcSamplingStartCollection(handle), PTI_SUCCESS);
   RunLargeKernelWorkload(queue);
-  ASSERT_EQ(ptiPcSamplingStopCollection(handle), PTI_SUCCESS);
+  ASSERT_PC_SAMPLING_STOP_SUCCESS(handle);
 
   // Profiled device.
   size_t device_count = 0;
@@ -521,12 +532,12 @@ TEST_F(PcSamplingTest, DistinctKernelsEachExposeStallReasonData) {
 
   pti_pc_sampling_handle_t handle = nullptr;
   ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
-  ASSERT_EQ(ptiPcSamplingConfigure(handle, nullptr, 0, 0), PTI_SUCCESS);
+  ASSERT_EQ(ptiPcSamplingConfigure(handle, nullptr, 0, kSamplingPeriodNs), PTI_SUCCESS);
 
   ASSERT_EQ(ptiPcSamplingStartCollection(handle), PTI_SUCCESS);
   RunLargeKernelWorkload(queue);
   RunAlternateKernelWorkload(queue);
-  ASSERT_EQ(ptiPcSamplingStopCollection(handle), PTI_SUCCESS);
+  ASSERT_PC_SAMPLING_STOP_SUCCESS(handle);
 
   size_t reason_count = 0;
   ASSERT_EQ(ptiPcSamplingGetStallReasons(handle, nullptr, &reason_count), PTI_SUCCESS);
@@ -571,11 +582,11 @@ TEST_F(PcSamplingTest, AggregationIsIdempotentAcrossRepeatedQueries) {
 
   pti_pc_sampling_handle_t handle = nullptr;
   ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
-  ASSERT_EQ(ptiPcSamplingConfigure(handle, nullptr, 0, 0), PTI_SUCCESS);
+  ASSERT_EQ(ptiPcSamplingConfigure(handle, nullptr, 0, kSamplingPeriodNs), PTI_SUCCESS);
 
   ASSERT_EQ(ptiPcSamplingStartCollection(handle), PTI_SUCCESS);
   RunLargeKernelWorkload(queue);
-  ASSERT_EQ(ptiPcSamplingStopCollection(handle), PTI_SUCCESS);
+  ASSERT_PC_SAMPLING_STOP_SUCCESS(handle);
 
   size_t device_count = 1;
   std::vector<pti_device_handle_t> profiled_devices(1);

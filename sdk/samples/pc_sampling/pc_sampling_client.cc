@@ -167,7 +167,7 @@ bool StopPcSamplingCollection(std::ostream& output) {
   }
 
   pti_result status = ptiPcSamplingStopCollection(g_pc_sampling_handle);
-  if (status != PTI_SUCCESS) {
+  if (status != PTI_SUCCESS && status != PTI_WARN_PC_SAMPLING_NO_DATA_COLLECTED) {
     std::cerr << "Failed to stop PC sampling collection: " << ptiResultTypeToString(status) << " ("
               << static_cast<int>(status) << ")" << std::endl;
     return false;

@@ -70,6 +70,8 @@ TEST(PcSamplingBasicTest, ResultTypeToStringSupportsPcSamplingSpecificErrors) {
                "PTI_ERROR_PC_SAMPLING_NOT_STOPPED");
   EXPECT_STREQ(ptiResultTypeToString(PTI_ERROR_PC_SAMPLING_CONFIGURATION_FAIL),
                "PTI_ERROR_PC_SAMPLING_CONFIGURATION_FAIL");
+  EXPECT_STREQ(ptiResultTypeToString(PTI_WARN_PC_SAMPLING_NO_DATA_COLLECTED),
+               "PTI_WARN_PC_SAMPLING_NO_DATA_COLLECTED");
 }
 
 TEST(PcSamplingBasicTest, PcSamplingStateToStringReturnsCorrectStrings) {

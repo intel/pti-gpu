@@ -221,6 +221,7 @@ ptiPcSamplingStartCollection(pti_pc_sampling_handle_t handle);
  * @param[in] handle             Collection handle
  *
  * @return PTI_SUCCESS when collection is successfully stopped
+ * @return PTI_WARN_PC_SAMPLING_NO_DATA_COLLECTED when collection is stopped, but no PC Sampling data was collected
  * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL
  * @return PTI_ERROR_PC_SAMPLING_NOT_STARTED if collection has not started yet
  * @return PTI_ERROR_PC_SAMPLING_ALREADY_STOPPED if collection was already stopped
