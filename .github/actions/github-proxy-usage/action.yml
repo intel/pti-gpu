@@ -1,0 +1,27 @@
+name: GitHub Proxy Usage
+description: >
+  Configures git to reach github.com through a dedicated proxy on runners
+  where the default network route is unreliable for GitHub traffic. The
+  proxy URL and the affected-runner pattern are supplied by the caller
+  (from the PTI_GIT_PROXY and PTI_GIT_PROXY_RUNNER_PATTERN repository
+  variables); only git traffic to github.com is affected. No-op when the
+  proxy input is empty, or the runner pattern is empty, or the runner
+  does not match.
+inputs:
+  proxy:
+    description: Proxy URL for git traffic to github.com (empty = no-op)
+    required: false
+    default: ''
+  runner-pattern:
+    description: >
+      Substring to match against runner.name; only matching runners get the
+      proxy configured (empty = no-op)
+    required: false
+    default: ''
+runs:
+  using: composite
+  steps:
+    - name: Configure git proxy for github.com
+      if: inputs.proxy != '' && inputs.runner-pattern != '' && contains(runner.name, inputs.runner-pattern)
+      shell: bash
+      run: git config --global http.https://github.com/.proxy "${{ inputs.proxy }}"

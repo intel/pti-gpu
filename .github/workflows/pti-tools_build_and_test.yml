@@ -56,6 +56,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: GitHub Proxy Usage
+        uses: ./.github/actions/github-proxy-usage
+        with:
+          proxy: ${{ vars.PTI_GIT_PROXY }}
+          runner-pattern: ${{ vars.PTI_GIT_PROXY_RUNNER_PATTERN }}
+
       - name: Build-unitrace
         working-directory: tools/unitrace
         run: |

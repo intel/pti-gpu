@@ -86,6 +86,12 @@ jobs:
           fetch-depth: 0
           clean: true
 
+      - name: GitHub Proxy Usage
+        uses: ./.github/actions/github-proxy-usage
+        with:
+          proxy: ${{ vars.PTI_GIT_PROXY }}
+          runner-pattern: ${{ vars.PTI_GIT_PROXY_RUNNER_PATTERN }}
+
       - name: Resolve paths
         run: |
           {

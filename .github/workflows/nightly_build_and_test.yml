@@ -98,6 +98,23 @@ jobs:
       - name: Configure Git to use GitHub PAT
         run: |
           git config --global url."https://user:${{ secrets.pat_pti_tools }}@github.com".insteadOf "https://github.com"
+      - name: GitHub Proxy Usage
+        uses: ./.github/actions/github-proxy-usage
+        with:
+          proxy: ${{ vars.PTI_GIT_PROXY }}
+          runner-pattern: ${{ vars.PTI_GIT_PROXY_RUNNER_PATTERN }}
+
+      - name: Cache third-party dependency sources
+        # Same pattern as unified-oneAPI-drop.yml: on a cache hit the
+        # FetchContent clones (fmt/spdlog/googletest/level-zero/ittapi) never
+        # touch github.com; the key hashes the files that pin the dependency
+        # versions, so any version bump changes the key and refreshes the
+        # cache - the pinned versions cannot go stale.
+        uses: actions/cache@v4
+        with:
+          path: sdk/build-*/_deps
+          key: ${{ runner.os }}-sdk-deps-${{ matrix.uploadname }}-${{ hashFiles('sdk/cmake/Modules/*.cmake', 'sdk/CMakeLists.txt') }}
+
       - name: Build
         working-directory: sdk
         run: |
@@ -187,6 +204,12 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: GitHub Proxy Usage
+        uses: ./.github/actions/github-proxy-usage
+        with:
+          proxy: ${{ vars.PTI_GIT_PROXY }}
+          runner-pattern: ${{ vars.PTI_GIT_PROXY_RUNNER_PATTERN }}
 
       - name: Build-unitrace
         working-directory: tools/unitrace
