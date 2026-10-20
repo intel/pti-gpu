@@ -28,6 +28,7 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <signal.h>
 
 #else /* !defined(_WIN32) && (defined(__gnu_linux__) || defined(__unix__)) */
 
@@ -36,6 +37,7 @@
 
 #endif /* !defined(_WIN32) && (defined(__gnu_linux__) || defined(__unix__)) */
 
+#include <atomic>
 #include <csignal>
 #include <stdlib.h>
 #include "ze_metrics.h"
@@ -52,7 +54,10 @@
 #define UNITRACE_INSTALL_LIBDIR "lib"
 #endif /* UNITRACE_INSTALL_LIBDIR */
 
-static ZeMetricProfiler* metric_profiler = nullptr;
+// Atomic so DisableProfiling() can run from both the normal exit path and
+// CleanUp() (a signal may arrive while the normal path is deleting it) and the
+// profiler is deleted exactly once.
+static std::atomic<ZeMetricProfiler*> metric_profiler{nullptr};
 static bool idle_sampling = false;
 
 // ============================================================================
@@ -716,9 +721,9 @@ ZeMetricProfiler *EnableProfiling(uint32_t app_pid, char *dir, std::string& logf
 }
 
 void DisableProfiling() {
-  if (metric_profiler != nullptr) {
-    delete metric_profiler;
-    metric_profiler = nullptr;
+  ZeMetricProfiler* profiler = metric_profiler.exchange(nullptr);
+  if (profiler != nullptr) {
+    delete profiler;
   }
 }
 
@@ -799,7 +804,16 @@ void TearDown() {
   }
 }
 
-void CleanUp(int /* sig */) {
+void CleanUp(int sig) {
+  // Stopping the metric profiler joins its sampling threads, which is only safe
+  // on the main thread. SIGINT/SIGTERM are blocked in those threads (see
+  // EnableProfiling() in main()), so on Linux they run here on the main thread;
+  // on Windows SIGINT runs on a thread of its own. Faults (SIGSEGV, SIGABRT...)
+  // run on the faulting thread and may hold locks the shutdown needs, so they
+  // only tear down.
+  if (sig == SIGINT || sig == SIGTERM) {
+    DisableProfiling();
+  }
   TearDown();
   _Exit(-1);
 }
@@ -1307,8 +1321,18 @@ int main(int argc, char *argv[]) {
         bpftrace_pid = child;
       }
       if (utils::GetEnv("UNITRACE_KernelMetrics") == "1") {
-
+        // Child threads ignore SIGINT/SIGTERM: the sampling threads started
+        // here inherit this blocked mask, so the signals are handled on the
+        // main thread, where CleanUp() can stop the profiler (which joins the
+        // sampling threads). A signal raised meanwhile stays pending and is
+        // delivered to the main thread when the mask is restored.
+        sigset_t termination_signals, prev_mask;
+        sigemptyset(&termination_signals);
+        sigaddset(&termination_signals, SIGINT);
+        sigaddset(&termination_signals, SIGTERM);
+        pthread_sigmask(SIG_BLOCK, &termination_signals, &prev_mask);
         metric_profiler = EnableProfiling(child, data_dir, logfile, idle_sampling);
+        pthread_sigmask(SIG_SETMASK, &prev_mask, nullptr);
 
         // create a latch file to notify the application process to proceed
         std::ofstream outf(latch_file_name, std::ios_base::out);

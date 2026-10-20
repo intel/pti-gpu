@@ -12,6 +12,8 @@ import unidiff
 import argparse
 import shutil
 import glob
+import signal
+import tempfile
 from pathlib import Path
 from datetime import datetime
 
@@ -66,11 +68,54 @@ def call_unidiff(scenario, output_dir, output_file_with_pid, expected_output_fil
         print(f"[ERROR] Unknown scenario: {scenario}")
         return 1
 
+# Seconds a signaled run may take to exit: stopping -k sampling and computing the
+# metrics happens in the signal handler.
+SIGNAL_EXIT_TIMEOUT = 120
+
+def run_and_signal(command, signal_name, signal_after):
+    """Run command and send it signal_name after signal_after seconds.
+
+    SIGINT goes to the whole process group, as Ctrl-C does; any other signal
+    only to the launched process, as `kill <pid>` does. Whatever is left of the
+    group is killed afterwards (e.g. the application after SIGTERM to unitrace).
+    Returns (completed process, error message or None). Output goes to files,
+    not pipes: a surviving application would hold pipes open."""
+    sig = signal.Signals[signal_name]
+    with tempfile.TemporaryFile("w+") as out, tempfile.TemporaryFile("w+") as err:
+        proc = subprocess.Popen(command, text=True, stdout=out, stderr=err,
+                                start_new_session=True)
+        error = None
+        try:
+            try:
+                proc.wait(timeout=signal_after)
+                error = f"exited ({proc.returncode}) before {signal_name} was sent"
+            except subprocess.TimeoutExpired:
+                if sig == signal.SIGINT:
+                    os.killpg(proc.pid, sig)
+                else:
+                    os.kill(proc.pid, sig)
+                try:
+                    proc.wait(timeout=SIGNAL_EXIT_TIMEOUT)
+                    if proc.returncode < 0:
+                        error = (f"was killed by {signal.Signals(-proc.returncode).name} "
+                                 f"instead of handling {signal_name}")
+                except subprocess.TimeoutExpired:
+                    error = f"did not exit within {SIGNAL_EXIT_TIMEOUT}s after {signal_name}"
+        finally:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            proc.wait()
+        out.seek(0)
+        err.seek(0)
+        return subprocess.CompletedProcess(command, proc.returncode, out.read(), err.read()), error
+
 def contains_non_whitespace(path):
     with open(path, "r", encoding="utf-8", errors="ignore") as f:
         return any(not ch.isspace() for ch in f.read())
 
-def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_prog, test_bin_dir, test_output_dir, use_mpiexec=False, num_ranks=1, specific_test_case=None, unitrace_exe_override=None, skip_golden_compare=False, results_subdir=None):
+def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_prog, test_bin_dir, test_output_dir, use_mpiexec=False, num_ranks=1, specific_test_case=None, unitrace_exe_override=None, skip_golden_compare=False, results_subdir=None, signal_name=None, signal_after=None):
     is_python_test = test_case_name.find("python") != -1
     unitrace_exe = cmake_root_path + "/../../build/" + test_layout.exe("unitrace")
     test_case = test_layout.workload_exe(test_bin_dir, test_case_name).replace("\\", "/")
@@ -99,6 +144,30 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
             native_command.extend(["mpiexec", "-n", str(num_ranks)])
         native_command += [test_case] + args
         print(f"[INFO] Native run (app only, no unitrace): {' '.join(native_command)}")
+        if signal_name:
+            # The application runs far longer than --signal-after: it passes if it
+            # is still running (has not failed) when the signal would be sent.
+            try:
+                native_proc = subprocess.Popen(native_command, stdout=subprocess.DEVNULL,
+                                               stderr=subprocess.DEVNULL, start_new_session=True)
+            except Exception as e:
+                print(f"[ERROR] DRIVER/ENVIRONMENT ISSUE (NOT a unitrace problem): could not "
+                      f"launch the application '{' '.join(native_command)}': {e}", file = sys.stderr)
+                return 1
+            try:
+                native_proc.wait(timeout=signal_after)
+            except subprocess.TimeoutExpired:
+                os.killpg(native_proc.pid, signal.SIGKILL)
+                native_proc.wait()
+                print(f"[INFO] Native run still running after {signal_after}s, as expected.", file = sys.stderr)
+                return 0
+            if native_proc.returncode != 0:
+                print(f"[ERROR] DRIVER/ENVIRONMENT ISSUE (NOT a unitrace problem): the "
+                      f"application failed to run on its own with return code "
+                      f"{native_proc.returncode}, before unitrace was involved.", file = sys.stderr)
+                return 1
+            print(f"[INFO] Native run succeeded.", file = sys.stderr)
+            return 0
         try:
             native_result = subprocess.run(native_command, text=True, capture_output=True)
         except Exception as e:
@@ -198,8 +267,20 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
 
     try:
         before_list_of_files = set(os.listdir(output_dir))
-        result = subprocess.run(command, text=True, capture_output=True) # executing Unitrace command
-        if result.returncode != 0:
+        if signal_name:
+            result, signal_error = run_and_signal(command, signal_name, signal_after)
+            if signal_error:
+                print(f"[ERROR] Unitrace {signal_error}.", file = sys.stderr)
+                print(f"[ERROR] Unitrace command {' '.join(command)} failed.", file = sys.stderr)
+                print(f"[ERROR] Unitrace stderr output: {result.stderr}", file = sys.stderr)
+                print(f"[ERROR] Unitrace stdout output: {result.stdout}", file = sys.stderr)
+                return 1
+            # unitrace exits non-zero after handling the signal; the output
+            # checks below decide the result.
+            print(f"[INFO] Unitrace handled {signal_name} and exited with {result.returncode}.", file = sys.stderr)
+        else:
+            result = subprocess.run(command, text=True, capture_output=True) # executing Unitrace command
+        if result.returncode != 0 and not signal_name:
             print(f"[ERROR] Unitrace execution failed with return code {result.returncode}.", file = sys.stderr)
             print(f"[ERROR] Unitrace command {' '.join(command)} failed.", file = sys.stderr)
             print(f"[ERROR] Unitrace stderr output: {result.stderr}", file = sys.stderr)
@@ -358,6 +439,13 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
                 return 1  # extra test prog failed
             else:
                 return 0
+        elif not scenario_set.isdisjoint(set(["-k", "-q"])) and signal_name:
+            # Interrupted run: the metric files exist, so the profiler was
+            # stopped on the signal. They may hold no counter rows: those are
+            # matched to kernel times that the application writes only when it
+            # exits normally.
+            print(f"[INFO] Metric files written after {signal_name}: {output_files}", file = sys.stderr)
+            return 0
         elif not scenario_set.isdisjoint(set(["-k", "-q"])):
             min_no_of_lines = 4 # Metric files has initial few lines for headers etc..
             for output_file in output_files:
@@ -518,6 +606,13 @@ def main():
     parser.add_argument('--skip-golden-compare', action='store_true',
                         help='Skip golden-output content comparisons (for environments without '
                              'validated golden files); execution and output checks still apply')
+    parser.add_argument('--signal', type=str, default=None, choices=['SIGINT', 'SIGTERM'],
+                        help='Interrupt the unitrace run with this signal after --signal-after '
+                             'seconds (SIGINT to the whole process group like Ctrl-C, SIGTERM to '
+                             'unitrace only like kill); the run must still write its output. '
+                             'Linux only.')
+    parser.add_argument('--signal-after', type=float, default=5,
+                        help='Seconds before --signal is sent (default: 5)')
     parser.add_argument('-s', '--scenario', type=str, required=True,
                         help='Unitrace scenario options to run, or "native" to run the application without unitrace')
     parser.add_argument('args', nargs=argparse.REMAINDER, help='Application and its arguments (parsing stops here)')
@@ -543,7 +638,8 @@ def main():
     return run_unitrace(args.cmake_root_path, scenario, args.args[0], args.args[1:], 
                        args.extra_test_prog, args.test_bin_dir, args.output_dir,
                        args.mpiexec, args.num_ranks, args.test_case,
-                       args.unitrace_exe, args.skip_golden_compare, args.results_subdir)
+                       args.unitrace_exe, args.skip_golden_compare, args.results_subdir,
+                       args.signal, args.signal_after)
 
 if __name__ == "__main__":
     sys.exit(main())

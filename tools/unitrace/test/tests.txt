@@ -279,6 +279,20 @@ scenario = -c
 scenario = -h
 scenario = --chrome-kernel-logging
 
+# Ctrl-C (SIGINT to the whole job) or `kill` (SIGTERM to unitrace) during a long
+# -k run: unitrace must handle it on the main thread, stop the metric profiler
+# and write the metric files, without hanging or aborting (UNITRACEI-103). The
+# workload runs far longer than --signal-after; the signal ends the run.
+[ze_gemm_metric_sigint]
+platform = Linux
+command  = run_test.py --signal=SIGINT --signal-after=5 ze_gemm 1024 1000000
+scenario = -k
+
+[ze_gemm_metric_sigterm]
+platform = Linux
+command  = run_test.py --signal=SIGTERM --signal-after=5 ze_gemm 1024 1000000
+scenario = -k
+
 [ze_grph_api]
 platform      = Windows
 command       = run_test.py ze_graph_api
