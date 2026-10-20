@@ -69,6 +69,24 @@ public:
 
     bool IsLegacy() const;
     bool IsResultDir() const;
+
+    // Flush and close all cached trace/report loggers. Metric and temp loggers
+    // stay open: the parent owns the metric handshake and finalizes those.
+    // Idempotent per Logger, so safe at an early stop and again at teardown.
+    void CloseTraceLoggers() const;
+
+#ifndef _WIN32
+    // Fork child: re-key to the child's pid and reopen each cached trace/report
+    // logger IN PLACE (collectors hold shared_ptrs to them). Metric/temp loggers
+    // are skipped, as in CloseTraceLoggers(): the parent finalizes those.
+    void ReopenAfterFork();
+
+    // atfork prepare/after hooks: hold mutex_ and every cached Logger's lock
+    // across fork() so none is left locked in the child by a vanished thread.
+    void LockForFork() const;
+    void UnlockAfterFork() const;
+#endif /* _WIN32 */
+
     const std::string& GetAppName() const { return app_name_; }
     const std::string& GetRank() const { return rank_; }
 
@@ -153,6 +171,9 @@ protected:
     std::shared_ptr<UniLogger> GetLoggerImpl(LoggerType type, int32_t device_id, bool lazy_flush, bool lock_free, bool binary = false) const;
     void RemoveDirectoryIfEmpty(const std::string& dir) const;
     void SetAppId(uint32_t app_id) {app_id_ = app_id;}
+    // Hook for factories whose output location depends on app_id_ (see
+    // ResultDirLoggerFactory). Called by ReopenAfterFork() after SetAppId().
+    virtual void OnAppIdChanged() {}
     std::string GetDataDirPath(bool warn = true) const {
         std::string data_dir = utils::GetEnv("UNITRACE_DataDir");
         if (data_dir.empty() && warn) {
@@ -206,7 +227,11 @@ public:
     std::vector<std::string> SearchFilesByType(LoggerType type, int32_t device_id) const override;
     std::string GetTraceLogFileName(LoggerType type) const;
 
+protected:
+    void OnAppIdChanged() override;
+
 private:
+    void SetResultDirPaths();
     std::string result_dir_;
     std::string metrics_dir_path_;
 };

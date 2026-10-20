@@ -12,6 +12,8 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <mutex>
+#include <new>
 #include <sstream>
 #include <string>
 #include <algorithm>
@@ -89,6 +91,36 @@ static bool device_logging_no_thread_ = (utils::GetEnv("UNITRACE_ChromeNoThreadO
 static bool device_logging_no_engine_ = (utils::GetEnv("UNITRACE_ChromeNoEngineOnDevice") == "1") ? true : false;
 
 static std::mutex device_pid_tid_map_lock_;
+
+#ifndef _WIN32
+// atfork hooks for the chrome logger's process-wide locks (see tracer.cc).
+// Prepare holds logger_lock_ -> EmitLock (the order flush paths nest them) so
+// no other thread can hold either across fork().
+inline void ChromeLoggerLockForFork() {
+  logger_lock_.lock();
+#if BUILD_WITH_PERFETTO
+  perfetto_emit::EmitLock().lock();
+#endif /* BUILD_WITH_PERFETTO */
+}
+
+inline void ChromeLoggerUnlockAfterForkParent() {
+#if BUILD_WITH_PERFETTO
+  perfetto_emit::EmitLock().unlock();
+#endif /* BUILD_WITH_PERFETTO */
+  logger_lock_.unlock();
+}
+
+// Child (single-threaded): recursive mutexes record the parent's tid as owner,
+// so unlock would fail (EPERM); re-create them in place. device_pid_tid_map_lock_
+// nests both ways with logger_lock_, so it is not held across fork; re-create too.
+inline void ChromeLoggerUnlockAfterForkChild() {
+#if BUILD_WITH_PERFETTO
+  new (&perfetto_emit::EmitLock()) std::recursive_mutex();
+#endif /* BUILD_WITH_PERFETTO */
+  new (&logger_lock_) std::recursive_mutex();
+  new (&device_pid_tid_map_lock_) std::mutex();
+}
+#endif /* _WIN32 */
 
 struct ZeDevicePidKey {
   ze_pci_address_ext_t pci_addr_;
@@ -1282,6 +1314,25 @@ class TraceBuffer {
       }
     }
 
+#ifndef _WIN32
+    // Fork child: drop the copied (parent-owned) pending events, retag with the
+    // child's pid and restart the per-file Perfetto state.
+    void ResetAfterFork() {
+      current_device_event_buffer_slice_ = 0;
+      current_host_event_buffer_slice_ = 0;
+      next_device_event_index_ = 0;
+      next_host_event_index_ = 0;
+      device_event_buffer_flushed_ = true;
+      host_event_buffer_flushed_ = true;
+      pid_ = utils::GetPid();
+      tid_ = utils::GetTid();  // the forking thread is the child's main thread
+#if BUILD_WITH_PERFETTO
+      pending_flows_ = PendingFlows();
+      host_track_emitted_ = false;
+#endif /* BUILD_WITH_PERFETTO */
+    }
+#endif /* _WIN32 */
+
     bool IsFinalized() {
       return finalized_.load(std::memory_order_acquire);
     }
@@ -1785,6 +1836,25 @@ class ClTraceBuffer {
       }
     }
 
+#ifndef _WIN32
+    // Fork child: drop the copied (parent-owned) pending events, retag with the
+    // child's pid and restart the per-file Perfetto state.
+    void ResetAfterFork() {
+      current_device_event_buffer_slice_ = 0;
+      current_host_event_buffer_slice_ = 0;
+      next_device_event_index_ = 0;
+      next_host_event_index_ = 0;
+      device_event_buffer_flushed_ = true;
+      host_event_buffer_flushed_ = true;
+      pid_ = utils::GetPid();
+      tid_ = utils::GetTid();  // the forking thread is the child's main thread
+#if BUILD_WITH_PERFETTO
+      pending_flows_ = PendingFlows();
+      host_track_emitted_ = false;
+#endif /* BUILD_WITH_PERFETTO */
+    }
+#endif /* _WIN32 */
+
     bool IsFinalized() {
       return finalized_.load(std::memory_order_acquire);
     }
@@ -1826,17 +1896,15 @@ class ChromeLogger {
     std::string process_name_;
     double process_start_time_;
     bool flushed_ = false;  // true once Flush() has drained buffers and written the JSON close
+    bool closed_ = false;   // true once Close() has finalized buffers and released the trace file
 
     ChromeLogger(const char* process_name)
       : logger_factory_(LoggerFactory::Create())
     {
       process_name_ = process_name;
 
-      std::string host = GetHostName();
       std::string rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
       mpi_rank = INIT_MPI_RANK_VAL(rank);
-      std::string host_proc_name = rank.empty() ? ("HOST<" + host + ">")
-                                                : ("RANK " + rank + " HOST<" + host + ">");
 
 #if !BUILD_WITH_PERFETTO
       if (utils::GetEnv("UNITRACE_OutputFormat") == "protobuf") {
@@ -1861,13 +1929,34 @@ class ChromeLogger {
         perfetto_emit::ClockId() = (utils::GetEnv("UNITRACE_SystemTime") == "1")
                                        ? perfetto_emit::kClockMonotonicRaw
                                        : perfetto_emit::kClockRealtime;
+        WriteFileHeader();
+        return;
+      }
+#endif /* BUILD_WITH_PERFETTO */
+      logger_ = logger_factory_->GetLogger(LOGGER_TYPE_CHROME_TRACE_UNITRACE, true, true);
+      if (!logger_) {
+        UniMemory::ExitIfOutOfMemory((void *)(logger_.get()));
+      }
+      WriteFileHeader();
+    }
 
+    // Per-file preamble (JSON envelope or Perfetto clock snapshot + process
+    // track), ending with the empty-file mark. Called at construction and again
+    // for a forked child's new file.
+    void WriteFileHeader() {
+      std::string host = GetHostName();
+      std::string rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
+      std::string host_proc_name = rank.empty() ? ("HOST<" + host + ">")
+                                                : ("RANK " + rank + " HOST<" + host + ">");
+
+#if BUILD_WITH_PERFETTO
+      if (UseProtobufOutput()) {
         // Sample BOOTTIME and the event clock back-to-back so the ClockSnapshot
         // relates them accurately (needed for the trace processor's clock sync).
         uint64_t boot_ns = UniTimer::GetHostBootTimestamp();
         uint64_t now_ns = UniTimer::GetEpochTime(UniTimer::GetHostTimestamp());
         perfetto_emit::EmitClockSnapshot(now_ns, boot_ns, perfetto_emit::DescriptorSeqId());
-        // Emitted once at construction, so direct emit -- no dedup needed.
+        // Emitted once per file, so direct emit -- no dedup needed.
         perfetto_emit::EmitProcessTrack(HostProcessTrackUuid(utils::GetPid()),
                                         utils::GetPid(), host_proc_name, now_ns,
                                         perfetto_emit::DescriptorSeqId());
@@ -1876,10 +1965,6 @@ class ChromeLogger {
         return;
       }
 #endif /* BUILD_WITH_PERFETTO */
-      logger_ = logger_factory_->GetLogger(LOGGER_TYPE_CHROME_TRACE_UNITRACE, true, true);
-      if (!logger_) {
-        UniMemory::ExitIfOutOfMemory((void *)(logger_.get()));
-      }
 
       process_start_time_ = UniTimer::GetEpochTimeInUs(UniTimer::GetHostTimestamp());
 
@@ -1897,50 +1982,88 @@ class ChromeLogger {
     ChromeLogger(const ChromeLogger& that) = delete;
     ChromeLogger& operator=(const ChromeLogger& that) = delete;
 
+#ifndef _WIN32
+    // Fork child: logger_ already points at the child's file (factory reopened
+    // it). Drop buffers of threads that do not exist here, reset the forking
+    // thread's buffer, re-arm the flush latch and write a fresh header.
+    // Locks were re-created by ChromeLoggerUnlockAfterForkChild() beforehand.
+    void ReopenAfterFork() {
+      if (logger_ == nullptr || closed_) {
+        return;  // session already stopped before the fork: nothing to write
+      }
+      if (trace_buffers_) {
+        TraceBuffer* mine = &thread_local_buffer_;
+        for (auto it = trace_buffers_->begin(); it != trace_buffers_->end();) {
+          it = (*it == mine) ? std::next(it) : trace_buffers_->erase(it);
+        }
+        mine->ResetAfterFork();
+      }
+#if BUILD_WITH_OPENCL
+      if (cl_trace_buffers_) {
+        ClTraceBuffer* mine = &cl_thread_local_buffer_;
+        for (auto it = cl_trace_buffers_->begin(); it != cl_trace_buffers_->end();) {
+          it = (*it == mine) ? std::next(it) : cl_trace_buffers_->erase(it);
+        }
+        mine->ResetAfterFork();
+      }
+#endif /* BUILD_WITH_OPENCL */
+      flushed_ = false;
+      WriteFileHeader();
+    }
+#endif /* _WIN32 */
+
     ~ChromeLogger() {
-      if (logger_ != nullptr) {
-        std::string chrome_trace_file_name_ = logger_->GetLogFileName();
+      // Close() is idempotent: if the session was stopped it has already
+      // finalized the buffers, closed the file and printed the message, so this
+      // becomes a no-op.
+      Close();
+    }
 
-        logger_lock_.lock();
+    // Finalize all buffers, write the JSON close, release the trace file and
+    // print where the timeline is stored, so a stopped session's result is
+    // complete on disk immediately. Idempotent (early stop and destructor).
+    void Close() {
+      logger_lock_.lock();
+      if (closed_ || logger_ == nullptr) {
+        logger_lock_.unlock();
+        return;
+      }
+      closed_ = true;
+      logger_lock_.unlock();
 
-        if (!flushed_) {
-          // Drain every registered trace buffer BEFORE the JSON is closed:
-          if (trace_buffers_) {
-            for (auto it = trace_buffers_->begin(); it != trace_buffers_->end();) {
-              (*it)->Finalize();
-              it = trace_buffers_->erase(it);
-            }
-          }
+      // Make sure any data that was buffered after the last Flush() (or if Flush() was never
+      // called at all) reaches disk and the JSON is properly closed.
+      Flush();
+
+      std::string chrome_trace_file_name_ = logger_->GetLogFileName();
+      logger_lock_.lock();
+      if (trace_buffers_) {
+        for (auto it = trace_buffers_->begin(); it != trace_buffers_->end();) {
+          (*it)->Finalize();
+          it = trace_buffers_->erase(it);
+        }
+      }
 
 #if BUILD_WITH_OPENCL
-          if (cl_trace_buffers_) {
-            for (auto it = cl_trace_buffers_->begin(); it != cl_trace_buffers_->end();) {
-              (*it)->Finalize();
-              it = cl_trace_buffers_->erase(it);
-            }
-          }
+      if (cl_trace_buffers_) {
+        for (auto it = cl_trace_buffers_->begin(); it != cl_trace_buffers_->end();) {
+          (*it)->Finalize();
+          it = cl_trace_buffers_->erase(it);
+        }
+      }
 #endif /* BUILD_WITH_OPENCL */
 
-          // Write closing brackets so the JSON is valid
-          // The protobuf stream is binary and self-terminating, so the
-          // tags would corrupt it -- JSON-only.
-          if (!UseProtobufOutput() && !logger_->IsEmpty()) {
-            logger_->Log("\n]\n}\n");
-            logger_->Flush();
-          }
-          flushed_ = true;
-        }
+      const bool empty = logger_->IsEmpty();
+      // Release the file so its data is durable and the handle is free even
+      // though the profiled process keeps running after a stop.
+      logger_->Close();
+      logger_lock_.unlock();
 
-        logger_lock_.unlock();
-
-        if (logger_->IsEmpty()) {
-          // no data has been logged
-          std::cerr << "[INFO] No event of interest is logged for process " << utils::GetPid() << " (" << process_name_ << ")" << std::endl;
-        } else {
-          // The JSON closing tags (if any) are written above (or by an earlier
-          // Flush()). The protobuf stream is self-terminating.
-          std::cerr << "[INFO] Timeline is stored in " << chrome_trace_file_name_ << std::endl;
-        }
+      if (empty) {
+        // no data has been logged
+        std::cerr << "[INFO] No event of interest is logged for process " << utils::GetPid() << " (" << process_name_ << ")" << std::endl;
+      } else {
+        std::cerr << "[INFO] Timeline is stored in " << chrome_trace_file_name_ << std::endl;
       }
     }
 
@@ -1974,9 +2097,14 @@ class ChromeLogger {
 
         // Write closing brackets so the JSON is valid if the process terminates
         // abnormally. The protobuf stream is binary and self-terminating, so the
-        // tags would corrupt it -- JSON-only.
+        // tags would corrupt it -- the closing tags are JSON-only.
         if (!UseProtobufOutput() && !logger_->IsEmpty()) {
           logger_->Log("\n]\n}\n");
+        }
+        // Push buffered bytes to disk for BOTH formats so a stopped session's
+        // trace is durable now; protobuf packets would otherwise be stranded
+        // in the ofstream buffer and lost if the process is killed later.
+        if (!logger_->IsEmpty()) {
           logger_->Flush();
         }
         flushed_ = true;

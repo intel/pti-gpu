@@ -13,12 +13,20 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <sys/mman.h>
+#include <sys/syscall.h>
+#include <linux/futex.h>
 #include <unistd.h>
+#include <csignal>
+#include <climits>
+#include <pthread.h>
 #else  /* _WIN32 */
 #include <windows.h>
 #endif /* _WIN32 */
 #include <atomic>
+#include <chrono>
+#include <cstdint>
 #include <iostream>
+#include <thread>
 
 extern char **environ;
 
@@ -79,6 +87,99 @@ class UniController{
     static void SetSessionStoppedCallback(SessionStoppedCallback callback) {
       session_stopped_callback_ = callback;
     }
+
+    // Idle-process fix: a stop is normally only seen from collector callbacks,
+    // so an idle process never flushes. This watcher blocks on the named
+    // session's shm state and fires the flush itself, holding no collector lock.
+    static void StartSessionStopWatcher() {
+      if (utils::GetEnv("UNITRACE_Session").empty()) {
+        return;
+      }
+      if (session_stopped_callback_ == nullptr) {
+        return;  // nothing to flush to; do not spin a thread
+      }
+      if (session_watcher_running_.exchange(true)) {
+        return;  // already started
+      }
+
+#ifndef _WIN32
+      // Spawn the watcher with all signals blocked (a new thread copies the
+      // creator's mask) so a signal handler never runs on it and self-joins
+      // in Teardown -> StopSessionStopWatcher (EDEADLK -> std::terminate).
+      sigset_t all_signals, prev_mask;
+      sigfillset(&all_signals);
+      pthread_sigmask(SIG_SETMASK, &all_signals, &prev_mask);
+#endif /* _WIN32 */
+
+      // Heap-allocated so a forked child can drop the inherited handle without
+      // touching its stale pthread descriptor (see RearmSessionWatcherAfterFork).
+      bool started = false;
+      try {
+        session_watcher_thread_ = new std::thread(SessionWatcherLoop);
+        started = true;
+      }
+      catch (...) {
+        // Runs from a library constructor / fork handler: never let the
+        // exception escape. Degrade to passive stop detection instead.
+        session_watcher_thread_ = nullptr;
+      }
+
+#ifndef _WIN32
+      pthread_sigmask(SIG_SETMASK, &prev_mask, nullptr);
+#endif /* _WIN32 */
+
+      if (!started) {
+        // Release the guard so a later attempt (e.g. a forked child) can retry.
+        session_watcher_running_.store(false, std::memory_order_release);
+      }
+    }
+
+    // Stop and join the watcher. MUST run before the tracer is destroyed so a
+    // mid-flush watcher finishes first. Idempotent; safe with no watcher.
+    static void StopSessionStopWatcher() {
+      if (!session_watcher_running_.load(std::memory_order_acquire)) {
+        return;
+      }
+      session_watcher_stop_.store(true, std::memory_order_release);
+      // Wake a parked watcher so it sees the stop flag now. The state word is
+      // unchanged (teardown is not a session stop), so it exits without flushing.
+      WakeSessionWaiters();
+      std::thread* watcher = session_watcher_thread_;
+      session_watcher_thread_ = nullptr;
+      if (watcher != nullptr) {
+        if (watcher->joinable()) {
+          // Signal masking makes a self-join unreachable for async signals;
+          // guard anyway: on the watcher thread detach instead (EDEADLK).
+          if (watcher->get_id() == std::this_thread::get_id()) {
+            watcher->detach();
+          } else {
+            watcher->join();
+          }
+        }
+        delete watcher;
+      }
+      session_watcher_running_.store(false, std::memory_order_release);
+    }
+
+#ifndef _WIN32
+    // Fork child: the watcher thread was not duplicated by fork(), so start a
+    // new one. Runs inside the atfork child handler: single-threaded, no app
+    // code has resumed yet, so no locking is needed and no stop can be missed.
+    static void RearmSessionWatcherAfterFork() {
+      if (temporal_control_stopped_.load(std::memory_order_acquire)) {
+        return;  // session already stopped before the fork; nothing to watch
+      }
+      // The inherited handle names a thread that does not exist here: drop it
+      // without join()/detach() (leaks a tiny std::thread object). Reset both
+      // guards copied from the parent so StartSessionStopWatcher() proceeds.
+      session_watcher_thread_ = nullptr;
+      session_watcher_running_.store(false, std::memory_order_release);
+      session_watcher_stop_.store(false, std::memory_order_release);
+      // session_shm_ is MAP_SHARED, so the new watcher parks on the same state
+      // word as the parent: one FUTEX_WAKE from --stop releases every process.
+      StartSessionStopWatcher();
+    }
+#endif /* _WIN32 */
 
     static void CreateTemporalControl(const char* session) {
       SharedMemoryReturnStatus ret = session_shm_.Create(session, sizeof(TemporalControl));
@@ -144,6 +245,10 @@ class UniController{
       AttachTemporalControlWrite(session);
       if (session_shm_.GetPtr() != nullptr) {
         ((TemporalControl*)session_shm_.GetPtr())->state_ = TEMPORAL_STOPPED;
+        // Wake every traced process parked on this session's state word. The
+        // futex keys on the shared page, so this write mapping reaches all
+        // read-mapped waiters. Must happen before Release() unmaps the page.
+        WakeSessionWaiters();
         std::cerr << "[INFO] Session " << session << " is stopped and can no longer be paused or resumed" << std::endl;
       }
       // Release (unmap + unlink) the shared memory so a new session with the
@@ -437,6 +542,84 @@ class UniController{
     }
 
   private:
+    // Body of the session-stop watcher thread (see StartSessionStopWatcher).
+    static void SessionWatcherLoop() {
+      while (!session_watcher_stop_.load(std::memory_order_acquire)) {
+        if (IsSessionStopped()) {
+          NotifySessionStopped();
+          return;  // stop observed and flushed -- the watcher's job is done
+        }
+        // Block until the state word changes instead of polling: idle workers
+        // cost no periodic wakeups; the bounded timeout is only a safety
+        // backstop. Returns false (no futex / no word) -> exit, never poll.
+        if (!WaitForSessionStateChange()) {
+          return;
+        }
+      }
+    }
+
+    // Latch the stopped state and fire the one-shot flush. Shared by the
+    // watcher and the collection-state call sites; the atomic exchange
+    // guarantees the flush runs at most once whichever thread detects first.
+    static void NotifySessionStopped() {
+      temporal_control_stopped_ = true;
+      if (session_stopped_callback_ &&
+          !session_stopped_notified_.exchange(true)) {
+        session_stopped_callback_();
+      }
+    }
+
+    // Address of the named session's state word the watcher blocks on, or
+    // null if session_shm_ is not mapped (already stopped+unlinked, or unnamed).
+    static TemporalControlState* SessionStatePtr() {
+      void* p = session_shm_.GetPtr();
+      if (p == nullptr) {
+        return nullptr;
+      }
+      return &((TemporalControl*)p)->state_;
+    }
+
+    // Park the watcher until the state word changes, a wake arrives, or the
+    // safety timeout elapses; the caller re-checks what happened. Returns false
+    // when no blocking wait is possible (no word, or Windows: no futex) -> exit.
+    static bool WaitForSessionStateChange() {
+#ifndef _WIN32
+      TemporalControlState* state = SessionStatePtr();
+      if (state == nullptr) {
+        return false;  // nothing to wait on -> caller exits; never poll
+      }
+      // Volatile read forces a fresh load of the cross-process word and matches
+      // what FUTEX_WAIT compares against, so "expected" is never stale.
+      const uint32_t observed =
+          *reinterpret_cast<volatile uint32_t*>(state);
+      struct timespec ts;
+      ts.tv_sec = kSessionWatchTimeoutMs_ / 1000;
+      ts.tv_nsec = (kSessionWatchTimeoutMs_ % 1000) * 1000000L;
+      // FUTEX_WAIT returns immediately (EAGAIN) if *state already differs from
+      // observed, so a change that already happened is never missed; otherwise
+      // it parks until FUTEX_WAKE, the timeout, or a signal (EINTR -> re-check).
+      syscall(SYS_futex, reinterpret_cast<uint32_t*>(state), FUTEX_WAIT,
+              observed, &ts, nullptr, 0);
+      return true;
+#else  /* _WIN32 */
+      // No futex on Windows. Do NOT poll as a fallback -- exit the watcher.
+      return false;
+#endif /* _WIN32 */
+    }
+
+    // Wake any watcher parked on this process's session state word. Called
+    // after a stop and on teardown. No-op without a futex (timeout re-checks).
+    static void WakeSessionWaiters() {
+#ifndef _WIN32
+      TemporalControlState* state = SessionStatePtr();
+      if (state == nullptr) {
+        return;
+      }
+      syscall(SYS_futex, reinterpret_cast<uint32_t*>(state), FUTEX_WAKE,
+              INT_MAX, nullptr, nullptr, 0);
+#endif /* _WIN32 */
+    }
+
     // Propagate the env-derived start-paused state into the
     // metric-sampling shared memory so the parent process (which owns the
     // sampling thread and cannot see this child's PTI_ENABLE_COLLECTION) can
@@ -531,9 +714,21 @@ class UniController{
     // but session_shm_.GetPtr() can also be null if the session is unnamed
     // this flag is true when session_shm_.GetPtr() is null but the named session is stopped
     // so subsequent processes are not profiled
-    inline static bool temporal_control_stopped_ = false;
+    // Atomic: written by app threads and the watcher. Monotonic false->true
+    // latch; the actual flush is gated by session_stopped_notified_.
+    inline static std::atomic<bool> temporal_control_stopped_{false};
     inline static SessionStoppedCallback session_stopped_callback_ = nullptr;
     inline static std::atomic<bool> session_stopped_notified_{false};
+
+    // Safety backstop for the watcher's blocking futex wait: bounds teardown
+    // latency and covers a wake racing the wait arming. Stop-to-flush latency
+    // on Linux comes from the cross-process wake, not this timeout.
+    static constexpr int kSessionWatchTimeoutMs_ = 250;
+    // Heap-allocated so a forked child can abandon the inherited handle by
+    // nulling the pointer, never join()/detach() on a stale pthread descriptor.
+    inline static std::thread* session_watcher_thread_ = nullptr;
+    inline static std::atomic<bool> session_watcher_running_{false};
+    inline static std::atomic<bool> session_watcher_stop_{false};
 
     inline static SharedMemory session_shm_;
     // shared memory to interact between child and parent process for metric sampling.

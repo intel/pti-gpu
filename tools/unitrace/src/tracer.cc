@@ -186,6 +186,10 @@ std::string get_version() {
 }
 
 void Teardown(void) {
+  // Stop and join the session-stop watcher first: it may be mid-flush inside
+  // OnSessionStopped() -> tracer->Flush(), so it must finish before the tracer
+  // it touches is deleted.
+  UniController::StopSessionStopWatcher();
   if (tracer != nullptr) {
     delete tracer;
     tracer = nullptr;
@@ -271,8 +275,40 @@ void OnSessionStopped(void) {
     if (metric_handshake) {
       UniController::SignalChildDataReady();
     }
+
+    // Session stopped but the app keeps running: close the result files now so
+    // the data is durable even if the process is later killed. Metric files are
+    // finalized by the parent via the handshake above and left untouched.
+    tracer->CloseResultFiles();
   }
 }
+
+#ifndef _WIN32
+// pthread_atfork handlers for fork() without exec. Prepare/parent hold the
+// logging locks across fork() so a thread mid-flush cannot leave one locked
+// in the child, where no thread exists to release it.
+static void OnForkPrepare(void) {
+  if (tracer != nullptr) {
+    tracer->LockForFork();
+  }
+}
+
+static void OnForkParent(void) {
+  if (tracer != nullptr) {
+    tracer->UnlockAfterForkParent();
+  }
+}
+
+// Child: release the locks, give the child its own result files, then re-arm
+// the stop watcher (in that order, so a racing stop flushes into the child's
+// file). Single-threaded here; no app code has resumed yet.
+static void OnForkChild(void) {
+  if (tracer != nullptr) {
+    tracer->ReopenResultFilesAfterFork();
+  }
+  UniController::RearmSessionWatcherAfterFork();
+}
+#endif /* _WIN32 */
 
 void CONSTRUCTOR Init(void) {
   std::string unitrace_version = utils::GetEnv("UNITRACE_VERSION");
@@ -339,6 +375,18 @@ void CONSTRUCTOR Init(void) {
     UniTimer::StartUniTimer();
     tracer = UniTracer::Create(ReadArgs());
   }
+
+  // Start the watcher only once the tracer exists: OnSessionStopped() no-ops
+  // while tracer is null, so starting earlier could drop the flush.
+  // Self-gates to named sessions with a registered callback.
+  UniController::StartSessionStopWatcher();
+
+#ifndef _WIN32
+  // Registered once, pre-main; the registration is inherited by every forked
+  // descendant. Not gated on a session: every fork-without-exec child needs
+  // its own result files. On failure children keep the old behavior.
+  pthread_atfork(OnForkPrepare, OnForkParent, OnForkChild);
+#endif /* _WIN32 */
 
   if (utils::GetEnv("UNITRACE_FollowChildProcess") == "0") {
     // restore LD_PRELOAD from UNITRACE_LD_PRELOAD_OLD to prevent the unitrace library

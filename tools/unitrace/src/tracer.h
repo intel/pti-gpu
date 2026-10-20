@@ -211,6 +211,50 @@ class UniTracer {
     data_flushed_ = true;
   }
 
+  // Finalize and close the result files without tearing down the tracer. Used
+  // when a session stops while the app keeps running, so the result is durable
+  // immediately. Metric files are left to the parent's handshake. Idempotent.
+  void CloseResultFiles() {
+    if (!data_flushed_) {
+      Flush();
+    }
+    if (chrome_logger_ != nullptr) {
+      chrome_logger_->Close();
+    }
+    logger_factory_->CloseTraceLoggers();
+  }
+
+#ifndef _WIN32
+  // atfork prepare: hold every logging lock across fork() so no other thread
+  // can leave one locked in the child. Order: chrome logger locks, then
+  // factory/Logger locks (matches how flush paths nest them).
+  void LockForFork() {
+    ChromeLoggerLockForFork();
+    logger_factory_->LockForFork();
+  }
+
+  void UnlockAfterForkParent() {
+    logger_factory_->UnlockAfterFork();
+    ChromeLoggerUnlockAfterForkParent();
+  }
+
+  // Fork child: release/re-create the locks taken in LockForFork(), then
+  // replace the inherited (shared) result files with the child's own. Loggers
+  // are reopened first, then the chrome logger writes a fresh header.
+  void ReopenResultFilesAfterFork() {
+    logger_factory_->UnlockAfterFork();
+    ChromeLoggerUnlockAfterForkChild();
+    if (ze_collector_ != nullptr) {
+      ze_collector_->MarkForkedChild();
+    }
+    logger_factory_->ReopenAfterFork();
+    if (chrome_logger_ != nullptr) {
+      chrome_logger_->ReopenAfterFork();
+    }
+    data_flushed_ = false;
+  }
+#endif /* _WIN32 */
+
   ~UniTracer() {
     if (ze_collector_ != nullptr) {
       ze_collector_->DisableTracing();

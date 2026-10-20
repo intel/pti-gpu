@@ -412,7 +412,12 @@ ResultDirLoggerFactory::ResultDirLoggerFactory(uint32_t app_id)
         std::cerr << "[ERROR] Result directory is missing or not specified." << std::endl;
         exit(-1);
     }
+    SetResultDirPaths();
+}
 
+// Derive the per-process result directory from result_dir_, rank and app_id_,
+// and make sure it exists. Shared by the constructor and OnAppIdChanged().
+void ResultDirLoggerFactory::SetResultDirPaths() {
     std::string dir = result_dir_;
     dir += "/";
     if (!rank_.empty()) {
@@ -424,6 +429,10 @@ ResultDirLoggerFactory::ResultDirLoggerFactory(uint32_t app_id)
     dir_path_ = dir;
     metrics_dir_path_ = dir + "/metrics";
     CreateDirectory(dir_path_);
+}
+
+void ResultDirLoggerFactory::OnAppIdChanged() {
+    SetResultDirPaths();
 }
 
 // ResultDirLoggerFactory destructor: on application exit, remove the directories
@@ -568,9 +577,71 @@ std::vector<std::string> ResultDirLoggerFactory::SearchFilesByType(LoggerType ty
     return result;
 }
 
+void LoggerFactory::CloseTraceLoggers() const {
+    std::lock_guard<std::mutex> guard(mutex_);
+    for (const auto& entry : loggers_) {
+        switch (std::get<0>(entry.first)) {
+            // Metric and temp loggers stay open: the parent process finalizes
+            // them through the metric flush handshake, not here.
+            case LOGGER_TYPE_METRICS_SAMPLING:
+            case LOGGER_TYPE_METRICS_SAMPLING_TEMP:
+            case LOGGER_TYPE_METRICS_QUERY:
+            case LOGGER_TYPE_METRICS_QUERY_TEMP:
+            case LOGGER_TYPE_KPROPS:
+            case LOGGER_TYPE_KTIME:
+                continue;
+            default:
+                if (entry.second) {
+                    entry.second->Close();
+                }
+        }
+    }
+}
+
 bool LoggerFactory::IsLegacy() const {
     return dynamic_cast<const LegacyLoggerFactory*>(this) != nullptr;
 }
+
+#ifndef _WIN32
+void LoggerFactory::ReopenAfterFork() {
+    SetAppId(utils::GetPid());
+    OnAppIdChanged();
+    for (const auto& entry : loggers_) {
+        const LoggerType type = std::get<0>(entry.first);
+        switch (type) {
+            case LOGGER_TYPE_METRICS_SAMPLING:
+            case LOGGER_TYPE_METRICS_SAMPLING_TEMP:
+            case LOGGER_TYPE_METRICS_QUERY:
+            case LOGGER_TYPE_METRICS_QUERY_TEMP:
+            case LOGGER_TYPE_KPROPS:
+            case LOGGER_TYPE_KTIME:
+                continue;
+            default:
+                if (entry.second) {
+                    entry.second->ReopenAfterFork(GenerateLogFileName(type, std::get<1>(entry.first)));
+                }
+        }
+    }
+}
+
+void LoggerFactory::LockForFork() const {
+    mutex_.lock();
+    for (const auto& entry : loggers_) {
+        if (entry.second) {
+            entry.second->LockForFork();
+        }
+    }
+}
+
+void LoggerFactory::UnlockAfterFork() const {
+    for (const auto& entry : loggers_) {
+        if (entry.second) {
+            entry.second->UnlockAfterFork();
+        }
+    }
+    mutex_.unlock();
+}
+#endif /* _WIN32 */
 
 bool LoggerFactory::IsResultDir() const {
     return dynamic_cast<const ResultDirLoggerFactory*>(this) != nullptr;

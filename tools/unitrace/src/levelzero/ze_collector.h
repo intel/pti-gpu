@@ -1428,7 +1428,10 @@ class ZeCollector {
     // intermittently never returns -- it takes the process down before the trace is
     // closed, silently truncating the output. Only a fraction of runs are affected,
     // which is what made it look like malformed JSON rather than a crash.
-    if (tracer_ != nullptr) {
+    // Also skipped in a fork()-without-exec child: the tracing layer waits for
+    // in-flight callbacks copied from the parent's other threads, which never
+    // drain here, so zelTracerDestroy() would spin forever at exit.
+    if (tracer_ != nullptr && !in_forked_child_) {
       ze_result_t status = ZE_FUNC(zelTracerDestroy)(tracer_);
       if (status != ZE_RESULT_SUCCESS) {
         std::cerr << "[WARNING] Failed to destroy tracer (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
@@ -1662,6 +1665,11 @@ class ZeCollector {
     global_device_time_stats_mutex_.unlock();
 
   }
+
+#ifndef _WIN32
+  // Called from the atfork child handler (see tracer.cc).
+  void MarkForkedChild() { in_forked_child_ = true; }
+#endif /* _WIN32 */
 
   void DisableTracing() {
     // For Windows, level-zero might have been unloaded hence calling zelTracerSetEnabled may have undefined behavior, so skip calling it.
@@ -6351,6 +6359,7 @@ typedef struct _zex_kernel_register_file_size_exp_t {
   ZeEventCache event_cache_;
 
   zel_tracer_handle_t tracer_ = nullptr;
+  bool in_forked_child_ = false;  // set by the atfork child handler
 
   mutable std::shared_mutex images_mutex_;
   std::map<ze_image_handle_t, size_t> images_;
