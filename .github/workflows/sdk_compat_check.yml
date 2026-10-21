@@ -228,6 +228,21 @@ jobs:
           # today's CMakeLists.
           cp -r "${BASE}/samples/." "${GITHUB_WORKSPACE}/sdk/samples/"
 
+          # Samples added after the baseline that compile sources of an overlaid
+          # sample, so the overlay pairs their current code with baseline code.
+          # pc_sampling_profiler builds ../pc_sampling/pc_sampling_client.cc, whose
+          # API changed after 1.2.0. Remove it once pti-1.3.0 is the baseline.
+          COMPAT_EXCLUDED_SAMPLES="pc_sampling_profiler"
+          for name in $COMPAT_EXCLUDED_SAMPLES; do
+            if [ -e "${BASE}/samples/${name}" ]; then
+              echo "::warning::${name} is in ${BASE_VER} and is checked; remove it from COMPAT_EXCLUDED_SAMPLES"
+              continue
+            fi
+            echo "excluded ${name}: added after ${BASE_VER}"
+            echo "return()" > "${GITHUB_WORKSPACE}/sdk/samples/${name}/CMakeLists.txt"
+            echo "- excluded \`${name}\` (added after \`${BASE_VER}\`)" >> "$GITHUB_STEP_SUMMARY"
+          done
+
           # Current tests may depend on sample APIs added after the baseline.
           cmake -S "${GITHUB_WORKSPACE}/sdk" --preset "$API_PRESET" -DPTI_BUILD_TESTING=OFF 2>&1 | tee configure.log
           [ "${PIPESTATUS[0]}" -eq 0 ] || { echo "::error::configuring with the ${BASE_VER} samples failed"; exit 1; }

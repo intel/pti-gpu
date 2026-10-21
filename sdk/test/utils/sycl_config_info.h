@@ -5,7 +5,9 @@
 
 #include <sycl/ext/oneapi/backend/level_zero.hpp>
 #include <sycl/sycl.hpp>
+#include <variant>
 
+#include "pti/pti_view.h"
 #include "ze_config_info.h"
 
 #if defined(__SYCL_COMPILER_VERSION) && defined(__LIBSYCL_MAJOR_VERSION)
@@ -39,6 +41,18 @@ namespace pti::test::utils {
 
 [[nodiscard]] inline bool NativeGraphApisAvailable() {
   return level_zero::NativeGraphApisAvailable();
+}
+
+[[nodiscard]] inline pti_backend_queue_t GetLevelZeroBackendQueue(sycl::queue& queue) {
+  pti_backend_queue_t backend_queue = nullptr;
+  auto queue_type = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(queue);
+
+  if (auto* ptr_queue_handle = std::get_if<ze_command_list_handle_t>(&queue_type)) {
+    backend_queue = static_cast<pti_backend_queue_t>(*ptr_queue_handle);
+  } else if (auto* ptr_queue_handle = std::get_if<ze_command_queue_handle_t>(&queue_type)) {
+    backend_queue = static_cast<pti_backend_queue_t>(*ptr_queue_handle);
+  }
+  return backend_queue;
 }
 
 }  // namespace pti::test::utils

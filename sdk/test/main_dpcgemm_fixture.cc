@@ -514,7 +514,7 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
               << queue.get_info<sycl::info::queue::device>().get_info<sycl::info::device::name>()
               << std::endl;
 
-    queue_test = samples_utils::GetLevelZeroBackendQueue(queue);
+    queue_test = pti::test::utils::GetLevelZeroBackendQueue(queue);
     if (queue_test == nullptr) {
       FAIL() << "Underlying level zero queue handle could not be obtained.";
     }

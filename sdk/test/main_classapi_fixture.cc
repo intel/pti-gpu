@@ -309,7 +309,7 @@ class ClassApiFixtureTest : public ::testing::TestWithParam<std::tuple<bool, boo
               << queue.get_info<sycl::info::queue::device>().get_info<sycl::info::device::name>()
               << std::endl;
 
-    ClassTestData::Get().queue_test = samples_utils::GetLevelZeroBackendQueue(queue);
+    ClassTestData::Get().queue_test = pti::test::utils::GetLevelZeroBackendQueue(queue);
     if (ClassTestData::Get().queue_test == nullptr) {
       FAIL() << "Underlying level zero queue handle could not be obtained.";
     }

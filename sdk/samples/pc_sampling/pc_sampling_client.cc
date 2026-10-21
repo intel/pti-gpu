@@ -23,7 +23,6 @@
 #include <iomanip>
 #include <iostream>
 #include <string>
-#include <sycl/sycl.hpp>
 #include <vector>
 
 #include "pti/pti_pc_sampling.h"

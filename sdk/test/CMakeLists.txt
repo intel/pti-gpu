@@ -1043,6 +1043,13 @@ target_include_directories(
 target_link_libraries(pc_sampling_internal_test PUBLIC spdlog::spdlog Pti::pti_view
 GTest::gtest_main LevelZero::level-zero LevelZero::level-zero-ext ${FS_LIB})
 
+set(PTI_PC_SAMPLING_TEST_PROPS ${PTI_METRIC_TEST_PROPS})
+if(PTI_SANITIZER)
+  # Sanitizers can move the GPU ISA heap to an address domain that cannot
+  # currently be correlated with EuStallSampling instruction pointers.
+  list(APPEND PTI_PC_SAMPLING_TEST_PROPS DISABLED TRUE)
+endif()
+
 if(HAVE_SYCL)
   add_executable(pc_sampling_functional_test pc_sampling/pc_sampling_functional_test.cc)
 
@@ -1106,31 +1113,82 @@ gtest_discover_tests(
   pc_sampling_basic_test
   DISCOVERY_TIMEOUT 60
   PROPERTIES
-    ${PTI_METRIC_TEST_PROPS}
-    LABELS "unit")
+    ${PTI_PC_SAMPLING_TEST_PROPS}
+    LABELS "unit"
+    LABELS "pc-sampling")
 
 gtest_discover_tests(
   pc_sampling_internal_test
   DISCOVERY_TIMEOUT 60
   PROPERTIES
-    ${PTI_METRIC_TEST_PROPS}
+    ${PTI_PC_SAMPLING_TEST_PROPS}
     LABELS "unit"
     LABELS "metrics"
-    LABELS "hw-metrics")
+    LABELS "hw-metrics"
+    LABELS "pc-sampling")
 
 if(HAVE_SYCL)
   gtest_discover_tests(
     pc_sampling_functional_test
     DISCOVERY_TIMEOUT 60
     PROPERTIES
-      ${PTI_METRIC_TEST_PROPS}
+      ${PTI_PC_SAMPLING_TEST_PROPS}
       LABELS "functional"
       LABELS "metrics"
-      LABELS "hw-metrics")
+      LABELS "hw-metrics"
+      LABELS "pc-sampling")
 endif()
 
 # TODO: Organize this better? Where to put
 # functional tests?
+if(PTI_BUILD_SAMPLES AND TARGET pc_sampling_profiler)
+  add_test(NAME pc_sampling_profiler-usage COMMAND pc_sampling_profiler --help)
+  add_test(NAME pc_sampling_profiler-bad-period
+           COMMAND pc_sampling_profiler --period 0 -- /bin/true)
+
+  set_tests_properties(
+    pc_sampling_profiler-usage PROPERTIES PASS_REGULAR_EXPRESSION "Usage:" LABELS
+    "unit;samples")
+  set_tests_properties(
+    pc_sampling_profiler-bad-period PROPERTIES WILL_FAIL TRUE LABELS "unit;samples")
+endif()
+
+if(PTI_BUILD_SAMPLES AND TARGET pc_sampling_profiler_l0_gemm)
+  add_test(
+    NAME run-pc_sampling_profiler-l0
+    COMMAND
+      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/pc_sampling/run_sample_test.py
+      $<TARGET_FILE:pc_sampling_profiler>
+      $<TARGET_FILE:pc_sampling_profiler_l0_gemm>
+      ${PROJECT_BINARY_DIR}/samples/pc_sampling_profiler/gemm.spv)
+  set_tests_properties(
+    run-pc_sampling_profiler-l0 PROPERTIES ${PTI_PC_SAMPLING_TEST_PROPS} SKIP_RETURN_CODE 77
+    TIMEOUT 120 LABELS "functional;samples;pc-sampling")
+endif()
+
+if(PTI_BUILD_SAMPLES AND TARGET pc_sampling_profiler_gemm)
+  add_test(
+    NAME run-pc_sampling_profiler-sycl
+    COMMAND
+      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/pc_sampling/run_sample_test.py
+      --sycl $<TARGET_FILE:pc_sampling_profiler> $<TARGET_FILE:pc_sampling_profiler_gemm>)
+  set_tests_properties(
+    run-pc_sampling_profiler-sycl PROPERTIES ${PTI_PC_SAMPLING_TEST_PROPS} SKIP_RETURN_CODE 77
+    TIMEOUT 360 LABELS "functional;samples;metrics;hw-metrics;pc-sampling")
+endif()
+
+if(PTI_BUILD_SAMPLES AND TARGET pc_sampling_profiler)
+  add_test(
+    NAME run-pc_sampling_profiler-pytorch
+    COMMAND
+      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/pc_sampling/run_sample_test.py
+      --pytorch $<TARGET_FILE:pc_sampling_profiler> ${Python_EXECUTABLE}
+      ${PROJECT_SOURCE_DIR}/samples/pc_sampling_profiler/pytorch_train.py)
+  set_tests_properties(
+    run-pc_sampling_profiler-pytorch PROPERTIES ${PTI_PC_SAMPLING_TEST_PROPS} SKIP_RETURN_CODE 77
+    TIMEOUT 360 LABELS "functional;samples;metrics;hw-metrics;pc-sampling;pytorch")
+endif()
+
 # Runs all samples
 if(PTI_BUILD_SAMPLES AND HAVE_SYCL)
   include(ProcessorCount)

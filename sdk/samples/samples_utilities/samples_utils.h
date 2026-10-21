@@ -393,18 +393,6 @@ inline void DumpRecord(pti_view_record_external_correlation* record) {
   std::cout << "External Id: " << record->_external_id << '\n';
 }
 
-inline pti_backend_queue_t GetLevelZeroBackendQueue(sycl::queue& queue) {
-  pti_backend_queue_t backend_queue = nullptr;
-  auto queue_type = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(queue);
-
-  if (auto* ptr_queue_handle = std::get_if<ze_command_list_handle_t>(&queue_type)) {
-    backend_queue = static_cast<pti_backend_queue_t>(*ptr_queue_handle);
-  } else if (auto* ptr_queue_handle = std::get_if<ze_command_queue_handle_t>(&queue_type)) {
-    backend_queue = static_cast<pti_backend_queue_t>(*ptr_queue_handle);
-  }
-  return backend_queue;
-}
-
 inline std::string GetCommandListTypeString(pti_backend_command_list_type cmd_list_type) {
   std::string result;
   if (cmd_list_type & PTI_BACKEND_COMMAND_LIST_TYPE_UNKNOWN) {

@@ -399,6 +399,7 @@ if(BUILD_TESTING AND PTI_BUILD_SAMPLES)
   add_subdirectory(samples/omp_vec_add)
   add_subdirectory(samples/metrics_perf)
   add_subdirectory(samples/pc_sampling)
+  add_subdirectory(samples/pc_sampling_profiler)
   add_subdirectory(samples/itt_ccl)
 endif()
 
