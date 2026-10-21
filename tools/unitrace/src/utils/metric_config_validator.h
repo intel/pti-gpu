@@ -15,7 +15,7 @@
 #include <map>
 #include <string>
 
-#include "ConfigNode.h"
+#include "config_node.h"
 
 namespace metric_config {
 

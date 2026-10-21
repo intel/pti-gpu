@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 
-#ifndef CONFIG_NODE_H
-#define CONFIG_NODE_H
+#ifndef UNITRACE_UTILS_CONFIG_NODE_H_
+#define UNITRACE_UTILS_CONFIG_NODE_H_
 
 #include <algorithm>
 #include <cassert>
@@ -586,4 +586,4 @@ class ConfigNode{
     std::vector<ConfigNodePtr> children;
 };
 
-#endif /* CONFIG_NODE_H */
+#endif  // UNITRACE_UTILS_CONFIG_NODE_H_

@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 
-// Unit test of the --metric-config file parser (ConfigNode.h).
+// Unit test of the --metric-config file parser (config_node.h).
 
 #include <cstdio>
 #include <filesystem>
@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-#include "ConfigNode.h"
+#include "config_node.h"
 #include "metric_config_validator.h"
 
 static int failures = 0;

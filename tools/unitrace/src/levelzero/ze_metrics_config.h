@@ -26,7 +26,7 @@
 #include <unordered_map>
 
 #include "utils/unitrace_assert.h"
-#include "ConfigNode.h"
+#include "config_node.h"
 #include "metric_config_validator.h"
 
 
