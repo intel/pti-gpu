@@ -526,6 +526,20 @@ if(HAVE_SYCL)
   target_link_libraries(sycl_queue_id PUBLIC spdlog::spdlog Pti::pti_view
     GTest::gtest_main)
 
+  add_executable(sycl_experimental_tests sycl_experimental_tests.cc)
+
+  target_include_directories(
+    sycl_experimental_tests
+    PUBLIC "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+         "${PROJECT_SOURCE_DIR}/src"
+         "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
+         "${PROJECT_SOURCE_DIR}/src/sycl" "${PROJECT_SOURCE_DIR}/src/utils")
+
+  target_compile_options(sycl_experimental_tests PRIVATE -fsycl)
+  target_link_options(sycl_experimental_tests PRIVATE -fsycl)
+
+  target_link_libraries(sycl_experimental_tests PUBLIC Pti::pti_view GTest::gtest_main)
+
   add_executable(zegemm_suite main_zegemm_fixture.cc)
 
   target_include_directories(
@@ -759,6 +773,24 @@ if(HAVE_SYCL)
     sycl_queue_id
     DISCOVERY_TIMEOUT 60
     PROPERTIES LABELS "functional")
+
+  gtest_discover_tests(
+    sycl_experimental_tests
+    DISCOVERY_TIMEOUT 60
+    TEST_SUFFIX "_PTI_COLLECTION_MODE_2_SYCL_UR_USE_LEVEL_ZERO_V2_0"
+    PROPERTIES ENVIRONMENT "PTI_COLLECTION_MODE=2"
+               ENVIRONMENT "SYCL_UR_USE_LEVEL_ZERO_V2=0"
+               TIMEOUT 120
+               LABELS "functional")
+
+  gtest_discover_tests(
+    sycl_experimental_tests
+    DISCOVERY_TIMEOUT 60
+    TEST_SUFFIX "_PTI_COLLECTION_MODE_2_SYCL_UR_USE_LEVEL_ZERO_V2_1"
+    PROPERTIES ENVIRONMENT "PTI_COLLECTION_MODE=2"
+               ENVIRONMENT "SYCL_UR_USE_LEVEL_ZERO_V2=1"
+               TIMEOUT 120
+               LABELS "functional")
 
   gtest_discover_tests(
     startstop_suite

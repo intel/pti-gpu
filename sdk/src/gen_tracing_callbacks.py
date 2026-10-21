@@ -1135,6 +1135,7 @@ def main():
     func_list = list(func_param_dictionary.keys())
 
     kfunc_list = [
+        "zeEventCreate",
         "zeEventDestroy",
         "zeEventHostReset",
         "zeEventPoolCreate",

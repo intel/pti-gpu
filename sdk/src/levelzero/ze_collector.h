@@ -925,15 +925,15 @@ class ZeCollector {
    *  \internal
    *  \warning lock to be acquired in caller chain
    */
-  bool QueryEventStatusUnlessDestroyed(ze_event_handle_t event, ze_result_t& status) {
-    bool destroyed = destroyed_events_.find(event) != destroyed_events_.end();
+  ze_result_t QueryEventStatusUnlessDestroyed(ze_event_handle_t event) const {
+    const bool destroyed = destroyed_events_.find(event) != destroyed_events_.end();
     SPDLOG_TRACE("\tPrior checking event status event: {}, destroyed: {} ",
                  static_cast<const void*>(event), destroyed);
-    if (!destroyed) {
-      overhead::ScopedOverheadCollector overhead_collector{zeEventQueryStatus_id};
-      status = zeEventQueryStatus(event);
+    if (destroyed) {
+      return ZE_RESULT_SUCCESS;
     }
-    return destroyed;
+    overhead::ScopedOverheadCollector overhead_collector{zeEventQueryStatus_id};
+    return zeEventQueryStatus(event);
   }
 
   std::vector<ZeKernelCommandExecutionRecord> CollectCommandExecutionRecordsProcessingEvent(
@@ -995,9 +995,8 @@ class ZeCollector {
   }
 
   bool AbleToProcessCommand(const ZeKernelCommand* command) {
-    ze_result_t status = ZE_RESULT_SUCCESS;
-    const bool destroyed = QueryEventStatusUnlessDestroyed(command->event_self, status);
-    const bool event_signaled = (status == ZE_RESULT_SUCCESS || destroyed);
+    const bool event_signaled =
+        (QueryEventStatusUnlessDestroyed(command->event_self) == ZE_RESULT_SUCCESS);
     //  event_signaled could be the event was reset on device, so check the
     //  timestamp query event if not signaled.
     return event_signaled ? EnsureTimestampsAvailable(command)
@@ -2013,25 +2012,39 @@ class ZeCollector {
   static void OnEnterEventDestroy(ze_event_destroy_params_t* params, void* global_data,
                                   void** /*instance_data*/, std::vector<uint64_t>* kids) {
     SPDLOG_TRACE("In {} event: {}", __FUNCTION__, static_cast<const void*>(*(params->phEvent)));
-    if (*(params->phEvent) != nullptr) {
-      ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-      collector->ProcessEventAndReturnCommandExecutionsRecordsToUser(*(params->phEvent), kids);
+    if (*params->phEvent == nullptr) {
+      return;
+    }
+    auto* const collector = static_cast<ZeCollector*>(global_data);
+    collector->ProcessEventAndReturnCommandExecutionsRecordsToUser(*params->phEvent, kids);
 
-      // only events that managed by collector should be taken care
-      if (ZeCollectionMode::kLocal == collector->collection_mode_) {
-        const std::lock_guard<std::mutex> lock(collector->lock_);
-        collector->destroyed_events_.insert(*(params->phEvent));
-      }
+    // only events that managed by collector should be taken care
+    if (ZeCollectionMode::kLocal == collector->collection_mode_) {
+      const std::lock_guard<std::mutex> lock(collector->lock_);
+      collector->destroyed_events_.insert(*params->phEvent);
+    }
+  }
+
+  static void OnExitEventCreate(ze_event_create_params_t* params, ze_result_t result,
+                                void* global_data, void** /*instance_data*/) {
+    if (result != ZE_RESULT_SUCCESS || *params->pphEvent == nullptr) {
+      return;
+    }
+    auto* const collector = static_cast<ZeCollector*>(global_data);
+    if (ZeCollectionMode::kLocal == collector->collection_mode_) {
+      const std::lock_guard<std::mutex> lock(collector->lock_);
+      collector->destroyed_events_.erase(*(*params->pphEvent));
     }
   }
 
   static void OnEnterEventHostReset(ze_event_host_reset_params_t* params, void* global_data,
                                     void** /*instance_data*/, std::vector<uint64_t>* kids) {
     SPDLOG_TRACE("In {} event: {}", __FUNCTION__, static_cast<const void*>(*(params->phEvent)));
-    if (*(params->phEvent) != nullptr) {
-      ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-      collector->ProcessEventAndReturnCommandExecutionsRecordsToUser(*(params->phEvent), kids);
+    if (*params->phEvent == nullptr) {
+      return;
     }
+    auto* const collector = static_cast<ZeCollector*>(global_data);
+    collector->ProcessEventAndReturnCommandExecutionsRecordsToUser(*(params->phEvent), kids);
   }
 
   static void OnExitEventHostSynchronize(ze_event_host_synchronize_params_t* params,
