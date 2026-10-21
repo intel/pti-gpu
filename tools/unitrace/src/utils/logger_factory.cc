@@ -606,6 +606,8 @@ bool LoggerFactory::IsLegacy() const {
 void LoggerFactory::ReopenAfterFork() {
     SetAppId(utils::GetPid());
     OnAppIdChanged();
+    // Uncontended in the single-threaded child; keeps loggers_ access under mutex_.
+    std::lock_guard<std::mutex> guard(mutex_);
     for (const auto& entry : loggers_) {
         const LoggerType type = std::get<0>(entry.first);
         switch (type) {
@@ -634,12 +636,14 @@ void LoggerFactory::LockForFork() const {
 }
 
 void LoggerFactory::UnlockAfterFork() const {
+    // Adopt mutex_, locked in LockForFork(), so it is released on exit.
+    std::lock_guard<std::mutex> guard(mutex_, std::adopt_lock);
+    // coverity[missing_lock]
     for (const auto& entry : loggers_) {
         if (entry.second) {
             entry.second->UnlockAfterFork();
         }
     }
-    mutex_.unlock();
 }
 #endif /* _WIN32 */
 
