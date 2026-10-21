@@ -6,6 +6,7 @@
 
 #ifndef PTI_TOOLS_ONETRACE_UNIFIED_TRACER_H_
 #define PTI_TOOLS_ONETRACE_UNIFIED_TRACER_H_
+#define NOMINMAX
 
 #include <chrono>
 #include <cstdint>
