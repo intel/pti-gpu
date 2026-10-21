@@ -15,6 +15,7 @@
 #         test only, e.g.:  command = FOO=1 run_test.py kuku GPU
 #       - Placeholders: {python}   = the python interpreter
 #                       {unitrace} = the unitrace binary under test
+#                       {bin}      = the directory the test workloads are installed in
 #
 #   options  = <unitrace options>
 #       Unitrace options shared by ALL scenarios of this test, appended to
@@ -178,6 +179,11 @@ scenario = -d
 
 [print_options_schema]
 command           = cpp_test/print_options_schema/check_options_schema.py {unitrace}
+requires          = none
+defaults-scenario = False
+
+[metric_config_parser]
+command           = cpp_test/metric_config/check_config_node.py {bin}
 requires          = none
 defaults-scenario = False
 

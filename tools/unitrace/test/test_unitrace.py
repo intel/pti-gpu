@@ -298,7 +298,8 @@ def build_test_command(test_entry, test_dir, scenario, bin_dir, output_dir, unit
     Returns the command and the extra environment set by leading NAME=VALUE
     tokens (formerly per-test ctest ENVIRONMENT properties)."""
     tokens = [token.format(python=sys.executable,
-                           unitrace=resolve_unitrace_exe(test_dir, unitrace_exe))
+                           unitrace=resolve_unitrace_exe(test_dir, unitrace_exe),
+                           bin=bin_dir)
               for token in test_entry["cmd"].split()]
     extra_env = {}
     while "=" in tokens[0] and not tokens[0].endswith(".py"):

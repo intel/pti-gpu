@@ -43,6 +43,7 @@
 #include "ze_metrics.h"
 #include "utils/utils.h"
 #include "cli_options.h"
+#include "metric_config_validator.h"
 #include "version.h"
 #include "unitrace_commit_hash.h"
 #include "unicontrol.h"
@@ -73,12 +74,17 @@ struct ArgParseState {
   char* progname_ = nullptr;
   int   app_index_ = 1;
   bool  show_metric_list_ = false;
+  const char* gen_metric_config_ = nullptr;
   bool  stall_sampling_ = false;
   bool  metric_sampling_ = false;
   bool  devices_to_sample_present_ = false;
   std::set<int> ranks_to_sample_;
   std::set<int> devices_to_sample_;
 };
+
+// ParseArgs result for an error that was already reported in detail: exit with
+// status 1 without the generic "Invalid command line" message and usage text.
+static constexpr int kParseErrorReported = -2;
 
 using CliOption = cli::CliOption<ArgParseState>;
 using Status    = cli::Status;
@@ -214,6 +220,11 @@ static Status OnMetricSampling(ArgParseState& st, const CliOption&, const char*)
 
 static Status OnMetricList(ArgParseState& st, const CliOption&, const char*) {
   st.show_metric_list_ = true;  // PrintMetricList runs in FinalizeParse
+  return Status::Ok;
+}
+
+static Status OnGenMetricConfig(ArgParseState& st, const CliOption&, const char* value) {
+  st.gen_metric_config_ = value;  // GenMetricConfig runs in FinalizeParse
   return Status::Ok;
 }
 
@@ -364,6 +375,9 @@ inline constexpr CliOption kCliOptions[] = {
   Opt::Value("--group", "-g", "enum", "metrics", "metric-group",
         "Hardware metric group (ComputeBasic by default)", "UNITRACE_MetricGroup", nullptr, "ComputeBasic")
       .ChoicesFrom("metric-groups").Requires("--metric-query,--metric-sampling,--stall-sampling"),
+  Opt::Value("--metric-config", nullptr, "path", "metrics", "filename",
+        "Configuration file with metrics to collect", "UNITRACE_MetricConfig")
+      .PathFile().Requires("--metric-query,--metric-sampling"),
   Opt::Value("--sampling-interval", "-i", "float", "metrics", "interval",
         "Hardware performance metric sampling interval in us, fractional values allowed (default is " DEFAULT_SAMPLING_INTERVAL_US_STR " us) in time-based mode",
         "UNITRACE_SamplingInterval", nullptr, DEFAULT_SAMPLING_INTERVAL_US_STR)
@@ -376,6 +390,9 @@ inline constexpr CliOption kCliOptions[] = {
   Opt::BoolH("--idle-sampling", nullptr, "metrics", "Continue metric sampling while the device is idle", OnIdleSampling),
   Opt::Action("--device-list", "metrics", "Print available devices", OnDeviceList),
   Opt::Action("--metric-list", "metrics", "Print available metric groups and metrics", OnMetricList),
+  Opt::ValueH("--gen-metric-config", nullptr, "path", "metrics", "filename",
+         "Generate a metric configuration file template with all supported predefined and programmable metrics",
+         OnGenMetricConfig).PathFile(),
   Opt::Value("--include-kernels", nullptr, "string", "filter", "kernel-names",
         "Trace kernels, the names of which contain substrings in the comma-separated <kernel-names> (Level Zero only)",
         "UNITRACE_IncludeKernels"),
@@ -644,9 +661,20 @@ static int FinalizeParse(ArgParseState& st) {
       utils::SetEnv("UNITRACE_DeviceTiming", "1");
     }
 
-    // default metric group is "ComputeBasic"
-    if (utils::GetEnv("UNITRACE_MetricGroup").empty()) {
+    // default metric group is "ComputeBasic" unless a metric config file is given
+    if (utils::GetEnv("UNITRACE_MetricGroup").empty() && utils::GetEnv("UNITRACE_MetricConfig").empty()) {
       utils::SetEnv("UNITRACE_MetricGroup", "ComputeBasic");
+    }
+
+    // Check the metric config file before the application starts; device-specific
+    // checks (names, valid parameter values) happen when the metric groups are created.
+    std::string metric_config = utils::GetEnv("UNITRACE_MetricConfig");
+    if (!metric_config.empty()) {
+      std::string error;
+      if (metric_config::Load(metric_config, metric_config::CountGroups(utils::GetEnv("UNITRACE_MetricGroup")), error) == nullptr) {
+        std::cerr << "[ERROR] Invalid metric configuration file: " << error << std::endl;
+        return kParseErrorReported;
+      }
     }
 
     // default sampling interval is DEFAULT_SAMPLING_INTERVAL_US
@@ -687,11 +715,16 @@ static int FinalizeParse(ArgParseState& st) {
           return -1;
       }
   }
-  if (st.show_metric_list_) {
+  if (st.show_metric_list_ || st.gen_metric_config_ != nullptr) {
     SetProfilingEnvironment(); // enable ZET_ENABLE_METRICS
     std::string value = utils::GetEnv("UNITRACE_DeviceId");
     uint32_t device_id = value.empty() ? 0 : std::stoul(value);
-    PrintMetricList(device_id);
+    if (st.show_metric_list_) {
+      PrintMetricList(device_id);
+    }
+    if (st.gen_metric_config_ != nullptr && !GenMetricConfig(device_id, st.gen_metric_config_)) {
+      return kParseErrorReported;
+    }
     return 0;
   }
 
@@ -1128,7 +1161,7 @@ int main(int argc, char *argv[]) {
     if (app_index >= argc) {
       std::cerr << "[ERROR] Application is missing" << std::endl;
       Usage(argv[0]);
-    } else if (app_index < 0) {
+    } else if (app_index < 0 && app_index != kParseErrorReported) {
       std::cerr << "[ERROR] Invalid command line" << std::endl;
       Usage(argv[0]);
     }

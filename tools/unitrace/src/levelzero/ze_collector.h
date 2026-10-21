@@ -43,6 +43,7 @@
 #include "ze_loader.h"
 #include "common_header.gen"
 #include "logger_factory.h"
+#include "ze_metrics_config.h"
 
 struct ZeMetricQueryPoolKey {
   ze_context_handle_t context_;
@@ -1465,6 +1466,11 @@ class ZeCollector {
         }
       }
       metric_contexts_.clear();
+
+      for (ZeMetricsManager *mng: metricsManagers_) {
+        delete mng;
+      }
+      metricsManagers_.clear();
     }
   }
 
@@ -2008,45 +2014,19 @@ class ZeCollector {
             }
 
             if (options_.metric_query) {
-              uint32_t num_groups = 0;
               zet_metric_group_handle_t group = nullptr;
-              status = ZE_FUNC(zetMetricGroupGet)(device, &num_groups, nullptr);
-              if (status != ZE_RESULT_SUCCESS) {
-                std::cerr << "[ERROR] Unable to get metric group" << std::endl;
+              ZeMetricsManager* metricsManager = ZeMetricsManager::CreateMetricGroups(device, ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_EVENT_BASED, utils::GetEnv("UNITRACE_MetricConfig"), utils::GetEnv("UNITRACE_MetricGroup"));
+
+              if (metricsManager != nullptr && metricsManager->GetMetricGroups() != nullptr) {
+                group = metricsManager->GetMetricGroups()[0];
+              }
+
+              if (group == nullptr) {
+                std::cerr << "[ERROR] Unable to get metric group. Please make sure the metric group is valid and supported" << std::endl;
                 exit(-1);
               }
-              if (num_groups > 0) {
-                std::vector<zet_metric_group_handle_t> groups(num_groups, nullptr);
-                status = ZE_FUNC(zetMetricGroupGet)(device, &num_groups, groups.data());
-                if (status != ZE_RESULT_SUCCESS) {
-                  std::cerr << "[ERROR] Unable to get metric group" << std::endl;
-                  exit(-1);
-                }
 
-                for (uint32_t k = 0; k < num_groups; ++k) {
-                  zet_metric_group_properties_t group_props{};
-                  group_props.stype = ZET_STRUCTURE_TYPE_METRIC_GROUP_PROPERTIES;
-                  status = ZE_FUNC(zetMetricGroupGetProperties)(groups[k], &group_props);
-                  if (status != ZE_RESULT_SUCCESS) {
-                    std::cerr << "[ERROR] Unable to get metric group properties" << std::endl;
-                    exit(-1);
-                  }
-
-                  if ((strcmp(group_props.name, utils::GetEnv("UNITRACE_MetricGroup").c_str()) == 0) && (group_props.samplingType & ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_EVENT_BASED)) {
-                    group = groups[k];
-                    break;
-                  }
-                }
-
-                if (group == nullptr) {
-                  std::cerr << "[ERROR] Unable to get metric group " << utils::GetEnv("UNITRACE_MetricGroup") << ". Please make sure the metric group is valid and supported" << std::endl;
-                  exit(-1);
-                }
-              }
-              else {
-                std::cerr << "[ERROR] Unable to get metric group " << utils::GetEnv("UNITRACE_MetricGroup") << ". Please make sure the metric group is valid and supported" << std::endl;
-                exit(-1);
-              }
+              metricsManagers_.push_back(metricsManager);
 
               status = ZE_FUNC(zetContextActivateMetricGroups)(context, device, 1, &group);
               if (status != ZE_RESULT_SUCCESS) {
@@ -6378,6 +6358,7 @@ typedef struct _zex_kernel_register_file_size_exp_t {
   ZeMetricQueryPools query_pools_;
 
   std::vector<ze_context_handle_t> metric_contexts_;
+  std::vector<ZeMetricsManager*> metricsManagers_;
 
   mutable std::shared_mutex events_mutex_;
   std::set<ze_event_pool_handle_t> counter_based_pools_;

@@ -61,6 +61,7 @@ add_subdirectory(grf)
 # internal_conditional_trace exercises the in-application stop control
 # (__itt_detach / PTI_ENABLE_COLLECTION).
 add_subdirectory(internal_conditional_trace)
+add_subdirectory(metric_config)
 add_subdirectory(omp_gemm)
 add_subdirectory(omp_cpu_gemm)
 add_subdirectory(sycl_graph_with_v2_adaptor)

@@ -20,8 +20,8 @@
 #include <cstdint>
 #include <iomanip>
 #include <iostream>
-#include <algorithm>
 #include <map>
+#include <memory>
 #include <set>
 #include <tuple>
 #include <vector>
@@ -39,6 +39,7 @@
 #include "kernel_extractor.h"
 #include "source_resolver.h"
 #include <inttypes.h>
+#include "ze_metrics_config.h"
 
 constexpr static uint64_t min_dummy_instance_id = 1024 * 1024;  // offset of idle-sampling instance ids
 constexpr static uint32_t max_metric_samples = 32768;
@@ -132,7 +133,7 @@ inline void PrintMetricList(uint32_t device_id) {
     UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
     bool is_ebs = (group_props.samplingType &
-                   ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_EVENT_BASED);
+                  ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_EVENT_BASED);
     bool is_tbs = (group_props.samplingType &
                    ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_TIME_BASED);
     UNITRACE_ASSERT(is_ebs || is_tbs);
@@ -168,6 +169,36 @@ inline void PrintMetricList(uint32_t device_id) {
     }
   }
 }
+// Returns false if the metric configuration template could not be generated.
+inline bool GenMetricConfig(uint32_t device_id, const char* config_filename) {
+  ze_result_t status = ZE_FUNC(zeInit)(ZE_INIT_FLAG_GPU_ONLY);
+  if (status != ZE_RESULT_SUCCESS) {
+    std::cerr << "[ERROR] Failed to initialize Level Zero runtime" << std::endl;
+#ifndef _WIN32
+    std::cerr << "[INFO] Please ensure that either /proc/sys/dev/i915/perf_stream_paranoid or /proc/sys/dev/xe/observation_paranoid is set to 0." << std::endl;
+#endif /* _WIN32 */
+    return false;
+  }
+
+  std::vector<ze_device_handle_t> device_list = GetDeviceList();
+  if (device_list.empty()) {
+    std::cerr << "[ERROR] No devices found" << std::endl;
+    return false;
+  }
+
+  if (device_id >= device_list.size()) {
+    std::cerr << "[ERROR] Device " << device_id << " does not exist" << std::endl;
+    return false;
+  }
+  ze_device_handle_t device = device_list[device_id];
+
+  if (!ZeMetricsManager::GenerateAllMetricConfig(device, config_filename)) {
+    std::cerr << "[ERROR] Failed to generate config file: " << config_filename << std::endl;
+    return false;
+  }
+  std::cerr << "[INFO] Metric configuration template is stored in " << config_filename << std::endl;
+  return true;
+}
 
 inline uint32_t GetMetricId(const std::vector<std::string>& metric_list, const std::string& metric_name) {
   UNITRACE_ASSERT(!metric_list.empty());
@@ -199,6 +230,7 @@ struct ZeDeviceDescriptor {
   int32_t device_id_;
   int32_t subdevice_id_;
   int32_t num_sub_devices_;
+  ZeMetricsManager* metricsManager_;
   zet_metric_group_handle_t metric_group_;
   ze_pci_ext_properties_t pci_properties_;
   std::thread *profiling_thread_;
@@ -222,6 +254,12 @@ class ZeMetricProfiler {
   ~ZeMetricProfiler() {
     StopProfilingMetrics();
     ComputeMetricsSampled();
+
+    // Created metrics now can be destroyed
+    for (auto [handle, device] : device_descriptors_) {
+      delete device->metricsManager_;
+      device->metricsManager_ = nullptr;
+    }
   }
 
   ZeMetricProfiler(const ZeMetricProfiler& that) = delete;
@@ -231,7 +269,9 @@ class ZeMetricProfiler {
   static void ComputeMetricsQueried(uint32_t pid) {
 
     std::string metric_group_name = utils::GetEnv("UNITRACE_MetricGroup");
-    std::vector<zet_metric_group_handle_t> groups;
+    std::string metric_config = utils::GetEnv("UNITRACE_MetricConfig");
+    // One entry per device, nullptr if no group could be created; freed on every return path.
+    std::vector<std::unique_ptr<ZeMetricsManager>> metricsManagers;
     ze_result_t status = ZE_RESULT_SUCCESS;
 
     // initialize L0, then get the metric group of each device
@@ -270,44 +310,7 @@ class ZeMetricProfiler {
             return;
           }
           for (auto device : devices) {
-            uint32_t num_groups = 0;
-            status = ZE_FUNC(zetMetricGroupGet)(device, &num_groups, nullptr);
-            if (status != ZE_RESULT_SUCCESS) {
-              std::cerr << "[ERROR] Unable to get metric group" << std::endl;
-              return;
-            }
-            if (num_groups > 0) {
-              std::vector<zet_metric_group_handle_t> grps(num_groups, nullptr);
-              status = ZE_FUNC(zetMetricGroupGet)(device, &num_groups, grps.data());
-              if (status != ZE_RESULT_SUCCESS) {
-                std::cerr << "[ERROR] Unable to get metric group" << std::endl;
-                return;
-              }
-
-              uint32_t k;
-              for (k = 0; k < num_groups; ++k) {
-                zet_metric_group_properties_t group_props{};
-                group_props.stype = ZET_STRUCTURE_TYPE_METRIC_GROUP_PROPERTIES;
-                status = ZE_FUNC(zetMetricGroupGetProperties)(grps[k], &group_props);
-                if (status != ZE_RESULT_SUCCESS) {
-                  std::cerr << "[ERROR] Unable to get metric group properties" << std::endl;
-                  return;
-                }
-
-                if ((strcmp(group_props.name, metric_group_name.c_str()) == 0) && (group_props.samplingType & ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_EVENT_BASED)) {
-                  groups.push_back(grps[k]);
-                  break;
-                }
-              }
-              if (k == num_groups) {
-                // no metric group found; should not happen
-                groups.push_back(nullptr);
-              }
-            }
-            else {
-              // unable to get metric groups; should not happen
-              groups.push_back(nullptr);
-            }
+            metricsManagers.emplace_back(ZeMetricsManager::CreateMetricGroups(device, ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_EVENT_BASED, metric_config, metric_group_name));
           }
         }
       }
@@ -372,33 +375,43 @@ class ZeMetricProfiler {
 
       if (device != did) {
         did = device;
-        group = groups[device];
-        metric_names = GetMetricNames(groups[device]);
-        UNITRACE_ASSERT(!metric_names.empty());
+        group = nullptr;
+        if (device >= 0 && static_cast<size_t>(device) < metricsManagers.size() &&
+            metricsManagers[device] != nullptr) {
+          group = metricsManagers[device]->GetMetricGroups()[0];
+        }
 
-        if (logger_factory->IsLegacy()) {
-           metrics_logger->Log("\n=== Device #" + std::to_string(did) + " Metrics ===\n");
-        }
-       
-        // Query metrics are written as a self-contained section per kernel-instance, the
-        // shape stall and time-based sampling also use:
-        //   Kernel, GlobalInstanceId              <- section label, naming the identity
-        //   "<name>", <instance id>                  the section carries
-        //   [SubDeviceId, ]<counter names...>     <- column header: the sub-device, then
-        //   [<sub-device>, ]<counter values...>      all metrics in metric_names order;
-        //                                            one row per sub-device
-        // SubDeviceId is written only when there is more than one sub-device.
-        // The counter names are the same for every section of a device, so build them
-        // once per device change.
-        counter_header.clear();
-        for (size_t i = 0; i < metric_names.size(); i++) {
-          if (i > 0) {
-            counter_header += ", ";
+        if (group != nullptr) {
+          metric_names = GetMetricNames(group);
+          UNITRACE_ASSERT(!metric_names.empty());
+
+          if (logger_factory->IsLegacy()) {
+             metrics_logger->Log("\n=== Device #" + std::to_string(did) + " Metrics ===\n");
           }
-          counter_header += metric_names[i];
+
+          // Query metrics are written as a self-contained section per kernel-instance, the
+          // shape stall and time-based sampling also use:
+          //   Kernel, GlobalInstanceId              <- section label, naming the identity
+          //   "<name>", <instance id>                  the section carries
+          //   [SubDeviceId, ]<counter names...>     <- column header: the sub-device, then
+          //   [<sub-device>, ]<counter values...>      all metrics in metric_names order;
+          //                                            one row per sub-device
+          // SubDeviceId is written only when there is more than one sub-device.
+          // The counter names are the same for every section of a device, so build them
+          // once per device change.
+          counter_header.clear();
+          for (size_t i = 0; i < metric_names.size(); i++) {
+            if (i > 0) {
+              counter_header += ", ";
+            }
+            counter_header += metric_names[i];
+          }
+          counter_header += "\n";
         }
-        counter_header += "\n";
       }
+
+      if (group == nullptr)
+        continue;
 
       // compute metrics
       uint32_t num_samples = 0;
@@ -461,10 +474,10 @@ class ZeMetricProfiler {
 
   ZeMetricProfiler(uint32_t app_pid, char *dir, std::string& logfile, bool idle_sampling, std::string &devices_to_sample) {
     data_dir_name_ = std::string(dir);
-    
+
     idle_sampling_ = idle_sampling;
     logger_factory_ = LoggerFactory::Create(app_pid);
-    
+
     GetZeDevicesStringToSet(devices_to_sample_, devices_to_sample);
 
     EnumerateDevices(app_pid, dir);
@@ -474,6 +487,7 @@ class ZeMetricProfiler {
 
     std::string metric_group = utils::GetEnv("UNITRACE_MetricGroup");
     std::string output_dir = utils::GetEnv("UNITRACE_TraceOutputDir");
+    std::string metric_config = utils::GetEnv("UNITRACE_MetricConfig");
 
     bool stall_sampling = false;
     if (metric_group == "EuStallSampling") {
@@ -528,7 +542,13 @@ class ZeMetricProfiler {
         UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
         desc->pci_properties_ = pci_device_properties;
 
-        zet_metric_group_handle_t group = FindMetricGroup (device, metric_group, ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_TIME_BASED);
+        desc->metricsManager_ = ZeMetricsManager::CreateMetricGroups(device, ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_TIME_BASED, metric_config, metric_group);
+        zet_metric_group_handle_t group = nullptr;
+
+        if (desc->metricsManager_ != nullptr && desc->metricsManager_->GetMetricGroups() != nullptr) {
+          group = desc->metricsManager_->GetMetricGroups()[0];
+        }
+
         if (group == nullptr) {
           std::cerr << "[WARNING] Metric group " << metric_group << " is not found on device : " << desc->device_id_ << std::endl;
           continue;
@@ -608,6 +628,7 @@ class ZeMetricProfiler {
 
           sub_desc->profiling_thread_ = nullptr;
           sub_desc->profiling_state_.store(PROFILER_DISABLED, std::memory_order_release);
+          sub_desc->metricsManager_ = nullptr;
 
 #if 0
           sub_desc->metric_file_name_ = std::string(dir) + "/." + std::to_string(global_dev_cnt) + "." + std::to_string(j) + "." + metric_group + "." + std::to_string(app_pid) + ".t";
@@ -1768,6 +1789,11 @@ class ZeMetricProfiler {
       UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
       status = ZE_FUNC(zeEventPoolDestroy)(event_pool);
+      UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
+
+      // Deactivate like the normal exit path: groups created from programmable metrics
+      // are destroyed later with the metrics manager and must not be active then.
+      status = ZE_FUNC(zetContextActivateMetricGroups)(context, device, 0, &group);
       UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
 
       // set state to enabled to let the parent thread continue

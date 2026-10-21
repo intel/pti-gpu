@@ -215,6 +215,8 @@ The options can be one or more of the following:
 --sampling-interval [-i] <interval>           Hardware performance metric sampling interval in us (default is 50 us) in time-based mode
 --device-list                                 Print available devices
 --metric-list                                 Print available metric groups and metrics
+--metric-config <filename>                    Configuration file with metrics to collect
+--gen-metric-config <filename>                Generate a metric configuration file template with all supported predefined and programmable metrics
 --stall-sampling                              Sample hardware execution unit stalls. Valid for Intel(R) Data Center GPU Max Series and later GPUs
 --ranks-to-sample <ranks>                     MPI ranks to sample. The argument <ranks> is a list of comma separated MPI ranks
 --devices-to-sample <devices>                 Devices ID to sample. The argument <devices> is a list of comma separated devices as reported
@@ -582,6 +584,12 @@ Please note that device timing is also enabled if hardware performance metric co
 
 Please also note that FLAT device hierarchy is required for hardware metric profiling.
 
+#### Selecting Metrics to Profile
+The hardware performance metrics to profile can be selected by using the **--group [-g]** option to specify a predefined metric group or by using the **--metric-config** option to specify a custom metric configuration file with the metrics to profile. The predefined metric groups and the metrics in each group can be listed by **--metric-list** option.
+
+See [Metric Config File Format](#metric-config-file-format) for details on how to create a custom metric configuration file.
+When neither **--group [-g]** nor **--metric-config** is specified, the default metric group **ComputeBasic** is used.
+
 #### Query Metrics for Each Kernel Instance
 
 The **--metric-query [-q]** option enables metric query for each kernel instance.
@@ -674,6 +682,127 @@ If the workload is an MPI application, sampling multiple ranks running on the sa
    ```sh
    mpiexec -n 8 -ppn 4 unitrace -k -o perfmetrics.csv --ranks-to-sample 0,4 <app>
    ```
+
+#### Metric Config File Format
+
+The file given to **--metric-config** is a plain-text file that selects the hardware metrics to collect. It can select a **predefined** metric group (the same groups as **--group [-g]** and **--metric-list**), or **programmable** metrics, which are created from metric templates with the parameter values you choose. A complete example is in [metric_config.txt](/tools/unitrace/examples/metricconfig/metric_config.txt), and **--gen-metric-config** writes a template with everything your device supports (see [Generate a Metric Config File Template](#generate-a-metric-config-file-template)).
+
+##### Syntax
+
+The file is line-based, with one item per line:
+
+| Line | Meaning |
+| ---- | ------- |
+| `<name>{` | Opens a node named **<name>**. Nodes nest. |
+| `}` | Closes the innermost open node. |
+| `<key>=<value>` | Sets an attribute of the innermost open node. Spaces around **=** are ignored. |
+| `# text` | Comment. Text from **#** to the end of the line is ignored, also after a value. |
+| (empty) | Ignored. |
+
+Names and keys cannot be empty and cannot contain spaces or any of **{ } = # ' [ ]**. A value is one of:
+
+| Value | Example | Notes |
+| ----- | ------- | ----- |
+| Boolean | `true`, `false` | |
+| Unsigned integer | `2` | Decimal digits only. |
+| Decimal number | `0.5` | Any value containing **.** |
+| Range list | `[0,1,2,10:19]`, `[0:16:4]` | Comma-separated items: **v** (one value), **first:last** (every value in between) or **first:last:step**. Items must be ascending and must not overlap. **[0:9:4]** is 0, 4 and 8. |
+
+##### Structure
+
+```txt
+predefined{                      # optional, at most once
+    <group name>{                # a predefined metric group, as listed by --metric-list
+        enable=<true|false>      # optional, false if missing
+    }
+    ...
+}
+programmable{                    # optional, at most once
+    <programmable name>{         # a programmable metric, as listed by --gen-metric-config
+        enable=<true|false>      # optional, false if missing
+        parameters{              # optional; parameters not listed keep their default value
+            <parameter>=<value>
+            ...
+        }
+    }
+    ...
+}
+```
+
+* At least one of **predefined** and **programmable** must be present, and each name can appear only once in its node.
+* Only entries with **enable=true** are collected.
+* Only one metric group can be collected in a run. Enable either exactly one predefined group, or any number of programmable metrics, which are collected together as one group. A group given with **--group [-g]** counts as well, so **-g** is normally not combined with **--metric-config**. Entries a device does not support are skipped (see [Validation](#validation)), so the rule applies to what is left on each device. If the driver cannot fit all enabled programmable metrics into one group, because they need conflicting hardware resources, the run fails as well; enable fewer metrics.
+* A parameter value must match the type of the parameter: an unsigned integer for integer parameters, a decimal number (or an integer) for decimal parameters, and **true**/**false** for boolean parameters.
+* A parameter value must be one of the valid values of the parameter on the device. The template lists them in a **# Valid values:** comment, e.g. **0:11,16:31** means 0 to 11 and 16 to 31. If the device reports no valid values for a parameter, the value is passed to the driver, which checks it.
+* At most one parameter of a programmable metric can be a range list. The metric is created once for every value in the list, so **Disaggregation=[0:3]** creates the metrics of XeCore 0, 1, 2 and 3.
+
+The examples below use the names and valid values of an Intel(R) Arc(TM) B-Series GPU (BMG G31, device ID 0xE221). Other GPUs, and even other boards of the same model (the available XeCores differ), can differ: use **--gen-metric-config** to get the list for your device.
+
+Example selecting a predefined metric group:
+
+```txt
+predefined{
+    ComputeBasic{
+        # Supported sampling types: event_based,time_based
+        enable=true
+    }
+    MemoryProfile{
+        # Supported sampling types: event_based,time_based
+        enable=false
+    }
+}
+```
+
+Only **ComputeBasic** is collected. The **# Supported sampling types** comment written by **--gen-metric-config** tells whether the group can be used with **--metric-query [-q]** (event_based) and/or **--metric-sampling [-k]** (time_based).
+
+Example selecting programmable metrics:
+
+```txt
+programmable{
+    XVE_INST_EXECUTED_SEND_ALL{
+        # Supported sampling types: event_based,time_based
+        enable=true
+        parameters{
+            # Valid values: 0:11,16:31
+            Disaggregation=2
+            # Valid values: 1
+            Normalization_average=1
+        }
+    }
+    XVE_INST_EXECUTED_CONTROL_ALL{
+        # Supported sampling types: event_based,time_based
+        enable=false
+        parameters{
+            # Valid values: 0:11,16:31
+            Disaggregation=[0,1,2,16:19]
+            # Valid values: 1
+            Normalization_average=1
+        }
+    }
+}
+```
+
+The first programmable metric selects normalized average disaggregation for XeCore 2 and produces the metric XVE_INST_EXECUTED_SEND_ALL_XECORE2_AVERAGE.
+The second one is not enabled. If it were, it would select XeCore 0, 1, 2 and 16 to 19, and produce XVE_INST_EXECUTED_CONTROL_ALL_XECORE0_AVERAGE, XVE_INST_EXECUTED_CONTROL_ALL_XECORE1_AVERAGE, XVE_INST_EXECUTED_CONTROL_ALL_XECORE2_AVERAGE, XVE_INST_EXECUTED_CONTROL_ALL_XECORE16_AVERAGE, ..., XVE_INST_EXECUTED_CONTROL_ALL_XECORE19_AVERAGE.
+
+##### Validation
+
+The file is checked before the application starts. If it is invalid, unitrace prints the file name, the line and the reason, and exits with a non-zero status without running the application, for example:
+
+```sh
+$ unitrace -k --metric-config my_metrics.txt ./testapp
+[ERROR] Invalid metric configuration file: my_metrics.txt:7: invalid range list '[0:5,3]' for 'Disaggregation' (expected e.g. [0,2,4:8] or [0:16:4], ascending and not overlapping)
+```
+
+The checks before the application starts cover the syntax and the structure described above: unknown or duplicate nodes, unknown attributes, an **enable** that is not **true**/**false**, unsupported parameter values (strings or negative integers), more than one range list in a metric, and a file in which nothing is enabled (unless a group is given with **--group [-g]**).
+
+When the metric groups are created on each device, unitrace also checks that every parameter exists and that every parameter value is valid on the device, and reports the parameter and the value otherwise. A predefined group or programmable metric that does not exist on a device, or does not support the sampling type of the run, is skipped with a warning, so one file can be used on different devices. Then exactly one metric group must be left: if nothing is left, or more than one group is, unitrace reports an error naming the groups.
+
+##### Generate a Metric Config File Template
+
+Use the **--gen-metric-config <filename>** option to generate a metric configuration file template with all supported predefined and programmable metrics. You can then edit the generated file to enable the desired metrics for collection.
+
+If the device has more than one programmable metric with the same name but different parameters, the template names the additional ones **<name>_<id>**. Such names are valid only for the unitrace build that generated the template.
 
 #### Analyze Performance Metrics
 
