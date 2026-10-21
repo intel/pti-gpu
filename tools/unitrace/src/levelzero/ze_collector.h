@@ -4670,6 +4670,8 @@ class ZeCollector {
     // Map executable graph directly to source graph's ZeGraph
     ZeGraph* graph_info = nullptr;
     {
+      // Same lock order as every other graphs_ access.
+      std::shared_lock<std::shared_mutex> cmd_lock(command_lists_mutex_);
       std::shared_lock<std::shared_mutex> lock(graphs_mutex_);
       auto git = graphs_.find(graph);
       if (git != graphs_.end()) {
