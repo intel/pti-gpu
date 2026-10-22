@@ -948,7 +948,7 @@ class ZeMetricsManager {
       str += "time_based,";
     }
 
-    assert(!str.empty());
+    UNITRACE_ASSERT(!str.empty());
     str.pop_back(); // remove trailing comma
     return "Supported sampling types: " + str;
   }

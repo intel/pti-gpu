@@ -7,14 +7,21 @@
 #ifndef UNITRACE_UTILS_UNITRACE_ASSERT_H_
 #define UNITRACE_UTILS_UNITRACE_ASSERT_H_
 
-#ifdef NDEBUG
-#undef NDEBUG
-#include <assert.h>
-#define NDEBUG
-#else
-#include <assert.h>
-#endif
+#include <cstdio>
+#include <cstdlib>
 
-#define UNITRACE_ASSERT(X) assert(X)
+// UNITRACE_ASSERT is always active, also in release (NDEBUG) builds. It does
+// not use the standard assert() macro: <cassert> re-reads NDEBUG every time it
+// is included, so any later #include <cassert> in the same translation unit
+// would turn an assert()-based macro into a no-op.
+[[noreturn]] inline void UnitraceAssertFail(const char* expr, const char* file, int line,
+                                            const char* func) {
+  std::fprintf(stderr, "%s:%d: %s: Assertion `%s' failed.\n", file, line, func, expr);
+  std::fflush(stderr);
+  std::abort();
+}
 
-#endif // UNITRACE_UTILS_UNITRACE_ASSERT_H_
+#define UNITRACE_ASSERT(X) \
+  ((X) ? static_cast<void>(0) : UnitraceAssertFail(#X, __FILE__, __LINE__, __func__))
+
+#endif  // UNITRACE_UTILS_UNITRACE_ASSERT_H_
