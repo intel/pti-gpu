@@ -13,10 +13,10 @@ def main():
     print("Usage: python get_iga_headers.py <include_path> <build_path> <iga_commit>")
     return
 
-  dst_path = sys.argv[1]
-  if (not os.path.exists(dst_path)):
-    os.mkdir(dst_path)
-  dst_path = os.path.join(dst_path, "iga")
+  include_path = sys.argv[1]
+  if (not os.path.exists(include_path)):
+    os.mkdir(include_path)
+  dst_path = os.path.join(include_path, "iga")
   if (not os.path.exists(dst_path)):
     os.mkdir(dst_path)
 
@@ -38,6 +38,13 @@ def main():
      "iga_types_swsb.hpp",
      "iga_bxml_ops.hpp",
      "iga_bxml_enums.hpp"])
+
+  # GFXCORE_FAMILY and PRODUCT_FAMILY, the values IGC records in a binary's notes.
+  igc_dst_path = os.path.join(include_path, "igc")
+  if (not os.path.exists(igc_dst_path)):
+    os.mkdir(igc_dst_path)
+  igc_src_path = os.path.join(clone_path, "inc", "common")
+  build_utils.copy(igc_src_path, igc_dst_path, ["igfxfmid.h"])
 
 if __name__ == "__main__":
   main()

@@ -276,9 +276,9 @@ UnitraceGetLevelZeroHeaders(unitrace_tool ${LEVEL_ZERO_COMMIT_ID})
 # unitrace, which resolves iga64 dynamically via LibraryLoader on both Windows and
 # Linux.
 # Unitrace owns its IGA header fetch (see cmake/HeaderFetch.cmake) so it can pin a
-# revision that defines IGA_XE2 and shield itself from a stale /usr/include/iga.
+# revision that defines IGA_XE3P_XPC and shield itself from a stale /usr/include/iga.
 # intel-graphics-compiler revision to fetch IGA API headers from. Pinned to a
-# revision that defines IGA_XE2 (XE_VER(2,0)) so BMG/Xe2 kernels disassemble.
+# revision that defines IGA_XE3P_XPC (XE_VER(3,3)) so Xe3P/CRI kernels disassemble.
 # Consumed by the UnitraceGetIGAHeaders(unitrace ...) call further down.
 set (IGA_COMMIT_ID "4ba3c2aaab4f189b143ef288bc3e75eb02ad6f82")
 

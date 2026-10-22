@@ -33,6 +33,8 @@ get_filename_component(UNITRACE_FETCH_SCRIPTS_DIR "${CMAKE_CURRENT_LIST_DIR}/../
 #     "IGA_XE2 not defined".
 #   - The include path is added with BEFORE so the fetched headers win over any
 #     stale system copy on the include search order.
+#   - igc/igfxfmid.h (GFXCORE_FAMILY) comes from the same intel-graphics-compiler
+#     revision, so the core families match the IGA architectures.
 #   - Only the C API headers are needed at build time; the iga64 shared library
 #     is loaded at runtime via LibraryLoader (dlopen/LoadLibrary).
 macro(UnitraceGetIGAHeaders TARGET IGA_COMMIT)
@@ -45,12 +47,14 @@ macro(UnitraceGetIGAHeaders TARGET IGA_COMMIT)
                               ${IGA_INC_PATH}/iga/iga_types_ext.hpp
                               ${IGA_INC_PATH}/iga/iga_types_swsb.hpp
                               ${IGA_INC_PATH}/iga/iga_bxml_ops.hpp
-                              ${IGA_INC_PATH}/iga/iga_bxml_enums.hpp)
+                              ${IGA_INC_PATH}/iga/iga_bxml_enums.hpp
+                              ${IGA_INC_PATH}/igc/igfxfmid.h)
     add_custom_command(OUTPUT ${IGA_INC_PATH}/iga/iga.h
                               ${IGA_INC_PATH}/iga/iga_types_ext.hpp
                               ${IGA_INC_PATH}/iga/iga_types_swsb.hpp
                               ${IGA_INC_PATH}/iga/iga_bxml_ops.hpp
                               ${IGA_INC_PATH}/iga/iga_bxml_enums.hpp
+                              ${IGA_INC_PATH}/igc/igfxfmid.h
                       COMMAND "${Python_EXECUTABLE}" "${UNITRACE_FETCH_SCRIPTS_DIR}/get_iga_headers.py" ${IGA_INC_PATH} ${CMAKE_BINARY_DIR} ${IGA_COMMIT})
   endif()
 

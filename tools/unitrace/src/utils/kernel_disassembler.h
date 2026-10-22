@@ -26,6 +26,7 @@
 #define PTI_TOOLS_UNITRACE_UTILS_KERNEL_DISASSEMBLER_H_
 
 #include <iga/iga.h>
+#include <igc/igfxfmid.h>
 
 #include <cinttypes>
 #include <cstdint>
@@ -81,23 +82,27 @@ constexpr iga_gen_t ProductConfigToIgaGen(uint32_t product_config) {
   }
 }
 
-// Maps a GFXCORE_FAMILY (igfxfmid.h, not included) to an iga_gen_t.
+// Maps a GFXCORE_FAMILY (igfxfmid.h) to an iga_gen_t.
 constexpr iga_gen_t GfxCoreFamilyToIgaGen(uint32_t gfx_core_family) {
   switch (gfx_core_family) {
-    case 11:     return IGA_GEN8;
-    case 12:     return IGA_GEN9;
-    case 13:
-    case 14:     return IGA_GEN10;
-    case 15:
-    case 16:     return IGA_GEN11;
-    case 17:
-    case 18:     return IGA_XE;
-    case 0x0c05: return IGA_XE_HP;
-    case 0x0c07: return IGA_XE_HPG;
-    case 0x0c08: return IGA_XE_HPC;
-    case 0x0c09: return IGA_XE2;
-    case 0x1e00: return IGA_XE3;
-    default:     return IGA_GEN_INVALID;
+    case IGFX_GEN8_CORE:    return IGA_GEN8;
+    case IGFX_GEN9_CORE:    return IGA_GEN9;
+    case IGFX_GEN10_CORE:
+    case IGFX_GEN10LP_CORE: return IGA_GEN10;
+    case IGFX_GEN11_CORE:
+    case IGFX_GEN11LP_CORE: return IGA_GEN11;
+    case IGFX_GEN12_CORE:
+    case IGFX_GEN12LP_CORE: return IGA_XE;
+    case IGFX_XE_HP_CORE:   return IGA_XE_HP;
+    case IGFX_XE_HPG_CORE:  return IGA_XE_HPG;
+    case IGFX_XE_HPC_CORE:  return IGA_XE_HPC;
+    case IGFX_XE2_HPG_CORE: return IGA_XE2;
+    case IGFX_XE3_CORE:     return IGA_XE3;
+    case IGFX_XE3P_CORE:    return IGA_XE3P_XPC;
+    default: {
+      std::cerr << "[WARNING] No IGA architecture found for GFXCORE_FAMILY " << gfx_core_family << std::endl;
+      return IGA_GEN_INVALID;
+    }
   }
 }
 

@@ -57,7 +57,7 @@ constexpr uint32_t kIntelGtNoteIndirectAccessBufferMajorVersion = 8;  // u32
 // never a valid value).
 struct GenArchitecture {
   // GFXCORE_FAMILY, e.g. IGFX_GEN12LP_CORE = 18, IGFX_XE_HPC_CORE = 0x0C08
-  // (igfxfmid.h, not included).
+  // (igfxfmid.h).
   uint32_t gfx_core_family_ = 0;
   // PRODUCT_FAMILY, e.g. IGFX_TIGERLAKE_LP = 29, IGFX_PVC = 1271.
   uint32_t product_family_ = 0;
