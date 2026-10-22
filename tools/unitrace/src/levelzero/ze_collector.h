@@ -2659,6 +2659,41 @@ class ZeCollector {
     global_device_submissions_mutex_.unlock_shared();
   }
 
+  void DropCommandsForDestroyedEventOnAllThreads(ze_event_handle_t event, bool signaled, std::vector<uint64_t> *kids) {
+    if (local_device_submissions_.IsFinalized()) {
+      return;
+    }
+    global_device_submissions_mutex_.lock();
+    if (global_device_submissions_) {
+      for (auto s : *global_device_submissions_) {
+        auto& submissions = *s;
+        if (submissions.IsFinalized()) {
+          continue;
+        }
+        if (!signaled) {
+          submissions.RevertStagedKernelCommandAndMetricQueriesForEvent(event);
+        }
+        auto it = submissions.commands_submitted_.begin();
+        while (it != submissions.commands_submitted_.end()) {
+          ZeCommand *command = *it;
+          if (command->event_ == event || command->in_order_counter_event_ == event) {
+            if (signaled) {
+              ProcessCommandSubmitted(submissions, command, kids, true);
+            }
+            else {
+              std::cerr << "[INFO] Remove command from submitted commands on event destroy" << std::endl;
+            }
+            submissions.commands_free_pool_.push_back(command);
+            it = submissions.commands_submitted_.erase(it);
+            continue;
+          }
+          ++it;
+        }
+      }
+    }
+    global_device_submissions_mutex_.unlock();
+  }
+
   void ProcessCommandsSubmittedOnFenceSynchronization(ze_fence_handle_t fence, std::vector<uint64_t> *kids) {
 
     if (local_device_submissions_.IsFinalized()) {
@@ -3325,27 +3360,12 @@ class ZeCollector {
 
     if (*(params->phEvent) != nullptr) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      if (ZE_FUNC(zeEventQueryStatus)(*(params->phEvent)) == ZE_RESULT_SUCCESS) {
+      bool signaled = (ZE_FUNC(zeEventQueryStatus)(*(params->phEvent)) == ZE_RESULT_SUCCESS);
+      if (signaled) {
         collector->ProcessCommandsSubmittedOnSignaledEvent(*(params->phEvent), kids);
       }
-      else {
-        // Event is not signaled on destroy, removing associated commands
-        global_device_submissions_mutex_.lock_shared();
-        // discard event associated staged commands
-        local_device_submissions_.RevertStagedKernelCommandAndMetricQueriesForEvent(*(params->phEvent));
-        // discard event associated submitted commands
-        auto it_cmd = local_device_submissions_.commands_submitted_.begin();
-        while (it_cmd != local_device_submissions_.commands_submitted_.end()) {
-          ZeCommand *command = *it_cmd;
-          if (command->event_ == *(params->phEvent)) {
-            std::cerr << "[INFO] Remove command from submitted commands on event destroy" << std::endl;
-            local_device_submissions_.commands_free_pool_.push_back(command);
-            it_cmd = local_device_submissions_.commands_submitted_.erase(it_cmd);
-            continue;
-          }
-          ++it_cmd;
-        }
-        global_device_submissions_mutex_.unlock_shared();
+      collector->DropCommandsForDestroyedEventOnAllThreads(*(params->phEvent), signaled, kids);
+      if (!signaled) {
         // Non immediate command list
         collector->command_lists_mutex_.lock();
         auto it = collector->command_lists_.begin();
