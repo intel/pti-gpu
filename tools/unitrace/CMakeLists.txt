@@ -464,3 +464,15 @@ if (BUILD_WITH_MPI)
                   COMPONENT Unitrace_Runtime
   )
 endif()
+
+# License notices for the third-party code built into unitrace_tool (Perfetto
+# trace protos, protobuf, ITT API): unitrace's own third-party-programs.txt (the
+# PTI SDK ships the repository-root one) and the full license texts with their
+# version records.
+set(UNITRACE_INSTALL_DOCDIR "${CMAKE_INSTALL_DATAROOTDIR}/doc/unitrace")
+install(FILES ${PROJECT_SOURCE_DIR}/third-party-programs.txt
+        DESTINATION ${UNITRACE_INSTALL_DOCDIR}
+        COMPONENT Unitrace_Runtime)
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/third_party/
+        DESTINATION ${UNITRACE_INSTALL_DOCDIR}/third_party
+        COMPONENT Unitrace_Runtime)

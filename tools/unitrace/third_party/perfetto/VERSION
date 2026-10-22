@@ -49,4 +49,4 @@ To bump to a new tag <tag>:
      break the build, but silently falls back to the slow single-TU flow -
      the configure log warns about the hash mismatch.
   3. Update Tag / size / sha256 values above (both files).
-  4. Update the SDK-root third-party-programs.txt if the version changed.
+  4. Update tools/unitrace/third-party-programs.txt if the license changed.
