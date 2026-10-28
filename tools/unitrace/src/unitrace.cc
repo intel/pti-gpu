@@ -1536,7 +1536,17 @@ int main(int argc, char *argv[]) {
 
   if (CreateProcessA(app_args[0], LPSTR(cmdline.c_str()), nullptr, nullptr, false, CREATE_SUSPENDED, nullptr, nullptr, &si, &pi)) {
     BOOL success = FALSE;
+    HANDLE init_done = nullptr;
     do {
+      // Created before injection; the collector signals it once Init() finishes (see tracer.cc).
+      const std::string init_done_name =
+        std::string(UNITRACE_INIT_DONE_EVENT_PREFIX) + std::to_string(pi.dwProcessId);
+      init_done = CreateEventA(nullptr, TRUE, FALSE, init_done_name.c_str());
+      if (init_done == nullptr) {
+        std::cerr << "[ERROR] Failed to create initialization event: " << GetLastError() << std::endl;
+        break;
+      }
+
       void *pathname = VirtualAllocEx(pi.hProcess, nullptr, lib_path.size() + 1, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
       if (pathname == nullptr) {
         std::cerr << "[ERROR] Failed to allocate memory: " << GetLastError() << std::endl;
@@ -1572,6 +1582,14 @@ int main(int argc, char *argv[]) {
       }
 
       CloseHandle(thr);
+
+      // Keep the application suspended until the collector has initialized. Bounded so a
+      // stuck driver gives a warning instead of a silent hang.
+      constexpr DWORD kInitTimeoutMs = 120000;
+      if (WaitForSingleObject(init_done, kInitTimeoutMs) != WAIT_OBJECT_0) {
+        std::cerr << "[WARNING] Timed out waiting for unitrace initialization to complete."
+          " Starting the application anyway; early activity may be missed" << std::endl;
+      }
 
       DWORD app_pid = pi.dwProcessId;
 
@@ -1652,6 +1670,10 @@ int main(int argc, char *argv[]) {
       success = TRUE;
     }
     while (0);
+
+    if (init_done != nullptr) {
+      CloseHandle(init_done);
+    }
 
     if (!success) {
       std::cerr << "[ERROR] Failed to initialize the tool " << std::endl;

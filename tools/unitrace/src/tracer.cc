@@ -8,6 +8,12 @@
 #include <fstream>
 #include <iostream>
 
+#ifdef _WIN32
+#include <windows.h>
+#include <atomic>
+#include <string>
+#endif /* _WIN32 */
+
 #include "tracer.h"
 #include "unitimer.h"
 #include "unicontrol.h"
@@ -409,6 +415,30 @@ void DESTRUCTOR Fini(void) {
 }
 
 #ifdef _WIN32
+// Init() must not run from DllMain: it calls into the OpenCL and Level Zero drivers,
+// which can deadlock under the loader lock or when this DLL is loaded during another
+// library's unfinished init (e.g. tbbmalloc via INTEL_LIBITTNOTIFY64). DllMain only
+// starts a thread, which runs Init() after DllMain returns. The launcher keeps the
+// application suspended until UNITRACE_INIT_DONE_EVENT_PREFIX<pid> is signaled.
+
+static std::atomic<bool> init_completed{false};
+
+static DWORD WINAPI InitThreadProc(LPVOID) {
+  Init();
+  init_completed.store(true, std::memory_order_release);
+
+  // Signal the launcher, if any (see unitrace.cc).
+  const std::string event_name =
+      std::string(UNITRACE_INIT_DONE_EVENT_PREFIX) + std::to_string(GetCurrentProcessId());
+  HANDLE init_done = OpenEventA(EVENT_MODIFY_STATE, FALSE, event_name.c_str());
+  if (init_done != nullptr) {
+    SetEvent(init_done);
+    CloseHandle(init_done);
+  }
+
+  return 0;
+}
+
 BOOL WINAPI DllMain(
     HINSTANCE hinstDLL,  // handle to DLL module
     DWORD fdwReason,     // reason for calling function
@@ -416,15 +446,27 @@ BOOL WINAPI DllMain(
 {
   switch (fdwReason)
   {
-    case DLL_PROCESS_ATTACH:
-      Init();
+    case DLL_PROCESS_ATTACH: {
+      // No driver calls here; see the note above InitThreadProc.
+      HANDLE init_thread = CreateThread(nullptr, 0, InitThreadProc, nullptr, 0, nullptr);
+      if (init_thread == nullptr) {
+        std::cerr << "[ERROR] Failed to start the unitrace initialization thread: " <<
+          GetLastError() << std::endl;
+        return FALSE;
+      }
+      CloseHandle(init_thread);
       break;
+    }
     case DLL_THREAD_ATTACH:
       break;
     case DLL_THREAD_DETACH:
       break;
     case DLL_PROCESS_DETACH:
-      Fini();
+      // Skip Fini() if Init() is still running: freeing the tracer under it is a
+      // use-after-free, and waiting for it would deadlock on the loader lock.
+      if (init_completed.load(std::memory_order_acquire)) {
+        Fini();
+      }
       break;
   }
   return TRUE;

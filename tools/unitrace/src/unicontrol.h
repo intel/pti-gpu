@@ -33,6 +33,11 @@ extern char **environ;
 #define UNITRACE_METRIC_SAMPLING_CONTROL "unitrace_metric_sampling_control"
 #define UNITRACE_METRIC_FLUSH_CONTROL "unitrace_metric_flush_control"
 
+#ifdef _WIN32
+// Signaled by the collector when initialization finishes; the target PID is appended.
+#define UNITRACE_INIT_DONE_EVENT_PREFIX "unitrace_init_done_"
+#endif /* _WIN32 */
+
 enum TemporalControlState {
   TEMPORAL_RESUMED = 0,
   TEMPORAL_PAUSED = 1,
