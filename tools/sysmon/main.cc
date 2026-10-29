@@ -884,7 +884,11 @@ void PrintEngineInfo(
 
   uint32_t engine_groups_count = 0;
   status = zesDeviceEnumEngineGroups(device, &engine_groups_count, nullptr);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  if (status != ZE_RESULT_SUCCESS) {
+    // Compute-runtime 26.22+ returns INSUFFICIENT_PERMISSIONS for non-root users
+    // Exit silently like we do when empty set is returned
+    return;
+  }
 
   std::map<int, std::string> engine_types = {
     {ZES_ENGINE_GROUP_ALL,"ALL"},
