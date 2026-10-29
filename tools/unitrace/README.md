@@ -113,7 +113,8 @@ cd test
 python test_unitrace.py
 ```
 
-By default, command **python test_unitrace.py** builds and runs all the tests. If the tests are already built and rebuilding the tests is not needed, you can use **--run** to skip building the tests:
+By default, command **python test_unitrace.py** builds and runs all the tests of the **cpp-test** group, the fuzz tests included. The fuzz tests are the `[fuzz_*]` blocks of **test/tests.txt**: test_unitrace.py builds the fuzz targets in **test/fuzz/** (see [test/fuzz/README.md](/tools/unitrace/test/fuzz/README.md)) with clang into `<unitrace build>/test/fuzz_build`, and each test replays one target's seed corpus and regression inputs. They need no GPU. The C++ targets build with clang from PATH or, when oneAPI is loaded (setvars.sh), the clang oneAPI ships; they are reported as Skipped off Linux or without a clang that links libFuzzer, the Python ones without atheris. **--test-name 'fuzz_*'** runs only the fuzz tests (and builds only the fuzz targets).
+If the tests are already built and rebuilding the tests is not needed, you can use **--run** to skip building the tests:
 
 ```sh
 cd test
@@ -164,6 +165,8 @@ command  = run_test.py mytest <args>
 With no further keys it runs the default scenario matrix on all platforms;
 add `platform`, `scenario`, `skip-scenario` or `options` lines to specialize
 (see the header of tests.txt).
+
+Fuzz harnesses for the inputs unitrace parses are in **test/fuzz/** (see [test/fuzz/README.md](/tools/unitrace/test/fuzz/README.md)).
 
 ## Run
 

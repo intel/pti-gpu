@@ -13,6 +13,7 @@ import platform
 import fnmatch
 import json
 
+import fuzz_tests
 import test_layout
 
 def clean_up_testing_folder(output_dir, test_names=None):
@@ -283,8 +284,13 @@ def build_target_of(test):
     return None
 
 def test_group_of(test):
-    # python tests are the ones rooted at python_test/
+    """The group a tests.txt test belongs to, from its command: python-test for commands
+    under python_test/, cpp-test for the rest (the fuzz tests under fuzz/ included)."""
     return "python-test" if "python_test/" in test["command"] else "cpp-test"
+
+def is_fuzz_test(test):
+    """true for a fuzz test: a [fuzz_*] block, running fuzz/replay.py."""
+    return "fuzz/replay.py" in test["command"]
 
 def resolve_unitrace_exe(test_dir, unitrace_exe=None):
     if unitrace_exe:
@@ -292,14 +298,23 @@ def resolve_unitrace_exe(test_dir, unitrace_exe=None):
     exe_name = "unitrace.exe" if platform.system() == "Windows" else "unitrace"
     return os.path.join(test_dir, "..", "..", "build", exe_name)
 
-def build_test_command(test_entry, test_dir, scenario, bin_dir, output_dir, unitrace_exe=None, skip_golden_compare=False):
-    """Expand one tests.txt command line for one scenario.
+def build_test_command(test_entry, test_dir, scenario, bin_dir, output_dir, unitrace_exe=None, skip_golden_compare=False, unitrace_build_dir=None):
+    """Expands one tests.txt command line for one scenario.
 
-    Returns the command and the extra environment set by leading NAME=VALUE
-    tokens (formerly per-test ctest ENVIRONMENT properties)."""
+    test_entry: {"name", "cmd"}; scenario: the unitrace options, "native" or "check";
+    bin_dir, output_dir: where the workloads are and where logs and results go;
+    unitrace_exe: the unitrace under test (None: the default build's);
+    skip_golden_compare: forwarded to run_test.py; unitrace_build_dir: the unitrace
+    build, for {fuzz_bin}. Placeholders {python}, {unitrace}, {bin} and {fuzz_bin} are
+    replaced; a run_test.py command gets the scenario and the directories.
+
+    Returns the command and the extra environment set by leading NAME=VALUE tokens
+    (formerly per-test ctest ENVIRONMENT properties).
+    """
     tokens = [token.format(python=sys.executable,
                            unitrace=resolve_unitrace_exe(test_dir, unitrace_exe),
-                           bin=bin_dir)
+                           bin=bin_dir,
+                           fuzz_bin=test_layout.fuzz_bin_dir(unitrace_build_dir))
               for token in test_entry["cmd"].split()]
     extra_env = {}
     while "=" in tokens[0] and not tokens[0].endswith(".py"):
@@ -316,9 +331,23 @@ def build_test_command(test_entry, test_dir, scenario, bin_dir, output_dir, unit
             tokens.insert(2, "--skip-golden-compare")
     return [sys.executable] + tokens, extra_env
 
-def launch_test_with_scenarios(test_entry, scenarios, test_dir, bin_dir, output_dir, total_tests, unitrace_exe=None, skip_golden_compare=False):
+# A scenario-independent check exits with this status when it cannot run here
+# (e.g. a fuzz target without clang); it is reported as Skipped.
+SKIPPED_RETURN_CODE = 77
+
+def launch_test_with_scenarios(test_entry, scenarios, test_dir, bin_dir, output_dir, total_tests, unitrace_exe=None, skip_golden_compare=False, unitrace_build_dir=None):
+    """Runs one test: a run_test.py command natively and then once per scenario, any
+    other command once ("check").
+
+    Each run's output goes to <logs>/<test>.<scenario>.log. A check exiting with
+    SKIPPED_RETURN_CODE is reported as Skipped with the last line it printed. If the
+    native run fails, the scenarios are not run (a driver or environment problem).
+
+    Returns (sub-tests run, failed (scenario, log path) pairs, skipped).
+    """
     test = test_entry["name"]
     failed_options = []
+    skipped = False
     sub_tests = 0
 
     # "native" runs the app without unitrace first, as a driver/environment
@@ -331,7 +360,7 @@ def launch_test_with_scenarios(test_entry, scenarios, test_dir, bin_dir, output_
     native_failed = False
     for cmd in run_list:
         sub_tests += 1
-        command, extra_env = build_test_command(test_entry, test_dir, cmd, bin_dir, output_dir, unitrace_exe, skip_golden_compare)
+        command, extra_env = build_test_command(test_entry, test_dir, cmd, bin_dir, output_dir, unitrace_exe, skip_golden_compare, unitrace_build_dir)
         result = subprocess.run(command, capture_output=True, text=True,
                                 env={**os.environ, **extra_env},
                                 cwd=os.path.dirname(os.path.abspath(__file__)))
@@ -350,7 +379,14 @@ def launch_test_with_scenarios(test_entry, scenarios, test_dir, bin_dir, output_
             log_file.write(result.stdout or "")
             log_file.write(result.stderr or "")
 
-        if result.returncode == 0:
+        if result.returncode == SKIPPED_RETURN_CODE and cmd == "check":
+            skipped = True
+            YELLOW = '\033[33m'
+            RESET = '\033[0m'
+            reason = (result.stdout or "").strip().splitlines()
+            reason = reason[-1] if reason else ""
+            print(f"{YELLOW}{test} : Skipped ({reason}){RESET}")
+        elif result.returncode == 0:
             print(str(total_tests+sub_tests)+" : "+test+cmd+" : Passed")
         else:
             native_failed = cmd == "native"
@@ -364,9 +400,16 @@ def launch_test_with_scenarios(test_entry, scenarios, test_dir, bin_dir, output_
             print(f"[ERROR] '{test}' failed to run natively (driver/environment issue, "
                   f"not a unitrace problem); skipping its unitrace scenarios.")
             break
-    return sub_tests, failed_options
+    return sub_tests, failed_options, skipped
 
-def run_tests(test_dir, test_group, bin_dir, output_dir, test_name=None, unitrace_exe=None, skip_golden_compare=False):
+def run_tests(test_dir, test_group, bin_dir, output_dir, test_name=None, unitrace_exe=None, skip_golden_compare=False, unitrace_build_dir=None):
+    """Runs the tests of one group, as tests.txt defines them for this OS.
+
+    test_name: a name or glob to run only matching tests. Tests needing a build
+    feature the unitrace under test lacks, or whose check exits with
+    SKIPPED_RETURN_CODE, are counted as Skipped. Prints a summary and, for each
+    failure, the errors of its log. Returns 1 if any test failed, else 0.
+    """
     failed_test_flag = 0
     failed_options = []
     skipped_tests = []
@@ -395,7 +438,10 @@ def run_tests(test_dir, test_group, bin_dir, output_dir, test_name=None, unitrac
                   f"{' '.join(missing)}){RESET}")
             continue
         test_entry = {"name": test["name"], "cmd": test["command"]}
-        total_sub_tests, tests_status = launch_test_with_scenarios(test_entry, scenarios, test_dir, bin_dir, output_dir, total_tests, unitrace_exe, skip_golden_compare)
+        total_sub_tests, tests_status, skipped = launch_test_with_scenarios(test_entry, scenarios, test_dir, bin_dir, output_dir, total_tests, unitrace_exe, skip_golden_compare, unitrace_build_dir)
+        if skipped:
+            skipped_tests.append(test["name"])
+            continue
         total_tests += total_sub_tests
         for test_status in tests_status:
             failed_options.append(test_status)
@@ -486,6 +532,10 @@ def list_tests(test_group, test_name=None):
         print()
     return 0
 
+TEST_GROUPS = ("cpp-test", "python-test")
+# The directory of each group's tests (and of its output under test/output).
+GROUP_DIRS = {"cpp-test": "cpp_test", "python-test": "python_test"}
+
 def parse_arguments():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Unitrace Test Script")
@@ -500,8 +550,10 @@ def parse_arguments():
     parser.add_argument(
         "--test-group",
         type=str,
+        choices=TEST_GROUPS,
         default="cpp-test",
-        help="cpp-test or python-test group to run. default is cpp-test."
+        help="cpp-test or python-test group to run. default is cpp-test, "
+             "which includes the fuzz tests."
     )
     # Flags for actions
     parser.add_argument(
@@ -557,63 +609,81 @@ def parse_arguments():
     )
     return parser.parse_args()
 
-def main():
-    args = parse_arguments()
-    if args.unitrace_exe:
-        args.unitrace_exe = os.path.abspath(args.unitrace_exe)
-    if args.unitrace_build_dir:
-        args.unitrace_build_dir = os.path.abspath(args.unitrace_build_dir)
+def run_group(args, test_group):
+    """Builds (unless --run) and runs one test group: cpp-test or python-test.
 
+    args: the parsed command line; test_group: the group. Cleans up the group's
+    output, builds its tests, then runs them. For cpp-test the build is the workloads
+    (CMake) and the fuzz targets (fuzz_tests.build()); a --test-name that selects
+    only fuzz tests builds only the fuzz targets, one that selects none builds no
+    fuzz targets. With --list, prints the group's tests instead. Returns 0 on
+    success, non-zero on a build error or a failed test.
+    """
     build_target = None
     matched_names = None
+    build_workloads = True
+    build_fuzz = test_group == "cpp-test"
     if args.test_name is not None:
         _, tests = load_test_definitions()
-        group_tests = [t for t in tests if test_group_of(t) == args.test_group]
+        group_tests = [t for t in tests if test_group_of(t) == test_group]
         matched = [t for t in group_tests
                    if test_name_matches(t["name"], args.test_name)]
         if not matched:
             print(f"[ERROR] No test matches '{args.test_name}' in group "
-                  f"'{args.test_group}'. Available tests:")
+                  f"'{test_group}'. Available tests:")
             for t in group_tests:
                 print(f"  {t['name']}")
             return 1
         # Clean up exactly the matched tests (the selector may be a glob).
         matched_names = [t["name"] for t in matched]
-        # Build only the matched workload when it is unambiguous; a test
+        # Build only what the matched tests need: the fuzz targets only for fuzz
+        # tests, and only the matched workload when it is unambiguous; a test
         # name is not necessarily a ninja target (see build_target_of).
-        targets = {build_target_of(t) for t in matched}
+        workload_tests = [t for t in matched if not is_fuzz_test(t)]
+        build_workloads = bool(workload_tests)
+        build_fuzz = build_fuzz and len(workload_tests) < len(matched)
+        targets = {build_target_of(t) for t in workload_tests}
         if len(targets) == 1:
             build_target = targets.pop()
 
     if args.list:
-        return list_tests(args.test_group, args.test_name)
+        return list_tests(test_group, args.test_name)
 
     error = test_layout.default_build_dir_error(args.unitrace_build_dir)
     if error:
         print(error)
         return 1
 
-    if args.test_group == "cpp-test":
-        args.test_dir = os.path.join(args.test_dir, "cpp_test")
-    elif args.test_group == "python-test":
-        args.test_dir = os.path.join(args.test_dir, "python_test")
+    test_dir = os.path.join(args.test_dir, GROUP_DIRS[test_group])
     bin_dir = test_layout.bin_dir(args.unitrace_build_dir)
-    output_dir = test_layout.output_dir(args.unitrace_build_dir, os.path.basename(args.test_dir),
+    output_dir = test_layout.output_dir(args.unitrace_build_dir, os.path.basename(test_dir),
                                         args.output_dir)
 
     if args.run == False:
         print("Cleaning up test folder ...")
         status = clean_up_testing_folder(output_dir, matched_names)
         # Build the tests now; a failed cleanup would leave stale results behind
-        if status == 0:
-            status = build(args.test_dir, build_target, args.unitrace_build_dir)
+        if status == 0 and build_workloads:
+            status = build(test_dir, build_target, args.unitrace_build_dir)
+        if status == 0 and build_fuzz:
+            status = fuzz_tests.build(args.unitrace_build_dir)
         if status != 0: #cleanup/build error check and return
             return status
     print("Start testing...")
     print(f"Test binaries: {bin_dir}")
     print(f"Test output:   {output_dir}")
-    status = run_tests(args.test_dir, args.test_group, bin_dir, output_dir, args.test_name, args.unitrace_exe, args.skip_golden_compare)
+    status = run_tests(test_dir, test_group, bin_dir, output_dir, args.test_name, args.unitrace_exe, args.skip_golden_compare, args.unitrace_build_dir)
     return(status)
+
+def main():
+    """Builds (unless --run) and runs the --test-group group; returns the exit status."""
+    args = parse_arguments()
+    if args.unitrace_exe:
+        args.unitrace_exe = os.path.abspath(args.unitrace_exe)
+    if args.unitrace_build_dir:
+        args.unitrace_build_dir = os.path.abspath(args.unitrace_build_dir)
+    args.test_dir = os.path.abspath(args.test_dir)
+    return run_group(args, args.test_group)
 
 if __name__ == "__main__":
     sys.exit(main())

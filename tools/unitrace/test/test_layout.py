@@ -16,6 +16,9 @@
 #   <unitrace build>/test/output/<group>/results/<test>/  unitrace output files,
 #                                               one directory per tests.txt test
 #
+#   <unitrace build>/test/fuzz_build/           the clang build of unitrace with
+#                                               the fuzz targets (the [fuzz_*] tests)
+#
 # <group> is cpp_test or python_test. test_unitrace.py --output-dir replaces
 # <unitrace build>/test/output with a directory of the caller's choice, e.g. a
 # short one on Windows where unitrace output paths must stay under MAX_PATH.
@@ -52,6 +55,23 @@ def default_build_dir_error(build_dir=None):
 def test_root(build_dir=None):
     """Install prefix of the test workloads."""
     return os.path.join(unitrace_build_dir(build_dir), "test")
+
+
+def fuzz_build_dir(build_dir=None):
+    """The clang build of unitrace with the fuzz targets: <unitrace build>/test/fuzz_build.
+
+    build_dir: the unitrace build directory (None: the default one).
+    """
+    return os.path.join(test_root(build_dir), "fuzz_build")
+
+
+def fuzz_bin_dir(build_dir=None):
+    """The directory of the C++ fuzz_* binaries of the fuzz build, {fuzz_bin} in
+    tests.txt.
+
+    build_dir: the unitrace build directory (None: the default one).
+    """
+    return os.path.join(fuzz_build_dir(build_dir), "test", "fuzz", "cpp")
 
 
 def bin_dir(build_dir=None):

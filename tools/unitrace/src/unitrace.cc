@@ -599,7 +599,11 @@ static int FinalizeParse(ArgParseState& st) {
         std::cout << "[WARNING] MPI ranks to sample are not specified" << std::endl;
       }
       else {
-        auto my_MPI_rank_ = std::stoi(my_MPI_rank);
+        int my_MPI_rank_ = -1;
+        if (!ToInt(my_MPI_rank, my_MPI_rank_)) {
+          std::cerr << "[ERROR] MPI rank (" << my_MPI_rank << ") is not a number" << std::endl;
+          return -1;
+        }
         if (st.ranks_to_sample_.find(my_MPI_rank_) == st.ranks_to_sample_.end()) {
           // turn off sampling on this rank
           st.stall_sampling_ = false;
@@ -693,6 +697,12 @@ static int FinalizeParse(ArgParseState& st) {
   if (utils::GetEnv("UNITRACE_ChromeEventBufferSize").empty()) {
     utils::SetEnv("UNITRACE_ChromeEventBufferSize", "-1");  // does not hurt to set to default even if chrome logging is not enabled
   }
+  // Only validated here; the collector reads the value from the environment.
+  int chrome_event_buffer_size = -1;
+  if (!ParseChromeEventBufferSize(utils::GetEnv("UNITRACE_ChromeEventBufferSize"), chrome_event_buffer_size)) {
+    std::cerr << "[ERROR] Chrome event buffer size (" << utils::GetEnv("UNITRACE_ChromeEventBufferSize") << ") is invalid" << std::endl;
+    return -1;
+  }
 
   if (!utils::GetEnv("UNITRACE_UseResultDirectory").empty() && utils::GetEnv("UNITRACE_UseResultDirectory") == "1") {
     if ((!utils::GetEnv("UNITRACE_TraceOutputDirPath").empty()) || !utils::GetEnv("UNITRACE_LogToFile").empty()) {
@@ -718,9 +728,13 @@ static int FinalizeParse(ArgParseState& st) {
   if (st.show_metric_list_ || st.gen_metric_config_ != nullptr) {
     SetProfilingEnvironment(); // enable ZET_ENABLE_METRICS
     std::string value = utils::GetEnv("UNITRACE_DeviceId");
-    uint32_t device_id = value.empty() ? 0 : std::stoul(value);
-    if (st.show_metric_list_) {
-      PrintMetricList(device_id);
+    uint32_t device_id = 0;
+    if (!ParseDeviceIndex(value, device_id)) {
+      std::cerr << "[ERROR] Device id (" << value << ") is invalid" << std::endl;
+      return -1;
+    }
+    if (st.show_metric_list_ && !PrintMetricList(device_id)) {
+      return -1;
     }
     if (st.gen_metric_config_ != nullptr && !GenMetricConfig(device_id, st.gen_metric_config_)) {
       return kParseErrorReported;
@@ -851,12 +865,18 @@ void CleanUp(int sig) {
   _Exit(-1);
 }
 
-std::string StringifyJsonArray(const char* label, char* const* arr, size_t start_idx = 0) {
-  std::string json = std::string("  \"") + label + "\": [";
+
+// One `"label": [...],` line of the --result-dir config log.
+//   label      the key, e.g. "unitrace_args"
+//   arr        nullptr-terminated strings, e.g. argv
+//   start_idx  the first element to write
+// Returns the line, each element escaped as a JSON string.
+static std::string StringifyJsonArray(const char* label, char* const* arr, size_t start_idx = 0) {
+  std::string json = std::string("  ") + JsonString(label) + ": [";
   bool first = true;
   for (size_t i = start_idx; arr[i] != nullptr; ++i) {
     if (!first) json += ", ";
-    json += "\"" + std::string(arr[i]) + "\"";
+    json += JsonString(arr[i]);
     first = false;
   }
   json += "],\n";
@@ -945,8 +965,8 @@ static std::string StringifyDevice() {
 
   char pci_id[8];
   std::snprintf(pci_id, sizeof(pci_id), "0x%04X", chosen.deviceId & 0xFFFF);
-  return std::string("  \"device\": { \"name\": \"") + chosen.name +
-         "\", \"pci_id\": \"" + pci_id + "\" },\n";
+  return std::string("  \"device\": { \"name\": ") + JsonString(chosen.name) +
+         ", \"pci_id\": \"" + pci_id + "\" },\n";
 }
 
 void CreateConfigLog(const std::string& unitrace_version, const std::vector<char*>& unitrace_args, const std::vector<char*>& app_args) {
@@ -956,15 +976,118 @@ void CreateConfigLog(const std::string& unitrace_version, const std::vector<char
     std::shared_ptr<UniLogger> config_logger = logger_factory->GetLogger(LOGGER_TYPE_CONFIG, true, true);
 
     config_logger->Log("{ \"unitrace version\": \"" + unitrace_version + "\",\n");
-    config_logger->Log("  \"app\": \"" + std::string(app_args[0]) + "\",\n");
+    config_logger->Log("  \"app\": " + JsonString(app_args[0]) + ",\n");
     config_logger->Log(StringifyJsonArray("unitrace_args", unitrace_args.data()));
     config_logger->Log(StringifyJsonArray("app_args", app_args.data(), 1));
-    config_logger->Log("  \"Host\": \"" + GetHostName() + "\",\n");
+    config_logger->Log("  \"Host\": " + JsonString(GetHostName()) + ",\n");
     config_logger->Log(StringifyDevice());
     config_logger->Log("  \"pid\": \"" + std::to_string(utils::GetPid()) + "\"\n");
     config_logger->Log("}\n");
     config_logger->Flush();
   }
+}
+
+// ---------------------------------------------------------------------------
+// Raw KMD trace (bpftrace output): tid,event,timestamp,duration[,data]
+// ---------------------------------------------------------------------------
+
+// true if s is a non-empty string of ASCII decimal digits: the form the KMD trace
+// script writes thread ids, timestamps and durations in.
+static bool IsDecimal(const std::string& s) { return !s.empty() && IsDigits(s); }
+
+// One event of the raw KMD trace (--chrome-kmd-logging), as the bpftrace script
+// writes it: tid,event,timestamp,duration[,data]
+//   tid_        the kernel thread id
+//   name_       the kernel function
+//   timestamp_  boot-time timestamp of the start, in ns
+//   duration_   duration, in ns
+//   data_       optional data after the duration, possibly with commas
+struct KmdEvent {
+  uint64_t tid_ = 0;
+  std::string name_;
+  uint64_t timestamp_ = 0;
+  uint64_t duration_ = 0;
+  std::string data_;
+};
+
+// Parses one line of the raw KMD trace into event.
+//   line   the line, with or without a trailing \r
+//   event  receives the event
+// Returns false if the line has fewer than four fields, or tid, timestamp or
+// duration is not decimal digits or does not fit 64 bits; such lines are other
+// output of the bpftrace script, not events.
+static bool ParseKmdLine(std::string line, KmdEvent& event) {
+  if (!line.empty() && line.back() == '\r') {
+    line.pop_back();
+  }
+  const size_t p1 = line.find(',');
+  const size_t p2 = (p1 == std::string::npos) ? p1 : line.find(',', p1 + 1);
+  const size_t p3 = (p2 == std::string::npos) ? p2 : line.find(',', p2 + 1);
+  if (p3 == std::string::npos) {
+    return false;
+  }
+  const std::string tid = line.substr(0, p1);
+  const std::string ts = line.substr(p2 + 1, p3 - p2 - 1);
+  std::string dur = line.substr(p3 + 1);
+  event.data_.clear();
+  const size_t p4 = dur.find(',');
+  if (p4 != std::string::npos) {
+    event.data_ = dur.substr(p4 + 1);
+    dur = dur.substr(0, p4);
+  }
+  // tid is written unquoted, and ts/dur are unsigned, so all three must be decimal.
+  if (!IsDecimal(tid) || !IsDecimal(ts) || !IsDecimal(dur)) {
+    return false;
+  }
+  try {
+    event.tid_ = std::stoull(tid);
+    event.timestamp_ = std::stoull(ts);
+    event.duration_ = std::stoull(dur);
+  } catch (...) {
+    return false;
+  }
+  event.name_ = line.substr(p1 + 1, p2 - p1 - 1);
+  return true;
+}
+
+// Reads the next event of the raw KMD trace into event, skipping lines that are not
+// one (other output of the bpftrace script).
+//   in     the raw trace
+//   event  receives the event
+// Returns false at the end of the input.
+static bool ReadKmdEvent(std::istream& in, KmdEvent& event) {
+  std::string line;
+  while (std::getline(in, line)) {
+    if (ParseKmdLine(line, event)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// The Chrome trace event (a complete "X" event on pid 0) for a KMD event.
+//   event   the event
+//   ts_us   its start, already converted to epoch time in us, fractional
+//   dur_us  its duration, already converted to us, fractional (a 500 ns
+//           event is 0.5)
+// Returns the JSON object; the name and data are escaped, so it is valid JSON for
+// any input line.
+static std::string KmdEventToJson(const KmdEvent& event, double ts_us, double dur_us) {
+  std::string str = "{";
+  str += "\"ph\": \"X\"";
+  str += ", \"tid\": " + std::to_string(event.tid_);
+  str += ", \"pid\": 0";
+  if (!event.name_.empty()) {
+    str += ", \"name\": " + JsonString(event.name_);
+  }
+  str += ", \"cat\": \"os_op\"";
+  str += ", \"ts\": " + std::to_string(ts_us);
+  str += ", \"dur\": " + std::to_string(dur_us);
+  if (!event.data_.empty()) {
+    str += ", \"args\": {\"data\": " + JsonString(event.data_) + "}";
+  }
+  str += "}";
+  return str;
 }
 
 static void DumpKmdTraceData(std::string& raw_data_file) {
@@ -1000,63 +1123,12 @@ static void DumpKmdTraceData(std::string& raw_data_file) {
 
   oskmd_logger->Log(str);
 
-  while (!inf.eof()) {
-    std::string tid;
-    std::string kfunc;
-    std::string ts;
-    std::string dur;
-    uint64_t t;
-    uint64_t d;
-
-    std::getline(inf, tid, ',');
-    if (inf.eof()) {
-      break;
-    }
-    std::getline(inf, kfunc, ',');
-    if (inf.eof()) {
-      break;
-    }
-    std::getline(inf, ts, ',');
-    if (inf.eof()) {
-      break;
-    }
-    std::getline(inf, dur);
-    if (inf.eof()) {
-      break;
-    }
-
-    // check if optional data is present after duration
-    std::string args;
-    auto n = dur.find(',');
-    if (n != dur.npos) {
-      args = dur.substr(n + 1);  // optional data
-      dur = dur.substr(0, n);
-    }
-
-    try {
-      t = std::stol(ts);
-      d = std::stol(dur);
-    }
-    catch (...) {
-      break;
-    }
-
-    str = ",\n{";
-    str += "\"ph\": \"X\"";
-    str += ", \"tid\": " + tid;
-    str += ", \"pid\": 0";
-    if (!kfunc.empty()) {
-      str += ", \"name\": \"" + kfunc + "\"";
-    }
-
-    str += ", \"cat\": \"os_op\"";
-    str += ", \"ts\": " + std::to_string(UniTimer::GetEpochTimeInUs(UniTimer::GetHostTimestampFromBootTimestamp(t)));
-    str += ", \"dur\": " + std::to_string(UniTimer::GetTimeInUs(d));
-    if (!args.empty()) {
-      str += ", \"args\": {\"data\": \"" + args + "\"}";
-    }
-    str += "}";
-
+  KmdEvent event;
+  while (ReadKmdEvent(inf, event)) {
+    str = ",\n" + KmdEventToJson(
+        event,
+        UniTimer::GetEpochTimeInUs(UniTimer::GetHostTimestampFromBootTimestamp(event.timestamp_)),
+        UniTimer::GetTimeInUs(event.duration_));
     oskmd_logger->Log(str);
   }
 
@@ -1066,6 +1138,8 @@ static void DumpKmdTraceData(std::string& raw_data_file) {
   std::cerr << "[INFO] KMD profiling data are stored in " << oskmd_logger->GetLogFileName() << std::endl;
 }
 
+// The fuzz targets include this file to reach its parsers, and bring their own main.
+#ifndef UNITRACE_FUZZ
 int main(int argc, char *argv[]) {
   if (argc < 2) {
     Usage(argv[0]);
@@ -1280,7 +1354,8 @@ int main(int argc, char *argv[]) {
 
   if (utils::GetEnv("UNITRACE_KernelMetrics") == "1" || !utils::GetEnv("UNITRACE_ChromeKmdLogging").empty()) {
 
-    char pattern[] = "/tmp/tmpdir.XXXXXX";
+    // static: data_dir points into it, and TearDown() runs after this block.
+    static char pattern[] = "/tmp/tmpdir.XXXXXX";
 
     data_dir = mkdtemp(pattern);
     if (data_dir == nullptr) {
@@ -1690,3 +1765,4 @@ int main(int argc, char *argv[]) {
 
   return 0;
 }
+#endif /* UNITRACE_FUZZ */

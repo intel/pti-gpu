@@ -9,6 +9,7 @@ import os
 import sys
 import argparse
 import json
+import math
 import shutil
 from pathlib import Path
 
@@ -84,6 +85,19 @@ def MergePerfettoTraces(inputFiles, outputFile):
         print(f"Error merging trace files: {e}")
         return False
 
+def RejectJsonConstant(name):
+    """parse_constant for json.load: NaN and Infinity are not JSON, and a merged
+    file holding one would not load in the trace viewers."""
+    raise ValueError(f"{name} is not valid JSON")
+
+def ParseFiniteFloat(text):
+    """parse_float for json.load: a number too large for a float (1e400) would be
+    written back as Infinity, which is not JSON either."""
+    value = float(text)
+    if not math.isfinite(value):
+        raise ValueError(f"{text} does not fit a float")
+    return value
+
 def merge_trace_files(input_files, output_file):
     """
     Merge multiple unitrace JSON files into a single output file.
@@ -107,7 +121,7 @@ def merge_trace_files(input_files, output_file):
                     valid = True
                     with open(input_files[i], 'r') as fp:
                         try:
-                            data = json.load(fp)
+                            data = json.load(fp, parse_constant=RejectJsonConstant, parse_float=ParseFiniteFloat)
                         except Exception as ex:
                             valid = False
                     if (valid == False):
@@ -125,7 +139,7 @@ def merge_trace_files(input_files, output_file):
                         rollback = False
                         with open(input_files[i], 'r') as fp:
                             try:
-                                data = json.load(fp)
+                                data = json.load(fp, parse_constant=RejectJsonConstant, parse_float=ParseFiniteFloat)
                             except Exception as ex:
                                 # give up, but need to roll back the changes made to the file
                                 rollback = True

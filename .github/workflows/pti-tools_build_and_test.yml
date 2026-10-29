@@ -68,7 +68,7 @@ jobs:
           source /opt/intel/oneapi/setvars.sh
           mkdir build
           cd build
-          cmake -DBUILD_WITH_MPI=0 -GNinja ..
+          cmake -GNinja ..
           ninja
 
       - name: Unitrace-install-test
@@ -90,6 +90,11 @@ jobs:
         working-directory: tools/unitrace/test
         run: |
           source /opt/intel/oneapi/setvars.sh
+          # The Python fuzz targets need atheris and the scripts' packages; without
+          # them they are skipped.
+          python -m venv fuzz_venv
+          source fuzz_venv/bin/activate
+          python -m pip install atheris -r ../requirements.txt
           python ./test_unitrace.py --test-group cpp-test
 
       - name: Unitrace-trace-format
@@ -178,7 +183,7 @@ jobs:
           call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
           mkdir build
           cd build
-          cmake -DBUILD_WITH_MPI=0 -GNinja ..
+          cmake -GNinja ..
           ninja
 
       - name: Unitrace-install-test

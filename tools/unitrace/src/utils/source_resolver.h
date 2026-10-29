@@ -103,7 +103,9 @@ inline void CollectRelocations(const std::vector<Elf64Section>& sections, uint32
   for (const Elf64Section& relocations : sections) {
     const bool is_rela = relocations.type_ == kElf64ShtRela;
     const bool is_rel = relocations.type_ == kElf64ShtRel;
-    if ((!is_rela && !is_rel) || relocations.info_ != debug_line_index) {
+    // data_ is nullptr if sh_offset/sh_size are outside the file; size_ is then
+    // unchecked and must not size the reserve below.
+    if ((!is_rela && !is_rel) || relocations.info_ != debug_line_index || relocations.data_ == nullptr) {
       continue;
     }
     if (relocations.link_ >= sections.size()) {
@@ -572,10 +574,13 @@ inline bool RunLineProgram(ByteCursor& cursor, uint64_t program_end, uint8_t add
       if (!cursor.Ok()) {
         return false;
       }
-      const uint64_t after = cursor.Offset() + length;
-      if (length == 0 || after > program_end) {
+      // Checked before adding: a length from the file near 2^64 would wrap the sum to
+      // an earlier offset, and seeking back to it would loop forever.
+      if (length == 0 || cursor.Offset() > program_end ||
+          length > program_end - cursor.Offset()) {
         return false;
       }
+      const uint64_t after = cursor.Offset() + length;
       const uint8_t sub_opcode = cursor.U8();
       switch (sub_opcode) {
         case kDwLneEndSequence:
@@ -626,8 +631,12 @@ inline bool RunLineProgram(ByteCursor& cursor, uint64_t program_end, uint8_t add
         advance(cursor.Uleb());
         break;
       case kDwLnsAdvanceLine: {
-        const int64_t new_line = static_cast<int64_t>(state.line_) + cursor.Sleb();
-        state.line_ = (new_line < 0) ? 0 : static_cast<uint32_t>(new_line);
+        // The delta is from the file: clamp it first, so the sum cannot overflow, and
+        // the result to the 32 bits a line has.
+        constexpr int64_t kLimit = int64_t{1} << 32;
+        const int64_t delta = std::clamp<int64_t>(cursor.Sleb(), -kLimit, kLimit);
+        const int64_t new_line = static_cast<int64_t>(state.line_) + delta;
+        state.line_ = static_cast<uint32_t>(std::clamp<int64_t>(new_line, 0, UINT32_MAX));
         break;
       }
       case kDwLnsSetFile:
@@ -752,10 +761,11 @@ inline bool ParseLineUnit(ByteCursor& cursor, const StringTableView& debug_str,
     return false;
   }
   // Where the program starts, which allows header fields this does not read.
-  const uint64_t program_start = unit_cursor.Offset() + header_length;
-  if (program_start > out_unit.end_) {
-    return false;
+  if (unit_cursor.Offset() > out_unit.end_ ||
+      header_length > out_unit.end_ - unit_cursor.Offset()) {
+    return false;  // Checked before adding, which a length near 2^64 would wrap
   }
+  const uint64_t program_start = unit_cursor.Offset() + header_length;
 
   const uint8_t minimum_instruction_length = unit_cursor.U8();
   const uint8_t maximum_operations_per_instruction =

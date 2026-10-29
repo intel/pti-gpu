@@ -1,0 +1,4 @@
+{ "traceEvents": [
+{"ph": "X", "name": "kernel1", "cat": "gpu", "pid": 1, "tid": 1, "ts": 1000, "dur": 500},
+{"ph": "X", "name": "kernel2", "cat": "gpu", "pid": 1, "tid": 1, "ts": 2000, "dur": 300}
+]}

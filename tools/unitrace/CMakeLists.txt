@@ -133,6 +133,9 @@ endif()
 # All of the fetch/build/generate logic lives in
 # cmake/Perfetto.cmake; SetupPerfetto() degrades to JSON-only on any failure.
 option(BUILD_WITH_PERFETTO "Build with support for Perfetto protobuf trace output" ON)
+# The fuzz targets (test/fuzz/cpp, clang only) include the unitrace sources, so they build
+# here, against the same include paths and generated headers as unitrace.
+option(UNITRACE_BUILD_FUZZ "Build the libFuzzer targets in test/fuzz/cpp" OFF)
 if (BUILD_WITH_PERFETTO)
   include(${PROJECT_SOURCE_DIR}/cmake/Perfetto.cmake)
   SetupPerfetto()  # clears BUILD_WITH_PERFETTO (degrade to JSON-only) on any failure
@@ -391,17 +394,19 @@ UnitraceGetLevelZeroHeaders(unitrace ${LEVEL_ZERO_COMMIT_ID})
 GetGitCommitHash(unitrace "${PROJECT_SOURCE_DIR}/scripts/get_commit_hash.py" "unitrace_commit_hash.h" get_git_commit_hash_unitrace)
 GetGitCommitHash(unitrace_tool "${PROJECT_SOURCE_DIR}/scripts/get_commit_hash.py" "unitrace_tool_commit_hash.h" get_git_commit_hash_unitrace_tool)
 
-if(UNIX)
+# The fuzz targets include unitrace.cc and the collectors, so they need the generated
+# headers kept.
+if(UNIX AND NOT UNITRACE_BUILD_FUZZ)
   add_custom_command(TARGET unitrace POST_BUILD COMMAND "rm" "-rf" "unitrace_commit_hash.h")
   add_custom_command(TARGET unitrace_tool POST_BUILD COMMAND "rm" "-rf" "unitrace_tool_commit_hash.h")
-else()
+elseif(NOT UNITRACE_BUILD_FUZZ)
   add_custom_command(TARGET unitrace POST_BUILD COMMAND "del" "unitrace_commit_hash.h")
   add_custom_command(TARGET unitrace_tool POST_BUILD COMMAND "del" "unitrace_tool_commit_hash.h")
 endif()
 
 # Clearning files only for release build, for any other build types lets skip deletion for better debuggability
 string(TOLOWER "${CMAKE_BUILD_TYPE}" LOWER_CMAKE_BUILD_TYPE)
-if(NOT LOWER_CMAKE_BUILD_TYPE STREQUAL "debug")
+if(NOT LOWER_CMAKE_BUILD_TYPE STREQUAL "debug" AND NOT UNITRACE_BUILD_FUZZ)
   if(UNIX)
     add_custom_command(TARGET unitrace_tool POST_BUILD COMMAND "rm" "-rf" "common_header.gen")
     add_custom_command(TARGET unitrace_tool POST_BUILD COMMAND "rm" "-rf" "tracing.gen")
@@ -413,6 +418,10 @@ if(NOT LOWER_CMAKE_BUILD_TYPE STREQUAL "debug")
     add_custom_command(TARGET unitrace_tool POST_BUILD COMMAND "del" "tracing.gen.types")
     add_custom_command(TARGET unitrace_tool POST_BUILD COMMAND "del" "l0_loader.gen")
   endif()
+endif()
+
+if(UNITRACE_BUILD_FUZZ)
+  add_subdirectory(test/fuzz/cpp)
 endif()
 
 configure_file(${PROJECT_SOURCE_DIR}/scripts/uniview.py ${CMAKE_BINARY_DIR}/scripts/uniview.py COPYONLY)

@@ -17,6 +17,7 @@
 #include <string>
 
 #include "utils/utils.h"
+#include "utils/utils_host.h"
 
 namespace cli {
 
@@ -195,27 +196,7 @@ void Usage(std::ostream& os, const char* progname, const CliOption<Ctx>* table, 
 }
 
 inline void JsonEscape(std::ostream& os, const char* s) {
-  os << '"';
-  for (const char* p = s; p && *p; ++p) {
-    unsigned char c = static_cast<unsigned char>(*p);
-    switch (c) {
-      case '"':  os << "\\\""; break;
-      case '\\': os << "\\\\"; break;
-      case '\b': os << "\\b";  break;
-      case '\f': os << "\\f";  break;
-      case '\n': os << "\\n";  break;
-      case '\r': os << "\\r";  break;
-      case '\t': os << "\\t";  break;
-      default:
-        if (c < 0x20) {  // other control chars must be \u-escaped for valid JSON
-          static const char* hex = "0123456789abcdef";
-          os << "\\u00" << hex[(c >> 4) & 0xf] << hex[c & 0xf];
-        } else {
-          os << *p;
-        }
-    }
-  }
-  os << '"';
+  os << ::JsonString(s ? s : "");
 }
 
 // Emit a comma-separated list (e.g. "0,1" or "--a,--b") as a JSON string array.

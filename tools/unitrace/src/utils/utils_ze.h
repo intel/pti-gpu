@@ -19,6 +19,7 @@
 #include <level_zero/ze_api.h>
 #include <level_zero/zet_api.h>
 #include "ze_loader.h"
+#include "utils/utils_host.h"
 
 #include "utils/demangle.h"
 #include "logger_factory.h"
@@ -40,6 +41,114 @@ inline bool InitializeL0() {
 #else /* BUILD_WITH_L0 */
   return true;
 #endif /* BUILD_WITH_L0 */
+}
+
+// Parses a comma-separated list of device ids (--devices-to-sample).
+//   list  the list, e.g. "0,2"
+//   out   receives the ids
+// Returns 0 on success; -1 if list is empty or an item is not a decimal number that
+// fits an int (an error is printed). Empty items ("0,,2") are skipped. Never
+// throws.
+inline int ParseDeviceList(const std::string& list, std::set<int>& out) {
+  if (list.empty()) {
+    return -1;
+  }
+  for (const auto& s : utils::SplitString(list, ',')) {
+    if (!s.empty()) {
+      int device = 0;
+      if (IsDigits(s) && ToInt(s, device)) {
+        out.insert(device);
+      } else {
+        std::cerr << "[ERROR] Given device to sample (" << s << ") is invalid" << std::endl;
+        return -1;
+      }
+    }
+  }
+  return 0;
+}
+
+// Parses a comma-separated list of MPI ranks (--ranks-to-sample) against the
+// launcher's environment.
+//   list      the list, e.g. "0,3"
+//   mpi_size  the job size (PMI_SIZE, PMIX_SIZE, OMPI_COMM_WORLD_SIZE, ...)
+//   mpi_rank  this process's rank (PMI_RANK or PMIX_RANK)
+//   out       receives the ranks in [0, mpi_size)
+// Returns 0 on success; -1 if list is empty, the MPI environment is missing or not
+// a number, or an item is not decimal digits (an error is printed; for an item,
+// by rank 0 only). A rank outside [0, mpi_size), including one too large for an
+// int, is ignored with a warning. Never throws.
+inline int ParseRankList(const std::string& list, const std::string& mpi_size,
+                         const std::string& mpi_rank, std::set<int>& out) {
+  if (list.empty()) {
+    return -1;
+  }
+  if (mpi_size.empty()) {
+    std::cerr << "[ERROR] PMI_SIZE or PMIX_SIZE or OMPI_COMM_WORLD_SIZE or OMPI_UNIVERSE_SIZE not set. Given --ranks-to-sample but the application does not seem to be using MPI" << std::endl;
+    return -1;
+  }
+  int32_t my_size = 0;
+  if (!ToInt(mpi_size, my_size)) {
+    std::cerr << "[ERROR] MPI size (" << mpi_size << ") is not a number" << std::endl;
+    return -1;
+  }
+  if (mpi_rank.empty()) {
+    std::cerr << "[ERROR] Given --ranks-to-sample but the application does not seem to be using MPI" << std::endl;
+    return -1;
+  }
+  int32_t my_rank = 0;
+  if (!ToInt(mpi_rank, my_rank)) {
+    std::cerr << "[ERROR] MPI rank (" << mpi_rank << ") is not a number" << std::endl;
+    return -1;
+  }
+  for (const auto& s : utils::SplitString(list, ',')) {
+    if (!s.empty()) {
+      int rank = -1;
+      if (IsDigits(s)) {
+        if (!ToInt(s, rank)) {
+          rank = -1;  // too large to be a rank: out of bounds
+        }
+        if ((0 <= rank) && (rank < my_size)) {
+          out.insert(rank);
+        } else if (my_rank == 0) {
+          std::cerr << "[WARNING] Given MPI rank to sample (" << s << ") is out of bounds for given execution. Ignoring." << std::endl;
+        }
+      } else if (my_rank == 0) {
+        std::cerr << "[ERROR] Given MPI rank to sample (" << s << ") is invalid" << std::endl;
+        return -1;
+      }
+    }
+  }
+  return 0;
+}
+
+// Parses an optional device index from the environment (UNITRACE_DeviceId,
+// PTI_DEVICE_ID, PTI_SUB_DEVICE_ID).
+//   value  the variable's value; empty means not set
+//   out    receives the index: 0 when value is empty
+// Returns false, with out untouched, if value is not decimal digits or does not fit
+// a uint32_t; the caller reports the error instead of an exception escaping into
+// the application.
+inline bool ParseDeviceIndex(const std::string& value, uint32_t& out) {
+  if (value.empty()) {
+    out = 0;
+    return true;
+  }
+  return ToUint32(value, out);
+}
+
+// The device ids of --devices-to-sample as the metric profiler reads them from its
+// environment.
+//   list  the --devices-to-sample value the profiler is created with
+//   out   receives the ids; for an invalid list, only kNoDevice
+// unitrace has already rejected an invalid list; one here (set by hand) samples no
+// device rather than throwing inside the application. An empty set would mean "all
+// devices" to the profiler, so an invalid list leaves an id no device has.
+constexpr int kNoDevice = -1;
+inline void DevicesStringToSet(const std::string& list, std::set<int>& out) {
+  if (!list.empty() && ParseDeviceList(list, out) != 0) {
+    std::cerr << "[ERROR] Devices to sample (" << list << ") are invalid; no device is sampled" << std::endl;
+    out = {kNoDevice};
+  }
 }
 
 inline std::vector<ze_driver_handle_t> GetDriverList() {
@@ -129,8 +238,15 @@ inline ze_driver_handle_t GetGpuDriver() {
   }
 
   std::string value = utils::GetEnv("PTI_DEVICE_ID");
-  uint32_t device_id = value.empty() ? 0 : std::stoul(value);
-  UNITRACE_ASSERT(device_id < driver_list.size());
+  uint32_t device_id = 0;
+  if (!ParseDeviceIndex(value, device_id)) {
+    std::cerr << "[ERROR] PTI_DEVICE_ID (" << value << ") is invalid" << std::endl;
+    return nullptr;
+  }
+  if (device_id >= driver_list.size()) {
+    std::cerr << "[ERROR] PTI_DEVICE_ID (" << value << ") is out of range, " << driver_list.size() << " driver(s) found" << std::endl;
+    return nullptr;
+  }
   return driver_list[device_id];
 }
 
@@ -153,8 +269,15 @@ inline ze_device_handle_t GetGpuDevice() {
   }
 
   std::string value = utils::GetEnv("PTI_DEVICE_ID");
-  uint32_t device_id = value.empty() ? 0 : std::stoul(value);
-  UNITRACE_ASSERT(device_id < device_list.size());
+  uint32_t device_id = 0;
+  if (!ParseDeviceIndex(value, device_id)) {
+    std::cerr << "[ERROR] PTI_DEVICE_ID (" << value << ") is invalid" << std::endl;
+    return nullptr;
+  }
+  if (device_id >= device_list.size()) {
+    std::cerr << "[ERROR] PTI_DEVICE_ID (" << value << ") is out of range, " << device_list.size() << " GPU device(s) found" << std::endl;
+    return nullptr;
+  }
 
   std::vector<ze_device_handle_t> sub_device_list =
     GetSubDeviceList(device_list[device_id]);
@@ -167,8 +290,15 @@ inline ze_device_handle_t GetGpuDevice() {
     return device_list[device_id];
   }
 
-  uint32_t sub_device_id = value.empty() ? 0 : std::stoul(value);
-  UNITRACE_ASSERT(sub_device_id < sub_device_list.size());
+  uint32_t sub_device_id = 0;
+  if (!ParseDeviceIndex(value, sub_device_id)) {
+    std::cerr << "[ERROR] PTI_SUB_DEVICE_ID (" << value << ") is invalid" << std::endl;
+    return nullptr;
+  }
+  if (sub_device_id >= sub_device_list.size()) {
+    std::cerr << "[ERROR] PTI_SUB_DEVICE_ID (" << value << ") is out of range, " << sub_device_list.size() << " sub-device(s) found" << std::endl;
+    return nullptr;
+  }
   return sub_device_list[sub_device_id];
 }
 
@@ -372,77 +502,22 @@ inline ze_api_version_t GetZeVersion() {
 }
 
 inline int GetZeDevicesToSample(std::set<int>& devices_to_sample) {
-  std::string devices_to_sample_str = utils::GetEnv("UNITRACE_DevicesToSampleArg");
-  if (devices_to_sample_str.empty()) {
-    return -1;
-  }
-
-  auto list_devices_str = utils::SplitString (devices_to_sample_str, ',');
-  for (const auto &s : list_devices_str) {
-    if (!s.empty()) {
-      bool is_number = std::find_if(s.begin(), s.end(), [] (unsigned char c) { return !std::isdigit(c); }) == s.end();
-      if (is_number) {
-        auto device_to_sample = std::stoi(s.c_str());
-        devices_to_sample.insert (device_to_sample);
-      } else {
-          std::cerr << "[ERROR] Given device to sample (" << s << ") is invalid" << std::endl;
-          return -1;
-      }
-    }
-  }
-  return 0;
+  return ParseDeviceList(utils::GetEnv("UNITRACE_DevicesToSampleArg"),
+                                        devices_to_sample);
 }
 
 inline int GetZeRanksToSample(std::set<int>& ranks_to_sample) {
-  std::string ranks_to_sample_str = utils::GetEnv("UNITRACE_RanksToSample");
-  if (ranks_to_sample_str.empty()) {
-    return -1;
-  }
-
   auto my_MPI_size = (utils::GetEnv("PMI_SIZE").empty()) ? utils::GetEnv("PMIX_SIZE") : utils::GetEnv("PMI_SIZE");
   if (my_MPI_size.empty()) {
     my_MPI_size = (utils::GetEnv("OMPI_COMM_WORLD_SIZE").empty()) ? utils::GetEnv("OMPI_UNIVERSE_SIZE") : utils::GetEnv("OMPI_COMM_WORLD_SIZE");
   }
-  if (my_MPI_size.empty()) {
-    std::cerr << "[ERROR] PMI_SIZE or PMIX_SIZE or OMPI_COMM_WORLD_SIZE or OMPI_UNIVERSE_SIZE not set. Given --ranks-to-sample but the application does not seem to be using MPI" << std::endl;
-    return -1;
-  }
-  int32_t my_size = std::stoi(my_MPI_size);
-  const auto &my_MPI_rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
-  if (my_MPI_rank.empty()) {
-    std::cerr << "[ERROR] Given --ranks-to-sample but the application does not seem to be using MPI" << std::endl;
-    return -1;
-  }
-  int32_t my_rank = std::stoi(my_MPI_rank);
-  auto list_mpi_ranks_str = utils::SplitString (ranks_to_sample_str, ',');
-  for (const auto &s : list_mpi_ranks_str) {
-    if (!s.empty()) {
-      bool is_number = std::find_if(s.begin(), s.end(), [] (unsigned char c) { return !std::isdigit(c); }) == s.end();
-      if (is_number) {
-        auto rank_to_sample = std::stoi(s.c_str());
-        if ((0 <= rank_to_sample) && (rank_to_sample < my_size)) {
-          ranks_to_sample.insert (rank_to_sample);
-        } else if (my_rank == 0) {
-            std::cerr << "[WARNING] Given MPI rank to sample (" << s << ") is out of bounds for given execution. Ignoring." << std::endl;
-        }
-      } else if (my_rank == 0) {
-          std::cerr << "[ERROR] Given MPI rank to sample (" << s << ") is invalid" << std::endl;
-          return -1;
-      }
-    }
-  }
-  return 0;
+  const auto my_MPI_rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
+  return ParseRankList(utils::GetEnv("UNITRACE_RanksToSample"), my_MPI_size,
+                                      my_MPI_rank, ranks_to_sample);
 }
 
 inline void GetZeDevicesStringToSet(std::set<int>& device_ids_to_sample, std::string& devices_to_sample) {
-  if (devices_to_sample.length() > 0) {
-      auto list_devices_str = utils::SplitString (devices_to_sample, ',');
-      for (const auto &s : list_devices_str) {
-        if (!s.empty()) {
-          device_ids_to_sample.insert (std::stoi(s.c_str()));
-        }
-      }
-  }
+  DevicesStringToSet(devices_to_sample, device_ids_to_sample);
 }
 
 // Write a module's native binary verbatim - the bytes zeModuleGetNativeBinary returns -

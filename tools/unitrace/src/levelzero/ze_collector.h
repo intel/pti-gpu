@@ -1260,6 +1260,70 @@ inline ze_pci_ext_properties_t *GetZeDevicePciPropertiesAndId(ze_device_handle_t
 
 }
 
+// ---------------------------------------------------------------------------
+// Kernel filter lists (--include-kernels[-file], --exclude-kernels[-file])
+// ---------------------------------------------------------------------------
+
+// Splits one line of a kernel filter list into its items and appends them to out.
+//   line  one line of --include-kernels/--exclude-kernels (or of their -file form)
+//   out   receives the items, in order
+// Items are separated by commas. An item in double quotes may contain commas, and
+// \" inside it stands for a quote; an unterminated quoted item runs to the end of
+// the line. Spaces around an item are trimmed and empty items are dropped, so any
+// line, however malformed, yields a (possibly empty) list and never throws.
+inline void SplitFilterLine(const std::string& line, std::vector<std::string>& out) {
+  size_t i = 0;
+  while (i < line.size()) {
+    while (i < line.size() && isspace(static_cast<unsigned char>(line[i]))) ++i;
+    if (i >= line.size()) break;
+    std::string item;
+    if (line[i] == '"') {
+      ++i;
+      while (i < line.size()) {
+        if (line[i] == '"') {
+          ++i;
+          break;
+        }
+        if (line[i] == '\\' && i + 1 < line.size() && line[i + 1] == '"') {
+          item += '"';
+          i += 2;
+          continue;
+        }
+        item += line[i++];
+      }
+    } else {
+      while (i < line.size() && line[i] != ',') {
+        item += line[i++];
+      }
+    }
+    size_t start = 0, end = item.size();
+    while (start < end && isspace(static_cast<unsigned char>(item[start]))) ++start;
+    while (end > start && isspace(static_cast<unsigned char>(item[end - 1]))) --end;
+    if (start < end) out.push_back(item.substr(start, end - start));
+    if (i < line.size() && line[i] == ',') ++i;
+  }
+}
+
+// The kernel names of a filter: every line of file, then the filter string.
+//   file    the opened --include-kernels-file/--exclude-kernels-file, or nullptr
+//   filter  the --include-kernels/--exclude-kernels value, possibly empty
+// Returns the items of all lines, split by SplitFilterLine(). Free of Level Zero,
+// so fuzz_kernel_filter calls it as the collector does (ZeCollector::Create()
+// through ZeCollector::ParseFilterList()).
+inline std::vector<std::string> ParseFilterList(std::istream* file, const std::string& filter) {
+  std::vector<std::string> result;
+  if (file != nullptr) {
+    std::string line;
+    while (std::getline(*file, line)) {
+      SplitFilterLine(line, result);
+    }
+  }
+  if (!filter.empty()) {
+    SplitFilterLine(filter, result);
+  }
+  return result;
+}
+
 // Forward declaration for global collector pointer
 class ZeCollector;
 
@@ -1296,8 +1360,8 @@ class ZeCollector {
       if (ranks_to_sample.size() > 0) {
         const auto &my_MPI_rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
         if (!my_MPI_rank.empty()) {
-            auto my_rank = std::stoi(my_MPI_rank);
-            if (ranks_to_sample.find(my_rank) == ranks_to_sample.end()) {
+            int my_rank = -1;
+            if (!ToInt(my_MPI_rank, my_rank) || ranks_to_sample.find(my_rank) == ranks_to_sample.end()) {
               std::cout << "[INFO] MPI rank " << my_rank << " is not enabled for tracing or profiling" << std::endl;
               return false;
             }
@@ -5920,7 +5984,7 @@ typedef struct _zex_kernel_register_file_size_exp_t {
           if (kname != nullptr) {
             status = ZE_FUNC(zeKernelGetName)(kernel, &kname_size, kname);
             UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
-            desc.name_ = std::string(kname);
+            desc.name_ = std::string(kname, strnlen(kname, kname_size));  // the driver may not terminate it
             free(kname);
           }
           else {
@@ -6268,66 +6332,15 @@ typedef struct _zex_kernel_register_file_size_exp_t {
     }
   }
 
+  // The kernel names of a filter given by path: opens file (if not empty and
+  // readable) and hands it with filter to ::ParseFilterList(). A file that cannot be
+  // opened is ignored, as before, so only filter is used.
   static std::vector<std::string> ParseFilterList(const std::string& file, const std::string& filter) {
-    std::vector<std::string> result;
-
-    // Helper lambda to split a line by comma, supporting double quotes
-    auto split_by_comma_with_quotes = [](const std::string& line, std::vector<std::string>& out) {
-      size_t i = 0;
-      while (i < line.size()) {
-        // Skip leading whitespace
-        while (i < line.size() && isspace(line[i])) ++i;
-        if (i >= line.size()) break;
-        std::string item;
-        if (line[i] == '"') {
-          // Quoted item
-          ++i;
-          while (i < line.size()) {
-            if (line[i] == '"') {
-              ++i;
-              break;
-            }
-            // Support escaped quotes
-            if (line[i] == '\\' && i + 1 < line.size() && line[i+1] == '"') {
-              item += '"';
-              i += 2;
-              continue;
-            }
-            item += line[i++];
-          }
-        } else {
-          // Unquoted item
-          while (i < line.size() && line[i] != ',') {
-            item += line[i++];
-          }
-        }
-        // Skip trailing whitespace
-        size_t start = 0, end = item.size();
-        while (start < end && isspace(item[start])) ++start;
-        while (end > start && isspace(item[end-1])) --end;
-        if (start < end) out.push_back(item.substr(start, end-start));
-        // Skip comma
-        if (i < line.size() && line[i] == ',') ++i;
-      }
-    };
-
-    // First, gather from file if provided
+    std::ifstream fin;
     if (!file.empty()) {
-      std::ifstream fin(file);
-      if (fin.good()) {
-        std::string line;
-        while (std::getline(fin, line)) {
-          split_by_comma_with_quotes(line, result);
-        }
-      }
+      fin.open(file);
     }
-
-    // Then, gather from string if provided
-    if (!filter.empty()) {
-      split_by_comma_with_quotes(filter, result);
-    }
-
-    return result;
+    return ::ParseFilterList((fin.is_open() && fin.good()) ? &fin : nullptr, filter);
   }
 
  private: // Data

@@ -29,10 +29,20 @@ class Roofline:
 
 
 class Platform:
+    REQUIRED_KEYS = ('PlatformName', 'FP16_GFLOPS', 'FP16_XMX_GFLOPS', 'FP32_GFLOPS', 'FP64_GFLOPS',
+                     'BF16_XMX_GFLOPS', 'GPU_MEMORY_BW_in_GB_per_sec', 'L3_BW_in_GB_per_sec')
+
     def __init__(self, config_file):
-        config = pd.read_csv(config_file, index_col=0, header=None).squeeze().to_dict()
+        # squeeze("columns"), not squeeze(): a one-row file would collapse to a scalar.
+        config = pd.read_csv(config_file, index_col=0, header=None).squeeze("columns")
+        if not isinstance(config, pd.Series):
+            raise ValueError(f"Device config {config_file} must have two columns: name, value")
+        config = config.to_dict()
+        missing = [key for key in self.REQUIRED_KEYS if key not in config]
+        if missing:
+            raise ValueError(f"Device config {config_file} is missing {', '.join(missing)}")
         self.PlatformName = config['PlatformName']
-        self.FP16 = config['FP16_GFLOPS']
+        self.FP16 = float(config['FP16_GFLOPS'])
         self.FP16_XMX = float(config['FP16_XMX_GFLOPS'])
         self.FP32 = float(config['FP32_GFLOPS'])
         self.FP64 = float(config['FP64_GFLOPS'])

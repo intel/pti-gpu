@@ -347,12 +347,14 @@ ITT_EXTERN_C void ITTAPI __itt_task_begin(const __itt_domain *domain, __itt_id /
 #else /* _WIN32 */
   if (domain && domain->nameA) {
     strncpy(desc.domain, domain->nameA, sizeof(desc.domain) - 2);
+    desc.domain[sizeof(desc.domain) - 2] = 0;  // strncpy does not terminate a truncated name
   }
   else {
     desc.domain[0] = 0;
   }
   if (name && name->strA) {
     strncpy(desc.name, name->strA, sizeof(desc.name) - 2);
+    desc.name[sizeof(desc.name) - 2] = 0;  // strncpy does not terminate a truncated name
   }
   else {
     desc.name[0] = 0;
@@ -373,7 +375,7 @@ ITT_EXTERN_C void ITTAPI __itt_task_end(const __itt_domain *domain)
     return;
   }
 
-  if (!task_desc.empty() && !strcmp(task_desc.top().domain, domain->nameA)) {
+  if (!task_desc.empty() && !strncmp(task_desc.top().domain, (domain && domain->nameA) ? domain->nameA : "", sizeof(task_desc.top().domain) - 2)) {
     char task[1057];
 
     snprintf(task, 1056, "%s::%s", task_desc.top().domain, task_desc.top().name);
@@ -402,7 +404,7 @@ ITT_EXTERN_C void ITTAPI __itt_task_end_internal_ex_info(const __itt_domain *dom
     return;
   }
 
-  if (task_desc.empty() || strcmp(task_desc.top().domain, domain->nameA)) {
+  if (task_desc.empty() || strncmp(task_desc.top().domain, (domain && domain->nameA) ? domain->nameA : "", sizeof(task_desc.top().domain) - 2)) {
     return;
   }
 
@@ -426,7 +428,7 @@ ITT_EXTERN_C void ITTAPI __itt_task_end_internal_callback_info(const __itt_domai
     return;
   }
 
-  if (task_desc.empty() || strcmp(task_desc.top().domain, domain->nameA)) {
+  if (task_desc.empty() || strncmp(task_desc.top().domain, (domain && domain->nameA) ? domain->nameA : "", sizeof(task_desc.top().domain) - 2)) {
     return;
   }
 

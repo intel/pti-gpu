@@ -16,6 +16,9 @@
 #       - Placeholders: {python}   = the python interpreter
 #                       {unitrace} = the unitrace binary under test
 #                       {bin}      = the directory the test workloads are installed in
+#                       {fuzz_bin} = the C++ fuzz_* binaries (fuzz build)
+#       - A scenario-independent command that cannot run here exits with
+#         status 77; the test is reported as Skipped.
 #
 #   options  = <unitrace options>
 #       Unitrace options shared by ALL scenarios of this test, appended to
@@ -317,3 +320,119 @@ command  = run_test.py -t vec_add {python} python_test/vec_add/vecAdd.py
 platform      = Linux
 command       = run_test.py -t mat_mul {python} python_test/mat_mul/matMul.py
 skip-scenario = -q
+
+# ----------------------------------------------------------------------------
+# Fuzz tests (part of cpp-test, test/fuzz/README.md): replay each target's seed
+# corpus and crash inputs. No GPU needed; test_unitrace.py builds the C++
+# targets with clang into <unitrace build>/test/fuzz_build ({fuzz_bin}). A
+# target that cannot run here (no clang with libFuzzer, no atheris) is
+# reported as Skipped.
+# ----------------------------------------------------------------------------
+
+[fuzz_cli_args]
+command           = fuzz/replay.py cli_args {fuzz_bin}
+platform          = Linux
+requires          = none
+defaults-scenario = False
+
+[fuzz_elf64]
+command           = fuzz/replay.py elf64 {fuzz_bin}
+platform          = Linux
+requires          = none
+defaults-scenario = False
+
+[fuzz_env_numbers]
+command           = fuzz/replay.py env_numbers {fuzz_bin}
+platform          = Linux
+requires          = none
+defaults-scenario = False
+
+[fuzz_kernel_filter]
+command           = fuzz/replay.py kernel_filter {fuzz_bin}
+platform          = Linux
+requires          = none
+defaults-scenario = False
+
+[fuzz_kernel_props]
+command           = fuzz/replay.py kernel_props {fuzz_bin}
+platform          = Linux
+requires          = none
+defaults-scenario = False
+
+[fuzz_kmd_trace]
+command           = fuzz/replay.py kmd_trace {fuzz_bin}
+platform          = Linux
+requires          = none
+defaults-scenario = False
+
+[fuzz_metric_query]
+command           = fuzz/replay.py metric_query {fuzz_bin}
+platform          = Linux
+requires          = none
+defaults-scenario = False
+
+[fuzz_metric_samples]
+command           = fuzz/replay.py metric_samples {fuzz_bin}
+platform          = Linux
+requires          = none
+defaults-scenario = False
+
+[fuzz_sample_lists]
+command           = fuzz/replay.py sample_lists {fuzz_bin}
+platform          = Linux
+requires          = none
+defaults-scenario = False
+
+[fuzz_stall_sampling]
+command           = fuzz/replay.py stall_sampling {fuzz_bin}
+platform          = Linux
+requires          = none
+defaults-scenario = False
+
+[fuzz_trace_json]
+command           = fuzz/replay.py trace_json {fuzz_bin}
+platform          = Linux
+requires          = none
+defaults-scenario = False
+
+[fuzz_analyzeperfmetrics]
+command           = fuzz/replay.py analyzeperfmetrics {fuzz_bin}
+platform          = Linux
+requires          = none
+defaults-scenario = False
+
+[fuzz_categorize]
+command           = fuzz/replay.py categorize {fuzz_bin}
+platform          = Linux
+requires          = none
+defaults-scenario = False
+
+[fuzz_mergetrace]
+command           = fuzz/replay.py mergetrace {fuzz_bin}
+platform          = Linux
+requires          = none
+defaults-scenario = False
+
+[fuzz_metrics_server]
+command           = fuzz/replay.py metrics_server {fuzz_bin}
+platform          = Linux
+requires          = none
+defaults-scenario = False
+
+[fuzz_perfdashboard_upload]
+command           = fuzz/replay.py perfdashboard_upload {fuzz_bin}
+platform          = Linux
+requires          = none
+defaults-scenario = False
+
+[fuzz_roofline_csv]
+command           = fuzz/replay.py roofline_csv {fuzz_bin}
+platform          = Linux
+requires          = none
+defaults-scenario = False
+
+[fuzz_summary]
+command           = fuzz/replay.py summary {fuzz_bin}
+platform          = Linux
+requires          = none
+defaults-scenario = False

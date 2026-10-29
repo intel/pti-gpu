@@ -42,6 +42,24 @@ static constexpr uint32_t num_device_timestamps_cahced_ = 1024;
 #define strdup strdup
 #endif /* _WIN32 */
 
+// name without the quotes GetZeKernelCommandName() and the OpenCL collector put
+// around a kernel name (a name itself may contain ","). A name not quoted on both
+// ends is returned as it is.
+inline std::string UnquoteName(const std::string& name) {
+  if (name.size() >= 2 && name.front() == '"' && name.back() == '"') {
+    return name.substr(1, name.size() - 2);
+  }
+  return name;
+}
+
+// The "name" field of a Chrome trace event for a kernel or an API call.
+//   name    the kernel name, quoted or not (UnquoteName())
+//   prefix  text put before the name, e.g. "Tile #0: " for implicit scaling
+// Returns `, "name": "<prefix><name>"`, escaped, so any name gives valid JSON.
+inline std::string JsonNameField(const std::string& name, const std::string& prefix = "") {
+  return ", \"name\": " + JsonString(prefix + UnquoteName(name));
+}
+
 static std::string EncodeURI(const std::string &input) {
   std::ostringstream encoded;
   encoded.fill('0');
@@ -64,12 +82,17 @@ static std::string EncodeURI(const std::string &input) {
 }
 
 static std::string rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
-// use pid as a dummy rank id
+// The MPI rank in value, or the pid as a dummy rank id when value is empty or not
+// a number.
+static uint32_t InitMpiRankVal(const std::string& value) {
+  uint32_t r = 0;
 #ifdef _WIN32
-#define INIT_MPI_RANK_VAL(rank) rank.empty() ? _getpid() : std::atoi(rank.c_str())
+  return ToUint32(value, r) ? r : static_cast<uint32_t>(_getpid());
 #else /* _WIN32 */
-#define INIT_MPI_RANK_VAL(rank) rank.empty() ? getpid() : std::atoi(rank.c_str())
+  return ToUint32(value, r) ? r : static_cast<uint32_t>(getpid());
 #endif /* _WIN32 */
+}
+#define INIT_MPI_RANK_VAL(rank) InitMpiRankVal(rank)
 static uint32_t mpi_rank = INIT_MPI_RANK_VAL(rank);
 
 static std::string pmi_hostname = GetHostName();
@@ -175,7 +198,7 @@ static void EmitDeviceProcessMetadata(uint32_t device_pid, const std::string& na
   }
 #endif /* BUILD_WITH_PERFETTO */
   logger_->Log(",\n{\"ph\": \"M\", \"name\": \"process_name\", \"pid\": " + std::to_string(device_pid) +
-               ", \"ts\": " + std::to_string(start_time) + ", \"args\": {\"name\": \"" + name + "\"}}");
+               ", \"ts\": " + std::to_string(start_time) + ", \"args\": {\"name\": " + JsonString(name) + "}}");
   logger_->Flush();
 }
 
@@ -194,8 +217,8 @@ static void EmitDeviceThreadMetadata(uint32_t device_pid, uint32_t device_tid,
   }
 #endif /* BUILD_WITH_PERFETTO */
   logger_->Log(",\n{\"ph\": \"M\", \"name\": \"thread_name\", \"pid\": " + std::to_string(device_pid) + ", \"tid\": " +
-               std::to_string(device_tid) + ", \"ts\": " + std::to_string(start_time) + ", \"args\": {\"name\": \"" +
-               name + "\"}}");
+               std::to_string(device_tid) + ", \"ts\": " + std::to_string(start_time) + ", \"args\": {\"name\": " +
+               JsonString(name) + "}}");
   logger_->Flush();
 }
 
@@ -475,7 +498,10 @@ static std::tuple<uint32_t, uint32_t, uint32_t> ClGetDevicePidTid(cl_device_pci_
 #endif /* BUILD_WITH_OPENCL */
 
 #if BUILD_WITH_ITT
-static std::string ConvertDataToString(IttArgs* args) {
+// The values of an ITT metadata argument as text: numbers comma-separated, a
+// string quoted. json: the string JSON-escaped, for the Chrome trace; otherwise
+// as the application gave it, for Perfetto annotations, which store it verbatim.
+static std::string ConvertDataToString(IttArgs* args, bool json = true) {
   std::string strData = "";
   void* dataPtr = args->isIndirectData ? args->data[0] : args->data;
   if (args->count) {
@@ -562,9 +588,8 @@ static std::string ConvertDataToString(IttArgs* args) {
       }
       default: {  // default is string
         const char* stringPtr = reinterpret_cast<const char*>(dataPtr);
-        strData += "\"";
-        strData += std::string(stringPtr, args->count);
-        strData += "\"";
+        const std::string value(stringPtr, args->count);
+        strData += json ? JsonString(value) : "\"" + value + "\"";
         break;
       }
     }
@@ -572,7 +597,7 @@ static std::string ConvertDataToString(IttArgs* args) {
   return strData;
 }
 #else /* BUILD_WITH_ITT */
-static std::string ConvertDataToString(IttArgs* args) {
+static std::string ConvertDataToString(IttArgs* args, bool json = true) {
   return "";
 }
 #endif /* BUILD_WITH_ITT */
@@ -767,13 +792,13 @@ inline void PerfettoEmitHostEvent(HostEventRecord& rec, uint32_t pid, uint32_t t
       has_args = true;
     }
   } else if (rec.api_type_ == API_TYPE_ITT) {
-    opts.annotations.push_back(perfetto_emit::Annotation::Str(rec.itt_args_.key, ConvertDataToString(&rec.itt_args_)));
+    opts.annotations.push_back(perfetto_emit::Annotation::Str(rec.itt_args_.key, ConvertDataToString(&rec.itt_args_, false)));
     if (rec.itt_args_.isIndirectData) {
       free(rec.itt_args_.data[0]);
     }
     IttArgs* args = rec.itt_args_.next;
     while (args != nullptr) {
-      opts.annotations.push_back(perfetto_emit::Annotation::Str(args->key, ConvertDataToString(args)));
+      opts.annotations.push_back(perfetto_emit::Annotation::Str(args->key, ConvertDataToString(args, false)));
       IttArgs* toFree = args;
       args = args->next;
       free(toFree);
@@ -846,12 +871,12 @@ class TraceBuffer {
   public:
     TraceBuffer() : flush_immediately_(false) {
       std::string szstr = utils::GetEnv("UNITRACE_ChromeEventBufferSize");
-      if (szstr.empty() || (szstr == "-1")) {
-        buffer_capacity_ = -1;
+      // unitrace rejects an invalid size; unbounded if the variable was set by hand.
+      ParseChromeEventBufferSize(szstr, buffer_capacity_);
+      if (buffer_capacity_ == -1) {
         slice_capacity_ = BUFFER_SLICE_SIZE_DEFAULT;
       }
       else {
-        buffer_capacity_ = std::stoi(szstr);
         if (buffer_capacity_ == 0) {
           buffer_capacity_ = 1;  // at least one event slot
           flush_immediately_ = true;
@@ -1035,23 +1060,10 @@ class TraceBuffer {
       str += ", \"pid\": " + std::to_string(pid);
 
       if (rec.implicit_scaling_) {
-        str += ", \"name\": \"Tile #" + std::to_string(rec.tile_) + ": ";
-        if (!kname.empty()) {
-          if (kname[0] == '\"') {
-            str += kname.substr(1, kname.size() - 2);
-          } else {
-            str += kname;
-          }
-        }
-        str += "\"";
+        str += JsonNameField(kname, "Tile #" + std::to_string(rec.tile_) + ": ");
       } else {
         if (!kname.empty()) {
-          if (kname[0] == '\"') {
-            // name is already quoted
-            str += ", \"name\": " + kname;
-          } else {
-            str += ", \"name\": \"" + kname + "\"";
-          }
+          str += JsonNameField(kname);
         }
       }
 
@@ -1120,12 +1132,7 @@ class TraceBuffer {
         str += ", \"cat\": \"Flow_D2H_" + std::to_string(rec.id_) + "_" + std::to_string(mpi_rank) + "\"";
       } else {
         if (rec.name_ != nullptr) {
-          if (rec.name_[0] == '\"') {
-            // name is already quoted
-            str += ", \"name\": " + std::string(rec.name_);
-          } else {
-            str += ", \"name\": \"" + std::string(rec.name_) + "\"";
-          }
+          str += JsonNameField(rec.name_);
 #if BUILD_WITH_OMP
         } else if (rec.api_id_ == OmpTracingId) {
           str += ", \"name\": \"" + std::string(GetOmptEventName(rec.id_)) + "\"";
@@ -1178,7 +1185,7 @@ class TraceBuffer {
           str_args += ", \"mpi_counter\": " + std::to_string(args.mpi_counter);
         }
       } else if (rec.api_type_ == API_TYPE_ITT) {
-        str_args = str_args + "\"" + rec.itt_args_.key + "\":[";
+        str_args += JsonString(rec.itt_args_.key) + ":[";
         str_args += ConvertDataToString(&rec.itt_args_);
         str_args += "]";
         if (rec.itt_args_.isIndirectData) {
@@ -1187,7 +1194,7 @@ class TraceBuffer {
         IttArgs* args = rec.itt_args_.next;
         while (args != nullptr) {
           str_args += ",";
-          str_args = str_args + "\"" + args->key + "\":[";
+          str_args += JsonString(args->key) + ":[";
           str_args += ConvertDataToString(args);
           str_args += "]";
           IttArgs* toFree = args;
@@ -1374,11 +1381,11 @@ class ClTraceBuffer {
   public:
     ClTraceBuffer() : flush_immediately_(false) {
       std::string szstr = utils::GetEnv("UNITRACE_ChromeEventBufferSize");
-      if (szstr.empty() || (szstr == "-1")) {
-        buffer_capacity_ = -1;
+      // unitrace rejects an invalid size; unbounded if the variable was set by hand.
+      ParseChromeEventBufferSize(szstr, buffer_capacity_);
+      if (buffer_capacity_ == -1) {
         slice_capacity_ = BUFFER_SLICE_SIZE_DEFAULT;
       } else {
-        buffer_capacity_ = std::stoi(szstr);
         if (buffer_capacity_ == 0) {
           buffer_capacity_ = 1;  // at least one event slot
           flush_immediately_ = true;
@@ -1562,23 +1569,10 @@ class ClTraceBuffer {
       str += ", \"pid\": " + std::to_string(pid);
 
       if (rec.implicit_scaling_) {
-        str += ", \"name\": \"Tile #" + std::to_string(rec.tile_) + ": ";
-        if (!kname.empty()) {
-          if (kname[0] == '\"') {
-            str += kname.substr(1, kname.size() - 2);
-          } else {
-            str += kname;
-          }
-        }
-        str += "\"";
+        str += JsonNameField(kname, "Tile #" + std::to_string(rec.tile_) + ": ");
       } else {
         if (!kname.empty()) {
-          if (kname[0] == '\"') {
-            // name is already quoted
-            str += ", \"name\": " + kname;
-          } else {
-            str += ", \"name\": \"" + kname + "\"";
-          }
+          str += JsonNameField(kname);
         }
       }
 
@@ -1693,12 +1687,7 @@ class ClTraceBuffer {
         str += ", \"cat\": \"CL_Flow_D2H_" + std::to_string(rec.id_) + "_" + std::to_string(mpi_rank) + "\"";
       } else {
         if (rec.name_ != nullptr) {
-          if (rec.name_[0] == '\"') {
-            // name is already quoted
-            str += ", \"name\": " + std::string(rec.name_);
-          } else {
-            str += ", \"name\": \"" + std::string(rec.name_) + "\"";
-          }
+          str += JsonNameField(rec.name_);
         } else {
           if ((rec.api_id_ != XptiTracingId) && (rec.api_id_ != IttTracingId)) {
             str += ", \"name\": \"" + get_symbol(rec.api_id_) + "\"";
@@ -1749,7 +1738,7 @@ class ClTraceBuffer {
         }
 
       } else if (rec.api_type_ == API_TYPE_ITT) {
-        str_args = str_args + "\"" + rec.itt_args_.key + "\":[";
+        str_args += JsonString(rec.itt_args_.key) + ":[";
         str_args += ConvertDataToString(&rec.itt_args_);
         str_args += "]";
         if (rec.itt_args_.isIndirectData) {
@@ -1758,7 +1747,7 @@ class ClTraceBuffer {
         IttArgs* args = rec.itt_args_.next;
         while (args != nullptr) {
           str_args += ",";
-          str_args = str_args + "\"" + args->key + "\":[";
+          str_args += JsonString(args->key) + ":[";
           str_args += ConvertDataToString(args);
           str_args += "]";
           IttArgs* toFree = args;
