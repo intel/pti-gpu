@@ -1819,13 +1819,34 @@ class ZeMetricProfiler {
       return f->good();
     };
 
+    // Drain the stream; dump the data only if save is true.
+    auto drain_metrics = [&](uint64_t size, bool save) -> bool {
+      while (size > 0) {
+        if (save && !dump_metrics (raw_metrics, size, &desc->metric_file_stream_)) {
+          std::cerr << "[ERROR] Failed to write to sampling metrics file " << desc->metric_file_name_ << std::endl;
+          return false;
+        }
+        //
+        // If less data than requested was read, we can assume that we have reached the end of the stream and
+        // can exit the loop however, it might be that less data was read because there was no space available in the buffer
+        // and not because we reached the end of the stream. To be safe, we will read again and if we get less than half of the
+        // buffer size, we will assume that we have reached the end of the stream.
+        //
+        if (size < MAX_METRIC_BUFFER / 2)
+          break;
+        size = ReadMetrics(streamer, raw_metrics, MAX_METRIC_BUFFER);
+      }
+      return true;
+    };
+
+    // One save decision per full drain, covering data since the previous drain.
+    MetricSamplingWindow sampling_window = UniController::BeginMetricSamplingWindow();
+
     desc->profiling_state_.store(PROFILER_ENABLED, std::memory_order_release);
     while (desc->profiling_state_.load(std::memory_order_acquire) != PROFILER_DISABLED) {
       auto size = EventBasedReadMetrics(event, streamer, raw_metrics, MAX_METRIC_BUFFER);
       if (size > 0) {
-        // dump the data to the intermediate file
-        if (UniController::IsMetricSamplingEnabled() && !dump_metrics (raw_metrics, size, &desc->metric_file_stream_)) {
-          std::cerr << "[ERROR] Failed to write to sampling metrics file " << desc->metric_file_name_ << std::endl;
+        if (!drain_metrics(size, UniController::IsMetricSamplingEnabled(sampling_window))) {
           break;
         }
       }
@@ -1833,20 +1854,8 @@ class ZeMetricProfiler {
 
     // flush the remaining metrics
     auto size = ReadMetrics(streamer, raw_metrics, MAX_METRIC_BUFFER);
-    while (size > 0) {
-      if (UniController::IsMetricSamplingEnabled() && !dump_metrics (raw_metrics, size, &desc->metric_file_stream_)) {
-        std::cerr << "[ERROR] Failed to write to sampling metrics file " << desc->metric_file_name_ << std::endl;
-        break;
-      }
-      //
-      // If less data than requested was read, we can assume that we have reached the end of the stream and
-      // can exit the loop however, it might be that less data was read because there was no space available in the buffer
-      // and not because we reached the end of the stream. To be safe, we will read again and if we get less than half of the
-      // buffer size, we will assume that we have reached the end of the stream.
-      //
-      if (size < MAX_METRIC_BUFFER / 2)
-        break;
-      size = ReadMetrics(streamer, raw_metrics, MAX_METRIC_BUFFER);
+    if (size > 0) {
+      drain_metrics(size, UniController::IsMetricSamplingEnabled(sampling_window));
     }
     free (raw_metrics);
 

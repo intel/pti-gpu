@@ -46,7 +46,16 @@ enum TemporalControlState {
 
 struct TemporalControl {
   TemporalControlState state_;
-  char padding_[1024 - sizeof(TemporalControlState)];
+  // Count of transitions into TEMPORAL_RESUMED. Never reset; readers detect
+  // a resume by comparing with the value they last saw.
+  std::atomic<uint32_t> resume_epoch_;
+  char padding_[1024 - sizeof(TemporalControlState) - sizeof(std::atomic<uint32_t>)];
+};
+
+// Collection state a sampling thread saw at its previous metric drain.
+struct MetricSamplingWindow {
+  uint32_t resume_epoch_ = 0;
+  bool resumed_ = true;
 };
 
 // Shared-memory control used by the parent unitrace process to know when its
@@ -198,7 +207,7 @@ class UniController{
           std::cerr << "[WARNING] Session " << session << " was not stopped before reusing" << std::endl;
         }
       }
-      ((TemporalControl*)session_shm_.GetPtr())->state_ = TEMPORAL_RESUMED;
+      SetTemporalState((TemporalControl*)session_shm_.GetPtr(), TEMPORAL_RESUMED);
     }
 
     static void AttachTemporalControlWrite(const char *session) {
@@ -230,7 +239,7 @@ class UniController{
         if (((TemporalControl*)session_shm_.GetPtr())->state_ == TEMPORAL_STOPPED) {
           return;
         }
-        ((TemporalControl*)session_shm_.GetPtr())->state_ = TEMPORAL_PAUSED;
+        SetTemporalState((TemporalControl*)session_shm_.GetPtr(), TEMPORAL_PAUSED);
         std::cerr << "[INFO] Session " << session << " is paused" << std::endl;
       }
     }
@@ -241,7 +250,7 @@ class UniController{
         if (((TemporalControl*)session_shm_.GetPtr())->state_ == TEMPORAL_STOPPED) {
           return;
         }
-        ((TemporalControl*)session_shm_.GetPtr())->state_ = TEMPORAL_RESUMED;
+        SetTemporalState((TemporalControl*)session_shm_.GetPtr(), TEMPORAL_RESUMED);
         std::cerr << "[INFO] Session " << session << " is resumed" << std::endl;
       }
     }
@@ -249,7 +258,7 @@ class UniController{
     static void TemporalStop(const char *session) {
       AttachTemporalControlWrite(session);
       if (session_shm_.GetPtr() != nullptr) {
-        ((TemporalControl*)session_shm_.GetPtr())->state_ = TEMPORAL_STOPPED;
+        SetTemporalState((TemporalControl*)session_shm_.GetPtr(), TEMPORAL_STOPPED);
         // Wake every traced process parked on this session's state word. The
         // futex keys on the shared page, so this write mapping reaches all
         // read-mapped waiters. Must happen before Release() unmaps the page.
@@ -267,10 +276,12 @@ class UniController{
         exit(-1);
       }
 
-      if (!utils::GetEnv("UNITRACE_StartPaused").empty()) {
-        ((TemporalControl*)metric_sample_shm_.GetPtr())->state_ = TEMPORAL_PAUSED;
+      // Static init ran before main() parsed --start-paused; refresh it.
+      start_paused_ = (utils::GetEnv("UNITRACE_StartPaused") == "1");
+      if (start_paused_) {
+        SetTemporalState((TemporalControl*)metric_sample_shm_.GetPtr(), TEMPORAL_PAUSED);
       } else {
-        ((TemporalControl*)metric_sample_shm_.GetPtr())->state_ = TEMPORAL_RESUMED;
+        SetTemporalState((TemporalControl*)metric_sample_shm_.GetPtr(), TEMPORAL_RESUMED);
       }
     }
 
@@ -394,38 +405,46 @@ class UniController{
       return (((TemporalControl*)session_shm_.GetPtr())->state_ == TEMPORAL_STOPPED);
     }
 
-    static bool IsMetricSamplingEnabled(void) {
+    // Called once per sampling thread before its first IsMetricSamplingEnabled().
+    static MetricSamplingWindow BeginMetricSamplingWindow(void) {
+      MetricSamplingWindow window;
+      const TemporalControl* ctl = MetricSamplingControl();
+      if (ctl != nullptr) {
+        window.resume_epoch_ = ctl->resume_epoch_.load(std::memory_order_acquire);
+        window.resumed_ = (ctl->state_ == TEMPORAL_RESUMED);
+      }
+      return window;
+    }
 
-      if (session_shm_.GetPtr() != nullptr) {
-        TemporalControlState state = ((TemporalControl*)session_shm_.GetPtr())->state_;
-        if (state == TEMPORAL_STOPPED) {
-          // Named session was stopped. Fire the session-stopped callback once
-          // so the owner of the metric sampling thread (the parent process)
-          // can react to the stop. The callback is invoked at most once across
-          // all sampling threads via the atomic exchange guard.
-          if (session_stopped_callback_) {
-            if (!session_stopped_notified_.exchange(true)) {
-              session_stopped_callback_();
-            }
+    // True if collection was resumed at any point since the previous call on
+    // this window, i.e. the data drained since then may hold resumed samples.
+    static bool IsMetricSamplingEnabled(MetricSamplingWindow& window) {
+      const TemporalControl* ctl = MetricSamplingControl();
+      if (ctl == nullptr) {
+        return true;
+      }
+
+      // Epoch before state, so a racing resume is seen now or on the next call.
+      const uint32_t epoch = ctl->resume_epoch_.load(std::memory_order_acquire);
+      const TemporalControlState state = ctl->state_;
+
+      if ((state == TEMPORAL_STOPPED) && (ctl == (TemporalControl*)session_shm_.GetPtr())) {
+        // Named session was stopped. Fire the session-stopped callback once
+        // so the owner of the metric sampling thread (the parent process)
+        // can react to the stop. The callback is invoked at most once across
+        // all sampling threads via the atomic exchange guard.
+        if (session_stopped_callback_) {
+          if (!session_stopped_notified_.exchange(true)) {
+            session_stopped_callback_();
           }
-          return false;
         }
-        return (state == TEMPORAL_RESUMED);
       }
 
-      if (start_paused_) {
-        // The parent process owns the sampling thread and always creates the
-        // metric-sampling shared memory, so its state is authoritative here.
-        // The child pushes its PTI_ENABLE_COLLECTION-derived state into this
-        // shm (see PropagateCollectionStateToMetricSampling), which is how the
-        // parent tracks in-application collection changes. There is no env-var
-        // fallback: the parent's own PTI_ENABLE_COLLECTION does not gate the
-        // target application's sampling.
-        if (metric_sample_shm_.GetPtr() != nullptr) {
-          return (((TemporalControl*)metric_sample_shm_.GetPtr())->state_ == TEMPORAL_RESUMED);
-        }
-      }
-      return true;
+      const bool resumed = (state == TEMPORAL_RESUMED);
+      const bool save = window.resumed_ || resumed || (epoch != window.resume_epoch_);
+      window.resume_epoch_ = epoch;
+      window.resumed_ = resumed;
+      return save;
     }
 
     // defer_callback: when true, report the stopped state WITHOUT synchronously
@@ -500,7 +519,7 @@ class UniController{
       // we always need to check in child process if it still exist
       if (utils::GetEnv("UNITRACE_KernelMetrics") == "1") {
         if (metric_sample_shm_.AttachWrite(UNITRACE_METRIC_SAMPLING_CONTROL, sizeof(TemporalControl)) == SHM_SUCCESS) {
-          ((TemporalControl*)metric_sample_shm_.GetPtr())->state_ = TEMPORAL_PAUSED;
+          SetTemporalState((TemporalControl*)metric_sample_shm_.GetPtr(), TEMPORAL_PAUSED);
         }
       }
     }
@@ -512,7 +531,7 @@ class UniController{
       // we always need to check in child process if it still exist
       if (utils::GetEnv("UNITRACE_KernelMetrics") == "1") {
         if (metric_sample_shm_.AttachWrite(UNITRACE_METRIC_SAMPLING_CONTROL, sizeof(TemporalControl)) == SHM_SUCCESS) {
-          ((TemporalControl*)metric_sample_shm_.GetPtr())->state_ = TEMPORAL_RESUMED;
+          SetTemporalState((TemporalControl*)metric_sample_shm_.GetPtr(), TEMPORAL_RESUMED);
         }
       }
     }
@@ -529,7 +548,7 @@ class UniController{
       // we always need to check in child process if it still exist
       if (utils::GetEnv("UNITRACE_KernelMetrics") == "1") {
         if (metric_sample_shm_.AttachWrite(UNITRACE_METRIC_SAMPLING_CONTROL, sizeof(TemporalControl)) == SHM_SUCCESS) {
-          ((TemporalControl*)metric_sample_shm_.GetPtr())->state_ = TEMPORAL_STOPPED;
+          SetTemporalState((TemporalControl*)metric_sample_shm_.GetPtr(), TEMPORAL_STOPPED);
         }
       }
       // Flush the data collected so far, now. This is the purpose of detach:
@@ -547,6 +566,27 @@ class UniController{
     }
 
   private:
+    // All state_ writes go through here so each transition into
+    // TEMPORAL_RESUMED bumps resume_epoch_.
+    static void SetTemporalState(TemporalControl* ctl, TemporalControlState state) {
+      if ((state == TEMPORAL_RESUMED) && (ctl->state_ != TEMPORAL_RESUMED)) {
+        ctl->resume_epoch_.fetch_add(1, std::memory_order_release);
+      }
+      ctl->state_ = state;
+    }
+
+    // State gating metric sampling: the named session's, else (with
+    // --start-paused) the one the application updates. nullptr if not gated.
+    static const TemporalControl* MetricSamplingControl(void) {
+      if (session_shm_.GetPtr() != nullptr) {
+        return (const TemporalControl*)session_shm_.GetPtr();
+      }
+      if (start_paused_) {
+        return (const TemporalControl*)metric_sample_shm_.GetPtr();
+      }
+      return nullptr;
+    }
+
     // Body of the session-stop watcher thread (see StartSessionStopWatcher).
     static void SessionWatcherLoop() {
       while (!session_watcher_stop_.load(std::memory_order_acquire)) {
@@ -641,7 +681,7 @@ class UniController{
           return;
         }
       }
-      ((TemporalControl*)metric_sample_shm_.GetPtr())->state_ = state;
+      SetTemporalState((TemporalControl*)metric_sample_shm_.GetPtr(), state);
     }
 
     // Shared by IsCollectionEnabled() and IsMetricSamplingEnabled() under
