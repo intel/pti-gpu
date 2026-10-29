@@ -2524,6 +2524,8 @@ class ZeCollector {
 
     std::shared_ptr<UniLogger> metric_logger = nullptr;
 
+    std::cerr << "[INFO] Post-processing metric data is in progress. "
+              << "This may take a while, please do not interrupt." << std::endl;
     while (1) {
       if (global_kernel_profiles_.empty()) {
         break;  // done
@@ -2651,6 +2653,7 @@ class ZeCollector {
         metric_logger->Flush();
       }
     }
+    std::cerr << "[INFO] Post-processing metric data is complete." << std::endl;
 
     if (logger_factory_->IsLegacy() && metric_logger && metric_logger->IsLogToFile()) {
       std::cerr << "[INFO] Kernel metrics are stored in " << metric_logger->GetLogFileName() << std::endl;

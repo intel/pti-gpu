@@ -577,6 +577,8 @@ class ZeMetricProfiler {
       std::cerr << "[ERROR] Could not open the metric data file" << std::endl;
       return;
     }
+    std::cerr << "[INFO] Post-processing metric data is in progress. "
+              << "This may take a while, please do not interrupt." << std::endl;
     int did = -1;
     zet_metric_group_handle_t group = nullptr;
     std::vector<std::string> metric_names;
@@ -680,6 +682,7 @@ class ZeMetricProfiler {
         std::cerr << "[WARNING] Not able to calculate metrics" << std::endl;
       }
     }
+    std::cerr << "[INFO] Post-processing metric data is complete." << std::endl;
 
     if (logger_factory->IsLegacy() && !metrics_logger->GetLogFileName().empty()) {
       std::cerr << "[INFO] Kernel metrics are stored in " << metrics_logger->GetLogFileName() << std::endl;
@@ -1713,6 +1716,10 @@ class ZeMetricProfiler {
 
     std::shared_ptr<UniLogger> metric_logger = nullptr;
 
+    // Post-processing can take long on large workloads; say so once, for all devices.
+    std::cerr << "[INFO] Post-processing metric data is in progress. "
+              << "This may take a while, please do not interrupt." << std::endl;
+
     for (auto [handle, device] : device_descriptors_) {
       if (device->parent_device_ != nullptr) {
         // subdevice
@@ -1721,10 +1728,7 @@ class ZeMetricProfiler {
 
       metric_logger = logger_factory_->GetDeviceLogger(LOGGER_TYPE_METRICS_SAMPLING, device->device_id_, true, true);
       if (device->stall_sampling_) {
-        if (!ComputeStallMetrics(device, metric_logger, raw_metrics)) {
-          free(raw_metrics);
-          return;
-        }
+        ComputeStallMetrics(device, metric_logger, raw_metrics);
       }
       else {
         ComputeTimedMetrics(device, metric_logger, raw_metrics);
@@ -1732,6 +1736,7 @@ class ZeMetricProfiler {
       metric_logger->Flush();
     }
     free (raw_metrics);
+    std::cerr << "[INFO] Post-processing metric data is complete." << std::endl;
     if (logger_factory_->IsLegacy() && metric_logger && !metric_logger->GetLogFileName().empty()) {
       std::cerr << "[INFO] Device metrics are stored in " << metric_logger->GetLogFileName() << std::endl;
     }
