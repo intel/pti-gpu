@@ -475,11 +475,17 @@ if (BUILD_WITH_MPI)
 endif()
 
 # License notices for the third-party code built into unitrace_tool (Perfetto
-# trace protos, protobuf, ITT API): unitrace's own third-party-programs.txt (the
+# trace protos, protobuf, ITT API, and the Level Zero, compute-runtime, IGA and
+# OpenCL API headers it compiles against): unitrace's own third-party-programs.txt (the
 # PTI SDK ships the repository-root one) and the full license texts with their
 # version records.
 set(UNITRACE_INSTALL_DOCDIR "${CMAKE_INSTALL_DATAROOTDIR}/doc/unitrace")
 install(FILES ${PROJECT_SOURCE_DIR}/third-party-programs.txt
+        DESTINATION ${UNITRACE_INSTALL_DOCDIR}
+        COMPONENT Unitrace_Runtime)
+# unitrace's own (outbound) MIT license, next to the notices as the SWLC notice
+# guidelines require. It lives at the repository root.
+install(FILES ${PROJECT_SOURCE_DIR}/../../LICENSE
         DESTINATION ${UNITRACE_INSTALL_DOCDIR}
         COMPONENT Unitrace_Runtime)
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/third_party/

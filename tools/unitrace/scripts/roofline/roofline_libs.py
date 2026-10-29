@@ -3,6 +3,14 @@ import csv
 import re
 import math
 
+from bokeh.embed import file_html
+from bokeh.layouts import column, row
+from bokeh.models import (Button, CheckboxGroup, ColumnDataSource, CustomJS, DataRange1d, Div, Dropdown,
+                          HoverTool, InlineStyleSheet, Legend, LegendItem, NumeralTickFormatter,
+                          Spacer)
+from bokeh.plotting import figure
+from bokeh.resources import INLINE
+
 
 class Roofline:
     def __init__(self, kernel_name, l3_read, l3_write, l3_bytes, gpu_memory_read, gpu_memory_write, gpu_memory_bytes,
@@ -178,234 +186,6 @@ def summary(entry_list, platform):
 
 
 def plot_html_roofline(entry_list, platform, test_case):
-    html_code = '''
- <!DOCTYPE HTML>
-<html>
-<head>
-    <style>
-        .canvasjs-chart-credit {
-            display: none !important;
-        }
-        html, body {
-            margin: 0;
-            padding: 0;
-            height: 100%;
-            overflow: hidden; /* Prevents page scrolling */
-        }
-        #container {
-            display: flex; /* Use Flexbox to align the chart and the container */
-            height: 100%; /* Use the full height of the window */
-        }
-        #chartContainer {
-            display: flex; /* Use Flexbox to center the chart */
-            justify-content: center; /* Center horizontally */
-            align-items: center; /* Center vertically */
-            position: relative; /* Relative position for the chart container */
-            flex-grow: 1; /* Allow the chart container to take the remaining space */
-            border: 1px solid #ccc; /* Border to visualize the container */
-            transition: flex-grow 0.3s ease; /* Animation when resizing */
-        }
-        #chartContainer > div {
-            width: 100%;
-            height: 100%;
-        }
-        #dataContainer {
-            position: relative; /* Relative position for the data container */
-            background-color: rgba(255, 255, 255, 0.9); /* Semi-transparent white background */
-            padding: 10px;
-            border: 1px solid #ccc;
-            z-index: 1000; /* Ensure the container is above the chart */
-            max-height: 100%; /* Maximum height to align with the chart */
-            overflow-y: auto; /* Add scrolling if necessary */
-            width: 25%; /* Width of the data container */
-            transition: width 0.3s ease, max-height 0.3s ease; /* Animation when resizing */
-        }
-        .data-section {
-            margin-bottom: 10px;
-        }
-        .collapsed {
-            max-height: 30px; /* Reduced height of the container when collapsed */
-            overflow: hidden; /* Hide any overflowing content */
-        }
-    </style>
-    <script type="text/javascript" src="https://cdn.canvasjs.com/canvasjs.min.js"></script>
-    <script type="text/javascript">
-        window.onload = function () {
-            var chart = new CanvasJS.Chart("chartContent", {
-                exportEnabled: true,
-                title: { text: "", fontSize: 50 },
-                legend: {
-                    cursor: "pointer",
-                    fontSize: 14,
-                    verticalAlign: "top",
-                    horizontalAlign: "left",
-                    itemclick: function (e) {
-                        e.dataSeries.visible = !e.dataSeries.visible;
-                        e.chart.render();
-                    }
-                },
-                toolTip: {   
-                    content: "{label}<br/> {y} GF/s"   
-                },
-                axisX: {
-                    logarithmic: true,
-                    minimum: 0.001,
-                    maximum: 100000,
-                    title: "Arithmetic Intensity (Flop/Byte)",
-                    titleFontSize: 20,
-                    labelFontSize: 16
-                },
-                axisY: {
-                    logarithmic: true,
-                    minimum: 0.1,
-                    title: "Performance (GFlop/s)",
-                    titleFontSize: 20,
-                    labelFontSize: 16
-                },
-                data: [
-                    {
-                        showInLegend: true, markerType: "none", markerColor: "blue", type: "spline", name: "L3_ROOF", dataPoints: [
-                        ]
-                    },
-                    {
-                        showInLegend: true, markerType: "none", markerColor: "red", type: "spline", name: "Gpu_memory_ROOF", dataPoints: [
-                        ]
-                    },
-                    {
-                        showInLegend: true, type: "scatter", markerColor: "blue", name: "L3_data", dataPoints: [
-                        ]
-                    },
-                    {
-                        showInLegend: true, type: "scatter", markerColor: "red", name: "Gpu_memory_data", dataPoints: [
-                        ]
-                    }
-                ]
-            });
-            
-            chart.render();
-            generateDataList(chart);
-        }
-
-        function generateDataList(chart) {
-            var dataContainer = document.getElementById('dataContainer');
-            if (!dataContainer) return;
-        
-            // Add a "Select/Deselect All" checkbox
-            var selectAllCheckbox = document.createElement('input');
-            selectAllCheckbox.type = 'checkbox';
-            selectAllCheckbox.id = 'selectAll';
-            selectAllCheckbox.checked = true; // By default, all checkboxes are checked
-        
-            var selectAllLabel = document.createElement('label');
-            selectAllLabel.htmlFor = 'selectAll';
-            selectAllLabel.innerText = 'Select/Deselect All';
-        
-            var selectAllItem = document.createElement('div');
-            selectAllItem.appendChild(selectAllCheckbox);
-            selectAllItem.appendChild(selectAllLabel);
-            dataContainer.appendChild(selectAllItem);
-        
-            // Event handler for the "Select/Deselect All" checkbox
-            selectAllCheckbox.onchange = function() {
-                var checkboxes = dataContainer.querySelectorAll('input[type="checkbox"]');
-                checkboxes.forEach(function(checkbox) {
-                    if (checkbox.id !== 'selectAll') {
-                        checkbox.checked = selectAllCheckbox.checked;
-                        checkbox.dispatchEvent(new Event('change'));
-                    }
-                });
-            };
-        
-            // Only generate checkboxes for L3_data and Gpu_memory_data
-            for (var i = 0; i < chart.options.data.length; i++) {
-                var dataSeries = chart.options.data[i];
-                if (dataSeries.name === "L3_data" || dataSeries.name === "Gpu_memory_data") {
-                    var section = document.createElement('div');
-                    section.className = 'data-section';
-                    
-                    var title = document.createElement('h3');
-                    title.innerText = dataSeries.name;
-                    section.appendChild(title);
-        
-                    // Sort data points by the custom order tag
-                    var sortedDataPoints = dataSeries.dataPoints.slice().sort(function(a, b) {
-                        return a.order - b.order;
-                    });
-        
-                    // Log the order of data points for debugging
-                    console.log('Order of data points for series:', dataSeries.name);
-                    for (var j = 0; j < sortedDataPoints.length; j++) {
-                        console.log('Data point', j, ':', sortedDataPoints[j]);
-        
-                        var dataPoint = sortedDataPoints[j];
-                        var checkbox = document.createElement('input');
-                        checkbox.type = 'checkbox';
-                        checkbox.checked = true; // By default, all checkboxes are checked
-                        checkbox.id = dataSeries.name + '_' + j;
-        
-                        // Use a closure to capture the current dataPoint
-                        (function(dp) {
-                            checkbox.onchange = function() {
-                                // Update data point visibility
-                                if (this.checked) {
-                                    dp.visible = true;
-                                    dp.y = dp.originalY; // Restore original value
-                                } else {
-                                    dp.visible = false;
-                                    dp.y = null; // Set y to null to hide it
-                                }
-                                
-                                chart.render(); // Render the chart after modification
-                            };
-                        })(dataPoint);
-        
-                        var label = document.createElement('label');
-                        label.htmlFor = checkbox.id;
-                        label.innerText = dataPoint.label;
-        
-                        var listItem = document.createElement('div');
-                        listItem.appendChild(checkbox);
-                        listItem.appendChild(label);
-                        section.appendChild(listItem);
-                    }
-        
-                    dataContainer.appendChild(section);
-                }
-            }
-        }
-
-
-        function toggleDataContainer() {
-            var dataContainer = document.getElementById('dataContainer');
-            var chartContainer = document.getElementById('chartContainer');
-            if (dataContainer.classList.contains("collapsed")) {
-                dataContainer.classList.remove("collapsed"); // Make the container visible
-                dataContainer.style.width = "25%"; // Restore the width
-                chartContainer.style.flexGrow = "1"; // Reduce the chart width
-            } else {
-                dataContainer.classList.add("collapsed"); // Collapse the container
-                dataContainer.style.width = "5%"; // Reduce the container width
-                chartContainer.style.flexGrow = "4"; // Increase the chart width
-            }
-            setTimeout(function() {
-                chart.render(); // Redraw the chart after the transition
-            }, 300); // Wait for the transition to complete
-        }
-    </script>
-</head>
-<body>
-    <div id="container">
-        <div id="chartContainer">
-            <div id="chartContent"></div> <!-- Container for the chart -->
-        </div> 
-        <div id="dataContainer">
-            <button onclick="toggleDataContainer()">Kernel Names</button> <!-- Button to collapse/expand -->
-        </div> 
-    </div>
-</body>
-</html>
-    '''
-
     variable_dict = {
         'FP16': sum(entry.FP16 for entry in entry_list),
         'FP16_XMX': sum(entry.FP16_XMX for entry in entry_list),
@@ -414,59 +194,120 @@ def plot_html_roofline(entry_list, platform, test_case):
         'FP64': sum(entry.FP64 for entry in entry_list),
     }
     precision = max(variable_dict, key=variable_dict.get)
-    html_code = html_code.replace('title: { text: "", fontSize: 50 }',
-                                  'title: { text: "' + test_case + '  ' + precision + '", fontSize: 50 }')
     ai = [0.001 * 2 ** n for n in range(0, int(math.log2(1000000 / 0.001)) + 1)]
-    peak_l3 = [min(x * platform.L3, getattr(platform, precision)) for x in ai]
-    peak_gpu_memory = [min(x * platform.GPU_MEMORY_BW, getattr(platform, precision)) for x in ai]
-    html_peak_l3 = [{'x': x_val, 'y': y_val} for x_val, y_val in zip(ai, peak_l3)]
-    html_peak_gpu_memory = [{'x': x_val, 'y': y_val} for x_val, y_val in zip(ai, peak_gpu_memory)]
-    html_code = add_to_html(html_code, 'L3_ROOF', html_peak_l3)
-    html_code = add_to_html(html_code, 'Gpu_memory_ROOF', html_peak_gpu_memory)
-    l3_roof = []
-    gpu_memory_roof = []
+    peak_flops = float(getattr(platform, precision))
+    roofs = []
+    for bandwidth in (platform.L3, platform.GPU_MEMORY_BW):
+        # The ridge, where the roof turns flat, is a vertex of its own: the samples rarely
+        # hit it, and a straight segment between the two around it cuts below the roof.
+        roof_ai = sorted(set(ai + [peak_flops / bandwidth]))
+        roofs.append((roof_ai, [min(x * bandwidth, peak_flops) for x in roof_ai]))
+
+    l3_points = {'x': [], 'y': [], 'size': [], 'label': []}
+    gpu_memory_points = {'x': [], 'y': [], 'size': [], 'label': []}
     min_pixel = 10
     max_pixel = 100
-    order = 0
-    for index, entry in enumerate(entry_list):
-
+    for entry in entry_list:
         if (entry.kernel_time * 100 / entry.total_gpu_time > 0.001) and getattr(entry, precision) > 0:
-            order += 1
             scale_factor = min(1, math.log(entry.total_gpu_time) / math.log(100))
             size_cercle = min_pixel + (max_pixel - min_pixel) * scale_factor * entry.kernel_time / entry.total_gpu_time
             porcentage_total_time = entry.kernel_time * 100 / entry.total_gpu_time
-            new_l3_point = {
-                "label": str("{:.2f}".format(porcentage_total_time)) + '  % ' + entry.kernel_name,
-                "x": (float(getattr(entry, precision))) / float(entry.L3),
-                "y": (float(getattr(entry, precision))) / float(entry.kernel_time),
-                'markerSize': float(size_cercle),
-                'originalY': (float(getattr(entry, precision))) / float(entry.kernel_time),
-                'order': order
+            label = str("{:.2f}".format(porcentage_total_time)) + '  % ' + entry.kernel_name
+            gflops = float(getattr(entry, precision)) / float(entry.kernel_time)
+            for points, num_bytes in ((l3_points, entry.L3), (gpu_memory_points, entry.gpu_memory)):
+                points['x'].append(float(getattr(entry, precision)) / float(num_bytes))
+                points['y'].append(gflops)
+                points['size'].append(float(size_cercle))
+                points['label'].append(label)
 
-            }
-            new_gpu_memory_point = {
-                "label": str("{:.2f}".format(porcentage_total_time)) + '  % ' + entry.kernel_name,
-                "x": float((getattr(entry, precision))) / float(entry.gpu_memory),
-                "y": float((getattr(entry, precision))) / float(entry.kernel_time),
-                'markerSize': float(size_cercle),
-                'originalY': float((getattr(entry, precision))) / float(entry.kernel_time),
-                'order': order
-            }
-            l3_roof.append(new_l3_point)
-            gpu_memory_roof.append(new_gpu_memory_point)
+    # Bokeh (BSD-3, in requirements.txt) with its JavaScript inlined: the report is one
+    # self-contained file that opens offline and loads nothing from a third-party server.
+    # It keeps the look and interactions of the CanvasJS chart it replaced: no pan or zoom,
+    # a menu to print or save the chart, the legend above the plot (click to hide a series),
+    # and a kernel panel that collapses to widen the chart.
+    # The range fits the dot centres, not their size: a decade of headroom above the highest
+    # point keeps the biggest dots (up to max_pixel wide) inside the plot.
+    top = max([peak_flops] + l3_points['y'] + gpu_memory_points['y'])
+    plot = figure(title=test_case + '  ' + precision, x_axis_type='log', y_axis_type='log',
+                  x_range=(0.001, 100000), y_range=DataRange1d(start=0.1, end=top * 10),
+                  x_axis_label='Arithmetic Intensity (Flop/Byte)', y_axis_label='Performance (GFlop/s)',
+                  tools='', toolbar_location=None, sizing_mode='stretch_both')
+    plot.title.text_font_size = '50px'
+    plot.title.text_font_style = 'normal'
+    plot.title.align = 'center'
+    plot.xgrid.visible = False
+    for axis in (plot.xaxis, plot.yaxis):
+        axis.axis_label_text_font_size = '20px'
+        axis.axis_label_text_font_style = 'normal'
+        axis.major_label_text_font_size = '16px'
+        axis.formatter = NumeralTickFormatter(format='0,0.[000]')  # 1,000 rather than 10^3
+    legend_items = []
+    for (name, color), (roof_ai, peak) in zip((('L3_ROOF', '#4F81BC'), ('Gpu_memory_ROOF', '#C0504E')), roofs):
+        roof = plot.line(roof_ai, peak, color=color, line_width=2)
+        plot.add_tools(HoverTool(renderers=[roof], tooltips='@y{0,0.[00]} GF/s'))
+        legend_items.append(LegendItem(label=name, renderers=[roof]))
 
-    html_code = add_to_html(html_code, 'L3_data', l3_roof)
-    html_code = add_to_html(html_code, 'Gpu_memory_data', gpu_memory_roof)
+    # Wrap long (templated C++) kernel names onto several lines instead of cutting them off.
+    wrap_labels = InlineStyleSheet(css='label { white-space: normal; overflow-wrap: anywhere; align-items: flex-start; }')
+    sections = []
+    groups = []
+    for name, color, points in (('L3_data', 'blue', l3_points), ('Gpu_memory_data', 'red', gpu_memory_points)):
+        all_points = ColumnDataSource(points)
+        shown_points = ColumnDataSource(dict(points))
+        scatter = plot.scatter('x', 'y', size='size', source=shown_points, color=color,
+                               hover_fill_color=color, hover_line_color='black', hover_line_width=2)
+        plot.add_tools(HoverTool(renderers=[scatter], tooltips='@label<br/>@y{0,0.[00]} GF/s'))
+        legend_items.append(LegendItem(label=name, renderers=[scatter]))
+        group = CheckboxGroup(labels=points['label'], active=list(range(len(points['label']))),
+                              sizing_mode='stretch_width', stylesheets=[wrap_labels])
+        # Show only the checked kernels: copy them from the full data into the plotted source.
+        group.js_on_change('active', CustomJS(args=dict(all_points=all_points, shown_points=shown_points), code='''
+            const keep = new Set(cb_obj.active);
+            const data = {};
+            for (const key of Object.keys(all_points.data)) {
+                data[key] = Array.from(all_points.data[key]).filter((_, i) => keep.has(i));
+            }
+            shown_points.data = data;
+        '''))
+        sections += [Div(text='<h3>' + name + '</h3>'), group]
+        groups.append(group)
+    plot.add_layout(Legend(items=legend_items, orientation='horizontal', location='top_left',
+                           click_policy='hide', label_text_font_size='14px', label_text_font_style='bold',
+                           border_line_color=None), 'above')
+
+    menu = Dropdown(label='\u2630', width=50, menu=[('Print', 'print'), ('Save as JPEG', 'jpeg'),
+                                                ('Save as PNG', 'png')])
+    menu.js_on_event('menu_item_click', CustomJS(args=dict(plot=plot, name=test_case), code='''
+        if (this.item === 'print') {
+            window.print();
+            return;
+        }
+        const canvas = Bokeh.index.get_one(plot).export('png').canvas;
+        const link = document.createElement('a');
+        link.href = canvas.toDataURL('image/' + this.item);
+        link.download = name + (this.item === 'jpeg' ? '.jpg' : '.png');
+        link.click();
+    '''))
+    chart = column(row(Spacer(sizing_mode='stretch_width'), menu, sizing_mode='stretch_width'), plot,
+                   sizing_mode='stretch_both')
+
+    select_all = CheckboxGroup(labels=['Select/Deselect All'], active=[0])
+    select_all.js_on_change('active', CustomJS(args=dict(groups=groups), code='''
+        for (const group of groups) {
+            group.active = cb_obj.active.length ? group.labels.map((_, i) => i) : [];
+        }
+    '''))
+    kernel_list = column([select_all] + sections)
+    toggle = Button(label='Kernel Names', width=120)
+    panel = column(toggle, kernel_list, width=350, sizing_mode='stretch_height',
+                   styles={'border': '1px solid #ccc', 'padding': '10px', 'overflow-y': 'auto'})
+    toggle.js_on_event('button_click', CustomJS(args=dict(kernel_list=kernel_list, panel=panel), code='''
+        kernel_list.visible = !kernel_list.visible;
+        panel.width = kernel_list.visible ? 350 : 140;  // collapsed, the chart takes the room
+    '''))
+    layout = row(chart, panel, sizing_mode='stretch_both')
     with open(test_case + ".html", "w+") as file:
-        file.write(html_code)
-
-
-def add_to_html(html_str, sep, data_to_add):
-    start_index = html_str.find(sep) + len(sep)
-    end_index = html_str.find(']', start_index)
-    new_str = ',\n\t\t'.join(map(str, data_to_add))
-    html_str = html_str[:end_index] + new_str + html_str[end_index:]
-    return html_str
+        file.write(file_html(layout, INLINE, title=test_case))
 
 
 def file_to_json(file_name):

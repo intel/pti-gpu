@@ -1425,7 +1425,7 @@ unitrace --g VectorEngine138 -q --chrome-kernel-logging -o <memory-profile> <app
 ```
 The `<device-config>` is required in both usage cases. This file is device specific and can be found in the **device_configs** folder.
 
-The `<output-file>` is in HTML format. It can be loaded and viewd in a browser:
+The `<output-file>` is in HTML format, drawn with Bokeh. The file is self-contained (the charting code is embedded in it), so it can be loaded and viewed in a browser without network access:
 
 ![GPU Roofline and Kernel Summary!](/tools/unitrace/doc/images/roofline.png)
 
@@ -1444,3 +1444,10 @@ It is also recommended to start with device timing (**-d**) and/or host timing (
 Once a kernel is determined to be a performance bottleneck, it is time to figure out why its performance is not optimal. There can be multiple reasons why the kernel is not performant: cache misses, low occupancy, low ALU utilizations, execution unit stalls, etc. You can get answers from metric profiles using **-k"", **-q** or **--stall-sampling** option. In case of execution unit stall analysis, the **--stall-sampling** will give you instruction offsets, source lines and reasons of stalls.
 
 In an interactive, for example Python, session, the **-t** option can be very useful with the kernel queuing, submission and execution data are output immediately after each kernel completes while your session is active.
+
+## License
+
+Unitrace is distributed under the MIT License; see [LICENSE](../../LICENSE).
+The third-party software built into unitrace and its license terms are listed
+in [third-party-programs.txt](third-party-programs.txt). Both files are installed
+to `share/doc/unitrace`.
