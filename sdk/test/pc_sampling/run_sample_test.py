@@ -83,7 +83,51 @@ def run_check(launcher, workload, module=None, expected_output=None, kernel_name
     return check_report(report, kernel_name)
 
 
+def run_exit_check(launcher, workload, exit_mode):
+    with tempfile.TemporaryDirectory() as work_dir:
+        output_path = os.path.join(work_dir, "stalls.txt")
+        completed = subprocess.run(
+            [launcher, "--output", output_path, "--", workload, exit_mode],
+            capture_output=True,
+            text=True,
+            timeout=TIMEOUT_S,
+            check=False,
+        )
+        sys.stdout.write(completed.stdout)
+        sys.stderr.write(completed.stderr)
+        report = ""
+        if os.path.exists(output_path):
+            with open(
+                output_path, "r", encoding="utf-8", errors="replace"
+            ) as report_file:
+                report = report_file.read()
+        skip_reason = environment_skip_reason(
+            completed.stdout + completed.stderr + report
+        )
+        if skip_reason:
+            print(f"PC sampling unavailable on this system ({skip_reason}), skipping")
+            return SKIP_EXIT_CODE
+        if completed.returncode != 0:
+            print(f"FAILED: workload exited with {completed.returncode}")
+            return 1
+        if (
+            "PC sampling report available to application exit handlers"
+            not in completed.stderr
+        ):
+            print(
+                "FAILED: PC sampling report was not ready before application exit handlers"
+            )
+            return 1
+        if "PC Sampling collection stopped successfully" not in report:
+            print("FAILED: exit path produced no PC sampling stop report")
+            return 1
+        print("PASSED: exit path produced a PC sampling report")
+        return 0
+
+
 def main():
+    if len(sys.argv) == 5 and sys.argv[1] == "--exit":
+        return run_exit_check(sys.argv[2], sys.argv[3], sys.argv[4])
     if len(sys.argv) == 4 and sys.argv[1] == "--sycl":
         return run_check(sys.argv[2], sys.argv[3], kernel_name="GEMMKernel")
     if len(sys.argv) == 5 and sys.argv[1] == "--pytorch":

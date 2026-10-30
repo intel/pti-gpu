@@ -33,7 +33,8 @@ endif()
 add_library(pc_sampling_profiler_collector SHARED collector.cc ../pc_sampling/pc_sampling_client.cc)
 target_include_directories(pc_sampling_profiler_collector
                            PRIVATE "${PROJECT_SOURCE_DIR}/../samples_utilities")
-target_link_libraries(pc_sampling_profiler_collector PRIVATE Pti::pti_view ${CMAKE_DL_LIBS})
+target_link_libraries(pc_sampling_profiler_collector
+                      PRIVATE Pti::pti_view Threads::Threads ${CMAKE_DL_LIBS})
 set_target_properties(pc_sampling_profiler_collector PROPERTIES CXX_VISIBILITY_PRESET hidden)
 
 add_executable(pc_sampling_profiler launcher.cc)

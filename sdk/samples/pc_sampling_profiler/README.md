@@ -65,10 +65,10 @@ interposes a single function, glibc's `__libc_start_main`, to wrap the applicati
    initializes Level Zero and enables metrics itself, so
    every module and kernel the application creates afterwards is observed, whichever runtime
    (Level Zero, SYCL, PyTorch) creates it.
-2. After `main` returns, while the GPU runtime is still alive, it stops collection and writes the
-   report: stall reasons, sample totals per device, and aggregated and per-instruction stall
-   counts for every sampled kernel. The report goes to standard error unless `--output` is
-   given; errors always go to standard error.
+2. Before the application’s exit handlers run and while the GPU runtime is still alive, the
+   collector stops collection and writes the report: stall reasons, sample totals per device,
+   and aggregated and per-instruction stall counts for every sampled kernel. The report goes to
+   standard error unless `--output` is given; errors always go to standard error.
 
 No Level Zero or higher-level runtime API is interposed, so the collector works the same with any
 Level Zero loader.
@@ -85,9 +85,9 @@ keeps the launcher's PID.
 - Static and setuid binaries cannot be profiled: the dynamic loader ignores `LD_PRELOAD` for them.
 - The target application must not use the PTI SDK itself. Only one PC sampling handle can exist.
 - Threads of the profiled process share one collection. Children created with `fork()` without
-  `exec()` inherit the parent's collector and GPU runtime state and are not supported.
+  `exec()` inherit the parent's collector and GPU runtime state and are not supported. The
+  collector skips finalization in a forked child to avoid using that inherited state.
 - Other GPU processes running at the same time contend for the EU stall stream.
-- No report is produced when the application does not return from `main`: calling `exit()`
-  (including `std::exit`) or `_exit()`, being interrupted with Ctrl-C, or being killed by a
-  signal.
+- No report is produced when the application uses `_exit()` or `_Exit()`, is interrupted with
+  Ctrl-C, or is killed by a signal. These termination paths bypass exit handlers.
 - The application's exit status does not reflect profiling failures; check standard error.

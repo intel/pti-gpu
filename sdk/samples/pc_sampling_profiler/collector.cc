@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <mutex>
 #include <string>
 
 #include "../pc_sampling/pc_sampling_client.h"
@@ -21,6 +22,8 @@ namespace {
 constexpr uint32_t kDefaultSamplingPeriodNs = 50'000;
 
 bool g_active = false;
+pid_t g_owner_pid = 0;
+std::mutex g_stop_mutex;
 
 std::ofstream g_output_file;
 std::ostream* g_output = &std::cerr;
@@ -60,6 +63,11 @@ bool ClaimCollection() {
 }
 
 void StopCollectionAndReport() {
+  if (getpid() != g_owner_pid) {
+    return;
+  }
+
+  std::lock_guard<std::mutex> lock(g_stop_mutex);
   if (!g_active) {
     return;
   }
@@ -105,6 +113,7 @@ MainFunction g_application_main = nullptr;
 __attribute__((no_sanitize("function")))
 #endif
 int MainWrapper(int argc, char** argv, char** envp) {
+  g_owner_pid = getpid();
   g_active = ClaimCollection() && InitializeCollector();
   const int status = g_application_main(argc, argv, envp);
   StopCollectionAndReport();
@@ -112,6 +121,30 @@ int MainWrapper(int argc, char** argv, char** envp) {
 }
 
 }  // namespace
+
+extern "C" __attribute__((visibility("default"), noreturn)) void exit(int status) noexcept {
+  using ExitFunction = void (*)(int);
+  static auto real_exit = reinterpret_cast<ExitFunction>(dlsym(RTLD_NEXT, "exit"));
+  if (real_exit == nullptr) {
+    std::abort();
+  }
+
+  StopCollectionAndReport();
+  real_exit(status);
+  __builtin_unreachable();
+}
+
+extern "C" __attribute__((visibility("default"), noreturn)) void quick_exit(int status) noexcept {
+  using QuickExitFunction = void (*)(int);
+  static auto real_quick_exit = reinterpret_cast<QuickExitFunction>(dlsym(RTLD_NEXT, "quick_exit"));
+  if (real_quick_exit == nullptr) {
+    std::abort();
+  }
+
+  StopCollectionAndReport();
+  real_quick_exit(status);
+  __builtin_unreachable();
+}
 
 extern "C" __attribute__((visibility("default"))) int __libc_start_main(
     MainFunction main_function, int argc, char** argv, MainFunction init, void (*fini)(void),

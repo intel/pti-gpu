@@ -1177,12 +1177,25 @@ if(PTI_BUILD_SAMPLES AND TARGET pc_sampling_profiler)
   add_test(NAME pc_sampling_profiler-usage COMMAND pc_sampling_profiler --help)
   add_test(NAME pc_sampling_profiler-bad-period
            COMMAND pc_sampling_profiler --period 0 -- /bin/true)
-
   set_tests_properties(
     pc_sampling_profiler-usage PROPERTIES PASS_REGULAR_EXPRESSION "Usage:" LABELS
     "unit;samples")
   set_tests_properties(
     pc_sampling_profiler-bad-period PROPERTIES WILL_FAIL TRUE LABELS "unit;samples")
+
+  add_executable(pc_sampling_profiler_exit_workload pc_sampling/exit_workload.cc)
+  foreach(exit_mode IN ITEMS exit std-exit quick-exit std-quick-exit)
+    add_test(
+      NAME run-pc_sampling_profiler-${exit_mode}
+      COMMAND
+        ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/pc_sampling/run_sample_test.py
+        --exit $<TARGET_FILE:pc_sampling_profiler>
+        $<TARGET_FILE:pc_sampling_profiler_exit_workload> ${exit_mode})
+    set_tests_properties(
+      run-pc_sampling_profiler-${exit_mode}
+      PROPERTIES ${PTI_PC_SAMPLING_TEST_PROPS} SKIP_RETURN_CODE 77 TIMEOUT 120
+                 LABELS "functional;samples;pc-sampling")
+  endforeach()
 endif()
 
 if(PTI_BUILD_SAMPLES AND TARGET pc_sampling_profiler_l0_gemm)
