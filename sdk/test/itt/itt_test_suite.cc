@@ -217,7 +217,9 @@ class IttTest : public ::testing::Test {
     std::vector<pti_view_record_comms> local_records_vector;
     comms_vector_ = &local_records_vector;
 
-    PtiProlog();
+    ASSERT_PTI_SUCCESS(
+        ptiViewSetCallbacks(IttTest::ProvideBuffer, IttTest::BufferCompletedMultiThreaded));
+    ASSERT_EQ(ptiViewEnable(PTI_VIEW_COMMUNICATION), pti_result::PTI_ERROR_COLLECTOR_UNAVAILABLE);
 
     auto domain = __itt_domain_create(kCclDomain.data());
     auto task = __itt_string_handle_create(task_name.data());
@@ -262,6 +264,31 @@ TEST_F(IttTest, ExternalTrivialCollectorDisablesPtiTracing) {
   }
 
   RunExternalTrivialCollectorScenario();
+}
+
+TEST_F(IttTest, UnavailableCollectorRejectsCommunicationView) {
+  if (::utils::GetEnv("PTI_TEST_EXPECT_UNAVAILABLE_ITT_COLLECTOR").empty()) {
+    GTEST_SKIP() << "requires CTest to configure an unavailable ITT collector";
+  }
+
+  std::vector<pti_view_record_comms> local_records_vector;
+  comms_vector_ = &local_records_vector;
+  // The interface has already saved the load-time decision. Changing the
+  // environment before loading the core must not replace that decision.
+  const auto configured_collector = ::utils::GetEnv("INTEL_LIBITTNOTIFY64");
+  const auto pti_collector = ::utils::GetEnv("PTI_TEST_PTI_VIEW_PATH");
+  ASSERT_FALSE(pti_collector.empty());
+  ::utils::SetEnv("INTEL_LIBITTNOTIFY64", pti_collector.c_str());
+  ASSERT_PTI_SUCCESS(
+      ptiViewSetCallbacks(IttTest::ProvideBuffer, IttTest::BufferCompletedMultiThreaded));
+  EXPECT_EQ(ptiViewEnable(PTI_VIEW_COMMUNICATION), pti_result::PTI_ERROR_COLLECTOR_UNAVAILABLE);
+  ::utils::SetEnv("INTEL_LIBITTNOTIFY64", configured_collector.c_str());
+
+  // Failure to enable communication must not prevent other views from working.
+  ASSERT_PTI_SUCCESS(ptiViewEnable(PTI_VIEW_EXTERNAL_CORRELATION));
+  ASSERT_PTI_SUCCESS(ptiViewDisable(PTI_VIEW_EXTERNAL_CORRELATION));
+  PtiEpilog();
+  EXPECT_TRUE(local_records_vector.empty());
 }
 
 TEST_F(IttTest, IttCallsBeforeViewInitAndNonStandardDomain) {

@@ -4,7 +4,17 @@
 # SPDX-License-Identifier: MIT
 # =============================================================
 
-add_executable(itt_lib_env_test itt_lib_env_test.cc)
+add_library(itt_lib_env_external SHARED itt_lib_env_fixture.cc)
+
+# Compile the decision helper without the interface's startup registration.
+add_executable(itt_lib_env_test itt_lib_env_test.cc
+  "${PROJECT_SOURCE_DIR}/src/itt/itt_lib_env.cc")
+
+target_compile_definitions(itt_lib_env_test PRIVATE
+  PTI_TEST_LOADER_EXTERNAL_LIBRARY="$<TARGET_FILE:itt_lib_env_external>")
+# Let the bare fixture name resolve through the loader even before it is loaded.
+set_property(TARGET itt_lib_env_test APPEND PROPERTY BUILD_RPATH
+  "$<TARGET_FILE_DIR:itt_lib_env_external>")
 
 target_include_directories(itt_lib_env_test PUBLIC
   "${PROJECT_SOURCE_DIR}/src"
@@ -18,7 +28,7 @@ target_link_libraries(itt_lib_env_test PUBLIC GTest::gtest_main
                                               ${CMAKE_DL_LIBS}
                                               ${FS_LIB})
 
-add_dependencies(itt_lib_env_test pti_view)
+add_dependencies(itt_lib_env_test pti_view itt_lib_env_external)
 
 # Register each case separately for precise CTest failure reporting.
 gtest_discover_tests(

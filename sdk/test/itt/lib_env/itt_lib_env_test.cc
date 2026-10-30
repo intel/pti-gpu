@@ -7,9 +7,9 @@
 //
 // Tests for the INTEL_LIBITTNOTIFY64 diagnostics in src/itt/itt_lib_env.h.
 //
-// These exercise the decision logic only. The test binary path stands in for
-// libpti_view.so, allowing exact and equivalent path handling to be tested
-// without invoking the ITT runtime.
+// These exercise the decision logic only. Path tests use the test binary as a
+// substitute for libpti_view.so; loader-name tests use real shared modules.
+// No test invokes the ITT runtime.
 //
 // Deliberately a separate binary from itt_test_suite: nothing here needs SYCL,
 // pti_view or Level Zero, and no ITT call is ever made. The decision helper
@@ -21,10 +21,12 @@
 
 #include "itt/itt_lib_env.h"
 
+#include <dlfcn.h>
 #include <gtest/gtest.h>
 #include <unistd.h>
 
 #include <cstdlib>
+#include <memory>
 #include <string>
 #include <system_error>
 
@@ -32,6 +34,8 @@
 #include "utils.h"
 
 namespace {
+
+using ModuleHandle = std::unique_ptr<void, decltype(&::dlclose)>;
 
 class IttLibEnvTest : public ::testing::Test {
  protected:
@@ -142,6 +146,21 @@ TEST_F(IttLibEnvTest, SymlinkToThisModuleComparesEqual) {
   EXPECT_EQ(itt_lib_env::ConfigureIttCollector(self_path_),
             itt_lib_env::IttCollectorConfig::kAlreadyPti)
       << "a symlink to this module must not be reported as a different module";
+}
+
+TEST_F(IttLibEnvTest, UnloadedLibraryNameRemainsUnloaded) {
+  ASSERT_TRUE(pti::utils::filesystem::exists(PTI_TEST_LOADER_EXTERNAL_LIBRARY));
+  const auto name =
+      pti::utils::filesystem::path(PTI_TEST_LOADER_EXTERNAL_LIBRARY).filename().string();
+  ModuleHandle before(::dlopen(name.c_str(), RTLD_LAZY | RTLD_NOLOAD), ::dlclose);
+  ASSERT_EQ(before, nullptr);
+  ::utils::SetEnv(itt_lib_env::kIttLibEnvVarName, name.c_str());
+
+  EXPECT_EQ(itt_lib_env::ConfigureIttCollector(self_path_),
+            itt_lib_env::IttCollectorConfig::kUnresolvedLibraryName);
+  EXPECT_EQ(::utils::GetEnv(itt_lib_env::kIttLibEnvVarName), name);
+  ModuleHandle after(::dlopen(name.c_str(), RTLD_LAZY | RTLD_NOLOAD), ::dlclose);
+  EXPECT_EQ(after, nullptr);
 }
 
 }  // namespace

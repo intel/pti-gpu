@@ -14,6 +14,7 @@
 #include <stack>
 #include <string>
 
+#include "itt_lib_env.h"
 #include "pti_assert.h"
 #include "unikernel.h"
 
@@ -60,6 +61,18 @@ class IttCollector {
   IttCollector& operator=(const IttCollector& copy) = delete;
   IttCollector(IttCollector&&) = delete;
   IttCollector& operator=(IttCollector&&) = delete;
+
+  void SetConfiguration(itt_lib_env::IttCollectorConfig config, const char* selected_collector_path,
+                        const char* pti_module_path) {
+    std::lock_guard<std::mutex> lock(initialization_mutex_);
+    selected_collector_path_ = selected_collector_path != nullptr ? selected_collector_path : "";
+    pti_module_path_ = pti_module_path != nullptr ? pti_module_path : "";
+    config_collector_ = config;
+  }
+
+  // Returns whether the saved load-time configuration permits PTI communication
+  // tracing; logs a warning explaining why it is unavailable.
+  bool IsAvailable() const;
 
   void EnableTrace() {
     SPDLOG_DEBUG("{}(): TID: {}", PTI_FUNCTION_NAME, utils::GetTid());
@@ -134,6 +147,12 @@ class IttCollector {
   explicit IttCollector(OnIttLoggingCallback callback) : record_dispatcher_(callback) {}
 
   // Data
+  // Set once from the interface library; protected by initialization_mutex_.
+  itt_lib_env::IttCollectorConfig config_collector_ =
+      itt_lib_env::IttCollectorConfig::kConfigurationFailed;
+  std::string selected_collector_path_;
+  std::string pti_module_path_;
+
   std::atomic<OnIttLoggingCallback> record_dispatcher_ = nullptr;
   std::atomic<CollectionState> collection_state_{CollectionState::kDisabled};
 };

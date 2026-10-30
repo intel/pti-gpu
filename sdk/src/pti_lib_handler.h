@@ -38,6 +38,7 @@
 #include <ittnotify_config.h>
 
 #include "itt/itt_adapter.h"
+#include "itt/itt_lib_env.h"
 #include "itt/itt_metadata.h"
 
 #endif  // PTI_CCL_ITT_COMPILE
@@ -300,6 +301,8 @@ inline std::unique_ptr<LibraryLoader> LoadCoreLibrary(const std::string& core_li
 void PtiSetXPTIEnvironmentDetails(bool is_foreign_subscriber, bool is_likely_unitrace_subscriber);
 class PtiLibHandler {
 #if defined(PTI_CCL_ITT_COMPILE)
+  using IttCollectorSetConfigurationFn = void(ITTAPI*)(itt_lib_env::IttCollectorConfig, const char*,
+                                                       const char*);
   using IttCollectorSetCclGlobalAndDomainFn = void(ITTAPI*)(__itt_global*, const __itt_domain*);
 #endif  // PTI_CCL_ITT_COMPILE
 
@@ -403,10 +406,11 @@ class PtiLibHandler {
   decltype(&ptiPcSamplingDisable) ptiPcSamplingDisable_ = nullptr;                  // NOLINT
 
 #if defined(PTI_CCL_ITT_COMPILE)
+  IttCollectorSetConfigurationFn IttCollectorSetConfiguration_ = nullptr;            // NOLINT
+  IttCollectorSetCclGlobalAndDomainFn IttCollectorSetCclGlobalAndDomain_ = nullptr;  // NOLINT
   decltype(&__itt_task_begin) itt_task_begin_ = nullptr;                             // NOLINT
   decltype(&__itt_task_end) itt_task_end_ = nullptr;                                 // NOLINT
   decltype(&__itt_metadata_add) itt_metadata_add_ = nullptr;                         // NOLINT
-  IttCollectorSetCclGlobalAndDomainFn IttCollectorSetCclGlobalAndDomain_ = nullptr;  // NOLINT
 #endif  // PTI_CCL_ITT_COMPILE
 
   // Forward to implementation in core library
@@ -527,16 +531,28 @@ class PtiLibHandler {
     PTI_VIEW_GET_ITT_SYMBOL(itt_task_end);
     PTI_VIEW_GET_ITT_SYMBOL(itt_metadata_add);
 
+    IttCollectorSetConfiguration_ =
+        pti_view_lib_->GetSymbol<IttCollectorSetConfigurationFn>("IttCollectorSetConfiguration");
+    // Transfer the load-time decision even if ITT selected another collector
+    // and never called PTI's __itt_api_init.
+    if (IttCollectorSetConfiguration_ != nullptr) {
+      IttCollectorSetConfiguration_(itt_lib_env::GetIttCollectorConfig(),
+                                    itt_lib_env::GetSelectedIttCollectorPath().c_str(),
+                                    itt_lib_env::GetPtiIttCollectorPath().c_str());
+    } else {
+      SPDLOG_WARN("IttCollectorSetConfiguration is not available in the loaded library.");
+    }
+
     IttCollectorSetCclGlobalAndDomain_ =
         pti_view_lib_->GetSymbol<IttCollectorSetCclGlobalAndDomainFn>(
             "IttCollectorSetCclGlobalAndDomain");
 
     SPDLOG_DEBUG("{}() IttCollectorSetCclGlobalAndDomain_: {}", __FUNCTION__,
                  IttCollectorSetCclGlobalAndDomain_ != nullptr ? "available" : "not available");
-    // If __itt_api_init fired before PtiLibHandler was constructed,
-    // seed the collector's ITT Global that CCL domain belongs to and CCL domain now
-    // Both could be nulls, but in that case it is not a problem,
-    // as the collector will be able to set them later when they become available
+    // Pass any oneCCL ITT global and domain already cached by the adapter.
+    // These pointers may be null if oneCCL has not initialized ITT yet.
+    // After this handler is initialized, __itt_api_init forwards any cached
+    // oneCCL pointers to the collector.
     if (IttCollectorSetCclGlobalAndDomain_ != nullptr) {
       auto* g = GetIttGlobalOfCclDomainAdapter();
       auto* domain = GetIttCclDomainAdapter();

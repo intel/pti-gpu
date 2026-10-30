@@ -33,6 +33,46 @@ inline const __itt_domain *GetCacheCclDomainCollector(const __itt_domain *domain
 }
 }  // namespace
 
+ITT_EXTERN_C void ITTAPI IttCollectorSetConfiguration(itt_lib_env::IttCollectorConfig config,
+                                                      const char *selected_collector_path,
+                                                      const char *pti_module_path) {
+  IttCollector::Instance().SetConfiguration(config, selected_collector_path, pti_module_path);
+}
+
+bool IttCollector::IsAvailable() const {
+  std::lock_guard<std::mutex> lock(initialization_mutex_);
+  switch (config_collector_) {
+    case itt_lib_env::IttCollectorConfig::kSetByPti:
+    case itt_lib_env::IttCollectorConfig::kAlreadyPti:
+      return true;
+    case itt_lib_env::IttCollectorConfig::kExternalLibrary:
+      SPDLOG_WARN(
+          "Cannot enable communication tracing: {}='{}' selects another ITT collector; "
+          "PTI collector is '{}'.",
+          itt_lib_env::kIttLibEnvVarName, selected_collector_path_, pti_module_path_);
+      return false;
+    case itt_lib_env::IttCollectorConfig::kExternalNotFound:
+      SPDLOG_WARN(
+          "Cannot enable communication tracing: ITT collector path {}='{}' did not exist; "
+          "PTI collector is '{}'.",
+          itt_lib_env::kIttLibEnvVarName, selected_collector_path_, pti_module_path_);
+      return false;
+    case itt_lib_env::IttCollectorConfig::kUnresolvedLibraryName:
+      SPDLOG_WARN(
+          "Cannot enable communication tracing: ITT collector name {}='{}' could not be "
+          "identified among loaded modules; PTI collector is '{}'.",
+          itt_lib_env::kIttLibEnvVarName, selected_collector_path_, pti_module_path_);
+      return false;
+    case itt_lib_env::IttCollectorConfig::kConfigurationFailed:
+      SPDLOG_WARN(
+          "Cannot enable communication tracing: PTI could not configure its ITT collector "
+          "through {}='{}'; PTI collector is '{}'.",
+          itt_lib_env::kIttLibEnvVarName, selected_collector_path_, pti_module_path_);
+      return false;
+  }
+  // Never reached.
+}
+
 // Static method definitions
 std::string IttCollector::DumpTaskDescriptor() noexcept {
   if (task_desc_.empty()) {

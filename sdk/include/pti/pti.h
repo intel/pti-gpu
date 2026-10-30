@@ -56,6 +56,8 @@ typedef enum {
   PTI_ERROR_BAD_API_ID = 7,               //!< invalid api_id when enable/disable runtime/driver specific api_id
   PTI_ERROR_NO_GPU_VIEWS_ENABLED = 8,     //!< at least one Level Zero GPU view kind must be enabled
                                           //!< (see ptiCallbackSubscribe for the list)
+  PTI_ERROR_COLLECTOR_UNAVAILABLE = 9,  //!< collector required for the requested tracing
+                                         //!< is unavailable
 
   PTI_ERROR_DRIVER = 50,                  //!< unknown driver error
   PTI_ERROR_TRACING_NOT_INITIALIZED = 51,  //!< installed driver requires tracing enabling with

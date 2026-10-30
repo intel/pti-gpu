@@ -575,6 +575,12 @@ ptiViewSetCallbacks(pti_fptr_buffer_requested fptr_bufferRequested,
 /**
  * @brief Enables View of specific group of operations
  *
+ * Communication tracing requires PTI to be selected as the ITT collector when
+ * the PTI interface library loads. If another collector is selected, its path
+ * does not exist, a bare collector name cannot be identified among loaded
+ * modules, or configuration fails, enabling PTI_VIEW_COMMUNICATION returns
+ * PTI_ERROR_COLLECTOR_UNAVAILABLE.
+ *
  * @param view_kind
  * @return pti_result
  */

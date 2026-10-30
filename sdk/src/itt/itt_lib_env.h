@@ -7,12 +7,7 @@
 #ifndef PTI_ITT_ITT_LIB_ENV_H_
 #define PTI_ITT_ITT_LIB_ENV_H_
 
-#include <cstdlib>
 #include <string>
-#include <system_error>
-
-#include "utils/pti_filesystem.h"
-#include "utils/utils.h"
 
 //
 // Helpers around INTEL_LIBITTNOTIFY64, the variable ittnotify uses to pick its
@@ -36,7 +31,14 @@ enum class IttCollectorConfig {
   kExternalLibrary,
   kExternalNotFound,
   kConfigurationFailed,
+  kUnresolvedLibraryName,
 };
+
+// Return the decision and diagnostic paths saved when the PTI interface library
+// loaded. These getters do not load the core or inspect the environment again.
+IttCollectorConfig GetIttCollectorConfig();
+const std::string& GetSelectedIttCollectorPath();
+const std::string& GetPtiIttCollectorPath();
 
 // Point ittnotify at this module unless a collector was already chosen.
 //
@@ -44,46 +46,9 @@ enum class IttCollectorConfig {
 // concurrent environment access. The XPTI initializer has the same constraint.
 //
 // Logs nothing itself; the caller reports the returned value.
-inline IttCollectorConfig ConfigureIttCollector(const std::string& this_module_path) {
-  if (this_module_path.empty()) {
-    return IttCollectorConfig::kConfigurationFailed;
-  }
-
-  const std::string env_value = ::utils::GetEnv(kIttLibEnvVarName);
-
-  if (env_value.empty()) {
-    // Preserve the module actually mapped into this process, but make its path
-    // independent of the working directory inherited by child processes.
-    std::error_code error;
-    const auto absolute_path = pti::utils::AbsolutePath(this_module_path, error);
-    if (error || absolute_path.empty() ||
-        ::setenv(kIttLibEnvVarName, absolute_path.c_str(), 1) != 0) {
-      return IttCollectorConfig::kConfigurationFailed;
-    }
-    return IttCollectorConfig::kSetByPti;
-  }
-
-  std::error_code error;
-  const bool exists = pti::utils::filesystem::exists(env_value, error);
-  if (error) {
-    return IttCollectorConfig::kConfigurationFailed;
-  }
-  if (!exists) {
-    return IttCollectorConfig::kExternalNotFound;
-  }
-
-  // Compare file identity so symlinks and alternate paths to this module match.
-  const bool is_this_module =
-      pti::utils::filesystem::equivalent(env_value, this_module_path, error);
-  if (error) {
-    return IttCollectorConfig::kConfigurationFailed;
-  }
-  if (is_this_module) {
-    return IttCollectorConfig::kAlreadyPti;
-  }
-
-  return IttCollectorConfig::kExternalLibrary;
-}
+// Bare library names are identified only among modules already loaded into the
+// process. A name that cannot be identified is preserved and reported unresolved.
+IttCollectorConfig ConfigureIttCollector(const std::string& this_module_path);
 
 }  // namespace itt_lib_env
 

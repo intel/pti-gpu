@@ -488,6 +488,9 @@ struct PtiViewRecordHandler {
 
 #if defined(PTI_CCL_ITT_COMPILE)
     if (type == pti_view_kind::PTI_VIEW_COMMUNICATION) {
+      if (!IttCollector::Instance().IsAvailable()) {
+        return pti_result::PTI_ERROR_COLLECTOR_UNAVAILABLE;
+      }
       IttCollector::Instance().SetCallback(CommunicationEvent);
       IttCollector::Instance().EnableTrace();
       collection_enabled = true;

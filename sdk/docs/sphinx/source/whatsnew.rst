@@ -5,10 +5,17 @@ What's New
 .. warning::
    **DRAFT DOCUMENTATION** - This documentation is currently in draft status and subject to change.
 
-Version 1.2.0
+Version 1.3.0
 ---------------
 
 *Current release*
+
+**Updates in this release:**
+
+* **Behavior change:** ``ptiViewEnable(PTI_VIEW_COMMUNICATION)`` now returns the new ``PTI_ERROR_COLLECTOR_UNAVAILABLE`` result code and logs a descriptive warning when ``INTEL_LIBITTNOTIFY64`` selects another collector, the configured collector path does not exist, a bare collector name cannot be identified among loaded modules, or collector configuration fails. Previously, enabling the view returned ``PTI_SUCCESS`` even though PTI could not collect communication records. Callers that require successful enablement, including the oneCCL tracing samples, now fail at enablement. API signatures and the ABI are unchanged.
+
+Version 1.2.0
+---------------
 
 **Updates in this release:**
 

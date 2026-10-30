@@ -191,6 +191,7 @@ add_library(Pti::pti_all ALIAS pti_all)
 set(PTI_ITT_COLLECTOR_FILE $<$<PLATFORM_ID:Linux>:${PROJECT_SOURCE_DIR}/src/itt/itt_collector.cc>)
 set(PTI_ITT_STUBS_FILE $<$<PLATFORM_ID:Linux>:${PROJECT_SOURCE_DIR}/src/itt/itt_stubs.cc>)
 set(PTI_ITT_ADAPTER_FILE $<$<PLATFORM_ID:Linux>:${PROJECT_SOURCE_DIR}/src/itt/itt_adapter.cc>)
+set(PTI_ITT_LIB_ENV_FILE $<$<PLATFORM_ID:Linux>:${PROJECT_SOURCE_DIR}/src/itt/itt_lib_env.cc>)
 set(PTI_INTEL_LLVM_EXCLUDE_LIBS
   $<$<AND:$<CXX_COMPILER_ID:IntelLLVM>,$<PLATFORM_ID:Linux>>:-no-intel-lib>
   $<$<AND:$<CXX_COMPILER_ID:IntelLLVM>,$<PLATFORM_ID:Windows>>:/Qno-intel-lib>)
@@ -320,6 +321,7 @@ add_library(pti_view SHARED "${PROJECT_SOURCE_DIR}/src/xpti_adapter.cc"
                             "${PROJECT_SOURCE_DIR}/src/pti_version.cc"
                             "${PROJECT_SOURCE_DIR}/src/pti_view_load.cc"
                             "${PTI_ITT_ADAPTER_FILE}"
+                            "${PTI_ITT_LIB_ENV_FILE}"
                             "${PTI_ITT_STUBS_FILE}")
 
 add_library(Pti::pti_view ALIAS pti_view)

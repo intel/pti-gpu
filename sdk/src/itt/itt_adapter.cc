@@ -22,15 +22,30 @@
 
 namespace {
 
+struct LoadTimeIttConfig {
+  std::string pti_module_path_adapter_;
+  itt_lib_env::IttCollectorConfig config_adapter_ =
+      itt_lib_env::IttCollectorConfig::kConfigurationFailed;
+  std::string configured_collector_path_adapter_;
+};
+
 // Registers this module as ittnotify collector when no collector was supplied
 // externally. It must run before oneCCL makes its first ITT call.
 class GlobalIttInitializer {
  public:
-  static itt_lib_env::IttCollectorConfig Initialize() {
-    return itt_lib_env::ConfigureIttCollector(utils::GetPathToSharedObject(Initialize));
+  static LoadTimeIttConfig Initialize() noexcept {
+    LoadTimeIttConfig result;
+    try {
+      result.pti_module_path_adapter_ = utils::GetPathToSharedObject(Initialize);
+      result.config_adapter_ = itt_lib_env::ConfigureIttCollector(result.pti_module_path_adapter_);
+      result.configured_collector_path_adapter_ = utils::GetEnv(itt_lib_env::kIttLibEnvVarName);
+    } catch (...) {
+      result.config_adapter_ = itt_lib_env::IttCollectorConfig::kConfigurationFailed;
+    }
+    return result;
   }
 
-  inline static const itt_lib_env::IttCollectorConfig config_ = Initialize();
+  inline static const LoadTimeIttConfig configuration_adapter_ = Initialize();
 };
 
 static std::atomic<__itt_global *> g_itt_global_of_ccl_domain{nullptr};
@@ -52,6 +67,18 @@ inline const __itt_domain *GetCacheCclDomainAdapter(const __itt_domain *domain) 
 }
 
 }  // namespace
+
+itt_lib_env::IttCollectorConfig itt_lib_env::GetIttCollectorConfig() {
+  return GlobalIttInitializer::configuration_adapter_.config_adapter_;
+}
+
+const std::string &itt_lib_env::GetSelectedIttCollectorPath() {
+  return GlobalIttInitializer::configuration_adapter_.configured_collector_path_adapter_;
+}
+
+const std::string &itt_lib_env::GetPtiIttCollectorPath() {
+  return GlobalIttInitializer::configuration_adapter_.pti_module_path_adapter_;
+}
 
 __itt_global *GetIttGlobalOfCclDomainAdapter() {
   __itt_global *g = g_itt_global_of_ccl_domain.load(std::memory_order_acquire);
@@ -279,23 +306,19 @@ ITT_EXTERN_C void ITTAPI __itt_api_init(__itt_global *p,
     return;
   }
 
-  switch (GlobalIttInitializer::config_) {
+  switch (itt_lib_env::GetIttCollectorConfig()) {
     case itt_lib_env::IttCollectorConfig::kConfigurationFailed:
       SPDLOG_WARN("{}() Failed to configure {}; PTI oneCCL tracing is disabled", __FUNCTION__,
                   itt_lib_env::kIttLibEnvVarName);
       return;
     case itt_lib_env::IttCollectorConfig::kExternalNotFound:
     case itt_lib_env::IttCollectorConfig::kExternalLibrary:
+    case itt_lib_env::IttCollectorConfig::kUnresolvedLibraryName:
       // ITT normally calls the selected external collector instead of PTI.
       // Return defensively if PTI initializer is invoked directly.
       return;
     case itt_lib_env::IttCollectorConfig::kAlreadyPti:
-      SPDLOG_WARN("{}() {} already points to PTI; PTI oneCCL tracing remains enabled", __FUNCTION__,
-                  itt_lib_env::kIttLibEnvVarName);
-      break;
     case itt_lib_env::IttCollectorConfig::kSetByPti:
-      SPDLOG_WARN("{}() Adapter: {} set by PTI at load time", __FUNCTION__,
-                  itt_lib_env::kIttLibEnvVarName);
       break;
   }
 
