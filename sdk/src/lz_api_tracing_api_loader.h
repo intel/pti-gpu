@@ -52,6 +52,9 @@ class PtiLzTracerLoader {
   decltype(&zeGraphInstantiateExt) zeGraphInstantiateExt_ = nullptr;                      // NOLINT
   decltype(&zetDeviceEnableMetricsExp) zetDeviceEnableMetricsExp_ = nullptr;              // NOLINT
   decltype(&zetDeviceDisableMetricsExp) zetDeviceDisableMetricsExp_ = nullptr;            // NOLINT
+  decltype(&zeCommandListIsImmediate) zeCommandListIsImmediate_ = nullptr;                // NOLINT
+  decltype(&zeCommandListGetFlags) zeCommandListGetFlags_ = nullptr;                      // NOLINT
+  decltype(&zeCommandListImmediateGetFlags) zeCommandListImmediateGetFlags_ = nullptr;    // NOLINT
 
   // Forward to implementation in core library
 #include "tracing_api_dlsym_public.gen"  // Auto-generated callbacks
@@ -84,6 +87,9 @@ class PtiLzTracerLoader {
     LEVEL_ZERO_LOADER_GET_SYMBOL(zeGraphInstantiateExt);
     LEVEL_ZERO_LOADER_GET_SYMBOL(zetDeviceEnableMetricsExp);
     LEVEL_ZERO_LOADER_GET_SYMBOL(zetDeviceDisableMetricsExp);
+    LEVEL_ZERO_LOADER_GET_SYMBOL(zeCommandListIsImmediate);
+    LEVEL_ZERO_LOADER_GET_SYMBOL(zeCommandListGetFlags);
+    LEVEL_ZERO_LOADER_GET_SYMBOL(zeCommandListImmediateGetFlags);
 #undef LEVEL_ZERO_LOADER_GET_SYMBOL
 #define APPEND_COMMAND(X)                                                                    \
   zeCommandListAppend##X##_ = api_dlsyms_lib_->GetSymbol<decltype(&zeCommandListAppend##X)>( \

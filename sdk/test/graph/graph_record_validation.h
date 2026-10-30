@@ -25,7 +25,7 @@ inline void ValidateView(const T* record) {
       << "Failing record: " << FormatRecord(record);
   EXPECT_NE(record->_end_timestamp, (std::numeric_limits<decltype(record->_end_timestamp)>::max)())
       << "Failing record: " << FormatRecord(record);
-  EXPECT_LE(record->_start_timestamp, record->_end_timestamp)
+  EXPECT_LT(record->_start_timestamp, record->_end_timestamp)
       << "Failing record: " << FormatRecord(record);
 }
 

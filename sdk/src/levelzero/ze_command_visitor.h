@@ -13,6 +13,8 @@
 
 #include <exception>
 #include <memory>
+#include <optional>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -22,12 +24,20 @@
 #include "ze_event_managers.h"
 #include "ze_gpu_command.h"
 
+struct ZeCommandListImmutableInfo {
+  bool immediate = false;
+  ze_command_list_flags_t flags = ZE_COMMAND_LIST_FLAG_FORCE_UINT32;
+  ze_command_queue_flags_t immediate_flags = ZE_COMMAND_QUEUE_FLAG_FORCE_UINT32;
+};
+
 class ZeCommandVisitor {
  public:
   using Self = ZeCommandVisitor;
   using Command = std::shared_ptr<ZeKernelCommand>;
   using Commands = std::vector<Command>;
   using Result = std::pair<Commands, ze_result_t>;
+  // Timestamp event & buffer
+  using TimestampInfo = std::pair<ZeEventView<ZeEventPool>, utils::ze::TimestampBuffer>;
 
   ZeCommandVisitor(ZeExts::Visit visitor_extension, ZeEventPoolManager* event_pool_manager);
 
@@ -135,6 +145,8 @@ class ZeCommandVisitor {
   constexpr bool HasError() const { return internal_error_ != ZE_RESULT_SUCCESS; }
 
  private:
+  bool VisitingNativeGraph() const;
+
   Result CollectResultAndReset();
 
   template <pti_api_id_driver_levelzero OverheadId, typename Fn, typename... Args>
@@ -163,8 +175,12 @@ class ZeCommandVisitor {
     return ZE_RESULT_SUCCESS;  // This return value is the return value of the callback, passed to
                                // the driver. Afaik, its unused.
   }
-  std::pair<ZeEventView<ZeEventPool>, utils::ze::TimestampBuffer> AppendQueryTimestamp(
-      ze_command_list_handle_t command_list, ze_event_handle_t event_to_query);
+
+  std::optional<TimestampInfo> AppendQueryTimestamp(ze_command_list_handle_t command_list,
+                                                    ze_event_handle_t event_to_query);
+
+  void AppendSignalEvent(ze_command_list_handle_t command_list, ze_event_handle_t event_to_signal,
+                         ze_event_handle_t wait_event);
 
   ZeExts::Visit visitor_extension_;
   ZeEventPoolManager* event_pool_manager_;
@@ -174,6 +190,7 @@ class ZeCommandVisitor {
   Commands commands_;
   ZeCommandListInfo current_command_list_info_;
   ZeDeviceDescriptor current_device_desc_;
+  std::unordered_map<ze_command_list_handle_t, ZeCommandListImmutableInfo> command_list_info_map_;
 };
 
 #endif  // PTI_LEVELZERO_ZE_COMMAND_VISITOR_H_

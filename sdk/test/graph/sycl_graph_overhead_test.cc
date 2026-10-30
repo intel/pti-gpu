@@ -245,17 +245,43 @@ class PtiCollector {
     const auto expected_kernels = iterations * Workload::kDefaultKernelNumber;
     const auto found_kernels = std::size(record_storage_.kernel_records);
     if (found_kernels != expected_kernels) {
-      fmt::print(stderr, "[FATAL] Expected {} kernel records, got {}\n", expected_kernels,
-                 found_kernels);
-      throw std::runtime_error("Kernel record count mismatch");
+      throw std::runtime_error(fmt::format("Kernel record count mismatch: expected {}, got {}",
+                                           expected_kernels, found_kernels));
     }
-    if (overhead_kind_map_.at(zeEventQueryStatus_id).second >= found_kernels) {
+    // The native graph is done when the event is signaled - no need to check the status of each
+    // event in an N-node graph.
+    if (CallCount(zeEventQueryStatus_id) >= found_kernels) {
       throw std::runtime_error(
           "Too many zeEventQueryStatus calls per graph execution, expected less than 1 per kernel");
+    }
+    // Note: PTI should only call zeCommandListAppendQueryKernelTimestamps
+    // and zeCommandListAppendWaitOnEvents during instrumented graph creation,
+    // so no iteration math required.
+    if (CallCount(zeCommandListAppendQueryKernelTimestamps_id) >= Workload::kDefaultKernelNumber) {
+      // zeCommandListAppendQueryKernelTimestamps is very expensive inside graph creation (and
+      // destruction of instrumented graph). This might be an issue with Level Zero driver, this
+      // call might need to be optimized.
+      // However, in a single, batched execution of a graph, we can have a least one call to
+      // zeCommandListAppendQueryKernelTimestamps - a single call probably won't be devastating and
+      // actually might be preferrable compared to many queries on the host.
+      throw std::runtime_error(
+          "Too many zeCommandListAppendQueryKernelTimestamps calls, expected less than 1 per "
+          "kernel in the graph");
+    }
+    if (CallCount(zeCommandListAppendWaitOnEvents_id) != 0) {
+      // We've requested an in-order queue - so there should not be a need to wait on events (this
+      // is only needed for out-of-order queues when a signal is required in the correct order).
+      // This could fail if native graphs come to PVC SYCL V1 backend.
+      throw std::runtime_error("Unexpected zeCommandListAppendWaitOnEvents calls");
     }
   }
 
  private:
+  std::size_t CallCount(pti_api_id_driver_levelzero api_id) const {
+    const auto call_count_it = overhead_kind_map_.find(api_id);
+    return call_count_it == std::cend(overhead_kind_map_) ? 0 : call_count_it->second.second;
+  }
+
   inline static Records record_storage_{};
   constexpr static std::size_t kRequestedBufferSize = 1024 * 1024;
   std::vector<pti_view_kind> enabled_views_;

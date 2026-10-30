@@ -295,7 +295,8 @@ struct ZeDeviceDescriptor {
   return transfer_properties;
 }
 
-constexpr bool IsInOrder(const ZeCommandListInfo& command_list_info) {
+template <typename T>
+constexpr bool IsInOrder(const T& command_list_info) {
   return command_list_info.immediate
              ? command_list_info.immediate_flags != ZE_COMMAND_QUEUE_FLAG_FORCE_UINT32 &&
                    (command_list_info.immediate_flags & ZE_COMMAND_QUEUE_FLAG_IN_ORDER) != 0

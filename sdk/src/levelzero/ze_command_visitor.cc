@@ -180,6 +180,44 @@ template <KernelCommandType CommandType,
   return command;
 }
 
+template <pti_api_id_driver_levelzero OverheadId, typename T, typename Fn>
+std::optional<T> GetCommandListProperty(Fn func, ze_command_list_handle_t command_list) {
+  if (!func) {
+    return std::nullopt;
+  }
+  overhead::ScopedOverheadCollector scoped(OverheadId);
+  T value{};
+  if (func(command_list, &value) != ZE_RESULT_SUCCESS) {
+    return std::nullopt;
+  }
+  return value;
+}
+
+[[nodiscard]] ZeCommandListImmutableInfo GetCommandListImmutableInfo(
+    ze_command_list_handle_t command_list) {
+  auto& loader = pti::PtiLzTracerLoader::Instance();
+  ZeCommandListImmutableInfo info;
+
+  auto immediate = GetCommandListProperty<zeCommandListIsImmediate_id, ze_bool_t>(
+      loader.zeCommandListIsImmediate_, command_list);
+  if (!immediate) {
+    return info;
+  }
+
+  info.immediate = static_cast<bool>(*immediate);
+  if (info.immediate) {
+    info.immediate_flags =
+        GetCommandListProperty<zeCommandListImmediateGetFlags_id, ze_command_queue_flags_t>(
+            loader.zeCommandListImmediateGetFlags_, command_list)
+            .value_or(ZE_COMMAND_QUEUE_FLAG_FORCE_UINT32);
+  } else {
+    info.flags = GetCommandListProperty<zeCommandListGetFlags_id, ze_command_list_flags_t>(
+                     loader.zeCommandListGetFlags_, command_list)
+                     .value_or(ZE_COMMAND_LIST_FLAG_FORCE_UINT32);
+  }
+  return info;
+}
+
 }  // namespace
 
 ZeCommandVisitor::ZeCommandVisitor(ZeExts::Visit visitor_extension,
@@ -208,31 +246,62 @@ ZeCommandVisitor::Result ZeCommandVisitor::CollectResultAndReset() {
     auto internal_exception = std::exchange(internal_exception_, nullptr);
     std::rethrow_exception(internal_exception);
   }
+  command_list_info_map_.clear();
   return result;
 }
 
-std::pair<ZeEventView<ZeEventPool>, utils::ze::TimestampBuffer>
-ZeCommandVisitor::AppendQueryTimestamp(ze_command_list_handle_t command_list,
-                                       ze_event_handle_t event_to_query) {
+bool ZeCommandVisitor::VisitingNativeGraph() const {
+  return visit_desc_.hReappendTargetCmdList == nullptr;
+}
+
+std::optional<ZeCommandVisitor::TimestampInfo> ZeCommandVisitor::AppendQueryTimestamp(
+    ze_command_list_handle_t command_list, ze_event_handle_t event_to_query) {
+  // Avoid `zeCommandListAppendQueryKernelTimestamps` on native graph workloads.
+  if (VisitingNativeGraph()) {
+    return std::make_pair(ZeEventView<ZeEventPool>{}, utils::ze::TimestampBuffer{nullptr});
+  }
+
   auto buf = utils::ze::MakeTimestampBuffer(current_command_list_info_.context, 1);
   if (!buf) {
     SPDLOG_INFO("Failed to create timestamp buffer");
     internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
-    return {};
+    return std::nullopt;
   }
 
-  ZeEventView<ZeEventPool> timestamp_event{};
-
-  const auto is_native_graph = visit_desc_.hReappendTargetCmdList == nullptr;
-
-  if (!is_native_graph) {
-    timestamp_event = event_pool_manager_->AcquireEvent(current_command_list_info_.context);
-  }
+  auto timestamp_event = event_pool_manager_->AcquireEvent(current_command_list_info_.context);
 
   ZE_COMMAND(this, zeCommandListAppendQueryKernelTimestamps, command_list, 1, &event_to_query,
              buf.get(), nullptr, timestamp_event.Get(), 1, &event_to_query);
 
   return std::make_pair(std::move(timestamp_event), std::move(buf));
+}
+
+void ZeCommandVisitor::AppendSignalEvent(ze_command_list_handle_t command_list,
+                                         ze_event_handle_t event_to_signal,
+                                         ze_event_handle_t wait_event) {
+  if (!event_to_signal) {
+    return;
+  }
+
+  auto command_list_info_it = command_list_info_map_.find(command_list);
+  if (command_list_info_it == std::cend(command_list_info_map_)) {
+    command_list_info_it =
+        command_list_info_map_.emplace(command_list, GetCommandListImmutableInfo(command_list))
+            .first;
+  }
+
+  bool res = false;
+  if (IsInOrder(command_list_info_it->second)) {
+    res = A2AppendSignalEvent(command_list, event_to_signal);
+  } else {
+    res = A2AppendWaitAndSignalEvent(command_list, event_to_signal, wait_event);
+  }
+
+  if (!res) {
+    SPDLOG_INFO("Failed to append wait and signal for event: {}",
+                static_cast<const void*>(event_to_signal));
+    internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
+  }
 }
 
 ZeCommandVisitor::Result ZeCommandVisitor::Visit(
@@ -294,17 +363,10 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernel(
 
     ZE_COMMAND(visitor, zeCommandListAppendLaunchKernel, target_command_list, hKernel,
                pLaunchFuncArgs, event.Get(), numWaitEvents, phWaitEvents);
-    if (hSignalEvent) {
-      auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
-      if (!res) {
-        SPDLOG_INFO("Failed to append wait and signal for event: {}",
-                    static_cast<const void*>(hSignalEvent));
-        visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
-      }
-    }
+    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
 
-    auto [timestamp_event, buf] = visitor->AppendQueryTimestamp(target_command_list, event.Get());
-    if (!buf) {
+    auto timestamp_query = visitor->AppendQueryTimestamp(target_command_list, event.Get());
+    if (!timestamp_query) {
       return;
     }
 
@@ -312,8 +374,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernel(
         hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
     visitor->commands_.back()->event_self = hSignalEvent ? hSignalEvent : event.Get();
     visitor->commands_.back()->event_swap = std::move(event);
-    visitor->commands_.back()->timestamp_query_event = std::move(timestamp_event);
-    visitor->commands_.back()->timestamp = std::move(buf);
+    visitor->commands_.back()->timestamp_query_event = std::move(timestamp_query->first);
+    visitor->commands_.back()->timestamp = std::move(timestamp_query->second);
 
     visitor->commands_.back()->props.name = utils::ze::GetKernelName(hKernel, true);
     visitor->commands_.back()->props.simd_width = utils::ze::GetKernelMaxSubgroupSize(hKernel);
@@ -342,17 +404,10 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernelWi
     ZE_VISITOR_COMMAND(visitor, zeCommandListAppendLaunchKernelWithArguments, target_command_list,
                        hKernel, groupCounts, groupSizes, pArguments, pNext, event.Get(),
                        numWaitEvents, phWaitEvents);
-    if (hSignalEvent) {
-      auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
-      if (!res) {
-        SPDLOG_INFO("Failed to append wait and signal for event: {}",
-                    static_cast<const void*>(hSignalEvent));
-        visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
-      }
-    }
+    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
 
-    auto [timestamp_event, buf] = visitor->AppendQueryTimestamp(target_command_list, event.Get());
-    if (!buf) {
+    auto timestamp_query = visitor->AppendQueryTimestamp(target_command_list, event.Get());
+    if (!timestamp_query) {
       return;
     }
 
@@ -360,8 +415,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernelWi
         hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
     visitor->commands_.back()->event_self = hSignalEvent ? hSignalEvent : event.Get();
     visitor->commands_.back()->event_swap = std::move(event);
-    visitor->commands_.back()->timestamp_query_event = std::move(timestamp_event);
-    visitor->commands_.back()->timestamp = std::move(buf);
+    visitor->commands_.back()->timestamp_query_event = std::move(timestamp_query->first);
+    visitor->commands_.back()->timestamp = std::move(timestamp_query->second);
     visitor->commands_.back()->props.name = utils::ze::GetKernelName(hKernel, true);
     visitor->commands_.back()->props.simd_width = utils::ze::GetKernelMaxSubgroupSize(hKernel);
   });
@@ -382,17 +437,10 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernelWi
 
     ZE_VISITOR_COMMAND(visitor, zeCommandListAppendLaunchKernelWithParameters, target_command_list,
                        hKernel, pGroupCounts, pNext, event.Get(), numWaitEvents, phWaitEvents);
-    if (hSignalEvent) {
-      auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
-      if (!res) {
-        SPDLOG_INFO("Failed to append wait and signal for event: {}",
-                    static_cast<const void*>(hSignalEvent));
-        visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
-      }
-    }
+    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
 
-    auto [timestamp_event, buf] = visitor->AppendQueryTimestamp(target_command_list, event.Get());
-    if (!buf) {
+    auto timestamp_query = visitor->AppendQueryTimestamp(target_command_list, event.Get());
+    if (!timestamp_query) {
       return;
     }
 
@@ -400,8 +448,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernelWi
         hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
     visitor->commands_.back()->event_self = hSignalEvent ? hSignalEvent : event.Get();
     visitor->commands_.back()->event_swap = std::move(event);
-    visitor->commands_.back()->timestamp_query_event = std::move(timestamp_event);
-    visitor->commands_.back()->timestamp = std::move(buf);
+    visitor->commands_.back()->timestamp_query_event = std::move(timestamp_query->first);
+    visitor->commands_.back()->timestamp = std::move(timestamp_query->second);
     visitor->commands_.back()->props.name = utils::ze::GetKernelName(hKernel, true);
     visitor->commands_.back()->props.simd_width = utils::ze::GetKernelMaxSubgroupSize(hKernel);
     if (pGroupCounts != nullptr) {
@@ -427,17 +475,10 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchCooperat
 
     ZE_COMMAND(visitor, zeCommandListAppendLaunchCooperativeKernel, target_command_list, hKernel,
                pLaunchFuncArgs, event.Get(), numWaitEvents, phWaitEvents);
-    if (hSignalEvent) {
-      auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
-      if (!res) {
-        SPDLOG_INFO("Failed to append wait and signal for event: {}",
-                    static_cast<const void*>(hSignalEvent));
-        visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
-      }
-    }
+    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
 
-    auto [timestamp_event, buf] = visitor->AppendQueryTimestamp(target_command_list, event.Get());
-    if (!buf) {
+    auto timestamp_query = visitor->AppendQueryTimestamp(target_command_list, event.Get());
+    if (!timestamp_query) {
       return;
     }
 
@@ -445,8 +486,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchCooperat
         hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
     visitor->commands_.back()->event_self = hSignalEvent ? hSignalEvent : event.Get();
     visitor->commands_.back()->event_swap = std::move(event);
-    visitor->commands_.back()->timestamp_query_event = std::move(timestamp_event);
-    visitor->commands_.back()->timestamp = std::move(buf);
+    visitor->commands_.back()->timestamp_query_event = std::move(timestamp_query->first);
+    visitor->commands_.back()->timestamp = std::move(timestamp_query->second);
     visitor->commands_.back()->props.name = utils::ze::GetKernelName(hKernel, true);
     visitor->commands_.back()->props.simd_width = utils::ze::GetKernelMaxSubgroupSize(hKernel);
     if (pLaunchFuncArgs != nullptr) {
@@ -472,17 +513,10 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernelIn
 
     ZE_COMMAND(visitor, zeCommandListAppendLaunchKernelIndirect, target_command_list, hKernel,
                pLaunchArgumentsBuffer, event.Get(), numWaitEvents, phWaitEvents);
-    if (hSignalEvent) {
-      auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
-      if (!res) {
-        SPDLOG_INFO("Failed to append wait and signal for event: {}",
-                    static_cast<const void*>(hSignalEvent));
-        visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
-      }
-    }
+    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
 
-    auto [timestamp_event, buf] = visitor->AppendQueryTimestamp(target_command_list, event.Get());
-    if (!buf) {
+    auto timestamp_query = visitor->AppendQueryTimestamp(target_command_list, event.Get());
+    if (!timestamp_query) {
       return;
     }
 
@@ -490,8 +524,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernelIn
         hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
     visitor->commands_.back()->event_self = hSignalEvent ? hSignalEvent : event.Get();
     visitor->commands_.back()->event_swap = std::move(event);
-    visitor->commands_.back()->timestamp_query_event = std::move(timestamp_event);
-    visitor->commands_.back()->timestamp = std::move(buf);
+    visitor->commands_.back()->timestamp_query_event = std::move(timestamp_query->first);
+    visitor->commands_.back()->timestamp = std::move(timestamp_query->second);
     visitor->commands_.back()->props.name = utils::ze::GetKernelName(hKernel, true);
     visitor->commands_.back()->props.simd_width = utils::ze::GetKernelMaxSubgroupSize(hKernel);
   });
@@ -512,14 +546,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryCopy(
 
     ZE_COMMAND(visitor, zeCommandListAppendMemoryCopy, target_command_list, dstptr, srcptr, size,
                event.Get(), numWaitEvents, phWaitEvents);
-    if (hSignalEvent) {
-      auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
-      if (!res) {
-        SPDLOG_INFO("Failed to append wait and signal for event: {}",
-                    static_cast<const void*>(hSignalEvent));
-        visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
-      }
-    }
+    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
 
     visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kMemory>(
         hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
@@ -547,14 +574,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryFill(
 
     ZE_COMMAND(visitor, zeCommandListAppendMemoryFill, target_command_list, ptr, pattern,
                pattern_size, size, event.Get(), numWaitEvents, phWaitEvents);
-    if (hSignalEvent) {
-      auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
-      if (!res) {
-        SPDLOG_INFO("Failed to append wait and signal for event: {}",
-                    static_cast<const void*>(hSignalEvent));
-        visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
-      }
-    }
+    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
 
     visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kMemory>(
         hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
@@ -586,14 +606,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryCopyRegi
     ZE_COMMAND(visitor, zeCommandListAppendMemoryCopyRegion, target_command_list, dstptr, dstRegion,
                dstPitch, dstSlicePitch, srcptr, srcRegion, srcPitch, srcSlicePitch, event.Get(),
                numWaitEvents, phWaitEvents);
-    if (hSignalEvent) {
-      auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
-      if (!res) {
-        SPDLOG_INFO("Failed to append wait and signal for event: {}",
-                    static_cast<const void*>(hSignalEvent));
-        visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
-      }
-    }
+    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
 
     visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kMemory>(
         hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
@@ -628,14 +641,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryCopyFrom
 
     ZE_COMMAND(visitor, zeCommandListAppendMemoryCopyFromContext, target_command_list, dstptr,
                hContextSrc, srcptr, size, event.Get(), numWaitEvents, phWaitEvents);
-    if (hSignalEvent) {
-      auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
-      if (!res) {
-        SPDLOG_INFO("Failed to append wait and signal for event: {}",
-                    static_cast<const void*>(hSignalEvent));
-        visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
-      }
-    }
+    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
 
     visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kMemory>(
         hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
@@ -662,14 +668,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopy(
 
     ZE_COMMAND(visitor, zeCommandListAppendImageCopy, target_command_list, hDstImage, hSrcImage,
                event.Get(), numWaitEvents, phWaitEvents);
-    if (hSignalEvent) {
-      auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
-      if (!res) {
-        SPDLOG_INFO("Failed to append wait and signal for event: {}",
-                    static_cast<const void*>(hSignalEvent));
-        visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
-      }
-    }
+    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
 
     visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kMemory>(
         hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
@@ -700,14 +699,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyRegio
 
     ZE_COMMAND(visitor, zeCommandListAppendImageCopyRegion, target_command_list, hDstImage,
                hSrcImage, pDstRegion, pSrcRegion, event.Get(), numWaitEvents, phWaitEvents);
-    if (hSignalEvent) {
-      auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
-      if (!res) {
-        SPDLOG_INFO("Failed to append wait and signal for event: {}",
-                    static_cast<const void*>(hSignalEvent));
-        visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
-      }
-    }
+    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
 
     visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kMemory>(
         hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
@@ -735,14 +727,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyToMem
 
     ZE_COMMAND(visitor, zeCommandListAppendImageCopyToMemory, target_command_list, dstptr,
                hSrcImage, pSrcRegion, event.Get(), numWaitEvents, phWaitEvents);
-    if (hSignalEvent) {
-      auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
-      if (!res) {
-        SPDLOG_INFO("Failed to append wait and signal for event: {}",
-                    static_cast<const void*>(hSignalEvent));
-        visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
-      }
-    }
+    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
 
     visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kMemory>(
         hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
@@ -771,14 +756,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyFromM
 
     ZE_COMMAND(visitor, zeCommandListAppendImageCopyFromMemory, target_command_list, hDstImage,
                srcptr, pDstRegion, event.Get(), numWaitEvents, phWaitEvents);
-    if (hSignalEvent) {
-      auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
-      if (!res) {
-        SPDLOG_INFO("Failed to append wait and signal for event: {}",
-                    static_cast<const void*>(hSignalEvent));
-        visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
-      }
-    }
+    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
 
     visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kMemory>(
         hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
@@ -815,14 +793,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyToMem
     ZE_VISITOR_COMMAND(visitor, zeCommandListAppendImageCopyToMemoryExt, target_command_list,
                        dstptr, hSrcImage, pSrcRegion, destRowPitch, destSlicePitch, event.Get(),
                        numWaitEvents, phWaitEvents);
-    if (hSignalEvent) {
-      auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
-      if (!res) {
-        SPDLOG_INFO("Failed to append wait and signal for event: {}",
-                    static_cast<const void*>(hSignalEvent));
-        visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
-      }
-    }
+    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
 
     visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kMemory>(
         hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
@@ -854,14 +825,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyFromM
     ZE_VISITOR_COMMAND(visitor, zeCommandListAppendImageCopyFromMemoryExt, target_command_list,
                        hDstImage, srcptr, pDstRegion, srcRowPitch, srcSlicePitch, event.Get(),
                        numWaitEvents, phWaitEvents);
-    if (hSignalEvent) {
-      auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
-      if (!res) {
-        SPDLOG_INFO("Failed to append wait and signal for event: {}",
-                    static_cast<const void*>(hSignalEvent));
-        visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
-      }
-    }
+    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
 
     visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kMemory>(
         hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
@@ -908,14 +872,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendBarrier(
 
     ZE_COMMAND(visitor, zeCommandListAppendBarrier, target_command_list, event.Get(), numWaitEvents,
                phWaitEvents);
-    if (hSignalEvent) {
-      auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
-      if (!res) {
-        SPDLOG_INFO("Failed to append wait and signal for event: {}",
-                    static_cast<const void*>(hSignalEvent));
-        visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
-      }
-    }
+    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
 
     visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kCommand>(
         hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
@@ -942,14 +899,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryRangesBa
 
     ZE_COMMAND(visitor, zeCommandListAppendMemoryRangesBarrier, target_command_list, numRanges,
                pRangeSizes, pRanges, event.Get(), numWaitEvents, phWaitEvents);
-    if (hSignalEvent) {
-      auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
-      if (!res) {
-        SPDLOG_INFO("Failed to append wait and signal for event: {}",
-                    static_cast<const void*>(hSignalEvent));
-        visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
-      }
-    }
+    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
 
     visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kCommand>(
         hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
