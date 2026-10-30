@@ -6021,8 +6021,11 @@ typedef struct _zex_kernel_register_file_size_exp_t {
 
       // for stall sampling
       uint64_t base_addr = 0;
-      if (collector->options_.stall_sampling && (ZexKernelGetBaseAddress != nullptr) && (ZexKernelGetBaseAddress(kernel, &base_addr) == ZE_RESULT_SUCCESS)) {
-        base_addr &= 0xFFFFFFFF;
+      if (collector->options_.stall_sampling && (ZexKernelGetBaseAddress != nullptr)) {
+        if (ZexKernelGetBaseAddress(kernel, &base_addr) != ZE_RESULT_SUCCESS) {
+          // Should we warn here?
+          base_addr = 0;
+        }
       }
 
       desc.base_addr_ = base_addr;

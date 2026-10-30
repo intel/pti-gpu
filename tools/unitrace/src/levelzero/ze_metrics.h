@@ -247,6 +247,8 @@ struct ZeDeviceDescriptor {
   std::string metric_file_name_;
   std::ofstream metric_file_stream_;
   bool stall_sampling_;
+  uint32_t stall_sampling_ip_shift;
+  uint64_t stall_sampling_ip_mask;
 };
 
 // ---------------------------------------------------------------------------
@@ -704,6 +706,26 @@ class ZeMetricProfiler {
     EnumerateDevices(app_pid, dir);
   }
 
+  void GetStallSamplingIPMask(uint32_t vendorId, uint32_t ipVersion, uint64_t &mask, uint32_t &shift) {
+    if (vendorId != 0x8086) {
+      mask = UINT64_MAX;
+      shift = 0;
+      return;
+    }
+
+    shift = 3;
+
+    if (ipVersion >= 0x8c2c000) {
+      mask = UINT64_MAX;
+    }
+    else if (ipVersion >= 0x8c28000) {
+      mask = (uint64_t(1) << 48) - 1;
+    }
+    else {
+        mask = UINT32_MAX;
+    }
+  }
+
   void EnumerateDevices(uint32_t app_pid, char *dir) {
 
     std::string metric_group = utils::GetEnv("UNITRACE_MetricGroup");
@@ -749,11 +771,18 @@ class ZeMetricProfiler {
         desc->subdevice_id_ = -1;     // not a subdevice
         desc->num_sub_devices_ = sub_devices.size();
 
-        ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2, };
+        ze_device_ip_version_ext_t ip_version{ZE_STRUCTURE_TYPE_DEVICE_IP_VERSION_EXT, nullptr};
+        ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2, &ip_version};
         ze_result_t status = ZE_FUNC(zeDeviceGetProperties)(device, &props);
         UNITRACE_ASSERT(status == ZE_RESULT_SUCCESS);
         UNITRACE_ASSERT(props.timerResolution != 0);
         UNITRACE_ASSERT(props.kernelTimestampValidBits != 0);
+
+        if (stall_sampling) {
+          GetStallSamplingIPMask(props.vendorId, ip_version.ipVersion,
+			         desc->stall_sampling_ip_mask,
+			         desc->stall_sampling_ip_shift);
+        }
 
         desc->device_timer_frequency_ = props.timerResolution;
         desc->device_timer_mask_ = (props.kernelTimestampValidBits == 64) ? (std::numeric_limits<uint64_t>::max)() : ((1ull << props.kernelTimestampValidBits) - 1ull);
@@ -820,6 +849,8 @@ class ZeMetricProfiler {
           UniMemory::ExitIfOutOfMemory((void *)(sub_desc));
 
           sub_desc->stall_sampling_ = stall_sampling;
+          sub_desc->stall_sampling_ip_mask = desc->stall_sampling_ip_mask;
+          sub_desc->stall_sampling_ip_shift = desc->stall_sampling_ip_shift;
 
           sub_desc->device_ = sub_devices[j];
           sub_desc->device_id_ = global_dev_cnt;           // subdevice
@@ -1267,7 +1298,8 @@ class ZeMetricProfiler {
           uint32_t size = samples[i];
           for (uint32_t j = 0; j + metric_list.size() <= size; j += metric_list.size()) {
             uint64_t ip;
-            ip = (value[j + 0].value.ui64 << 3);
+            ip = (value[j + 0].value.ui64 << device->stall_sampling_ip_shift) &
+                 device->stall_sampling_ip_mask;
             if (ip == 0) {
               continue;
             }
@@ -1341,7 +1373,8 @@ class ZeMetricProfiler {
           // Highest base address first: within a module, kernels do not overlap, so the
           // nearest kernel at or below the IP is the only candidate.
           for (auto it = kernels.rbegin(); it != kernels.rend(); ++it) {
-            const uint64_t base_addr = it->first;
+            // mask the base address to only bits available in ip in metrics result
+            const uint64_t base_addr = (it->first &  device->stall_sampling_ip_mask);
             KernelProps& props = it->second;
 
             if (base_addr > ip) {
