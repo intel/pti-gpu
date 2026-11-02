@@ -1,5 +1,7 @@
 set(PTI_CMAKE_MACRO_DIR ${CMAKE_CURRENT_LIST_DIR}/../.. CACHE INTERNAL "")
 
+include(${PTI_CMAKE_MACRO_DIR}/cmake/dependency_pins.cmake)
+
 macro(RequirePythonInterp)
   if(NOT DEFINED _Python_EXECUTABLE OR NOT TARGET Python::Interpreter)
     find_package(Python COMPONENTS Interpreter REQUIRED)
@@ -60,7 +62,7 @@ macro(FindTracedLibrariesHeaderPaths TARGET L0_GEN_SCRIPT GEN_FILE_NAME custom_t
 
   add_custom_target(${custom_target} ALL
                     DEPENDS ${L0_GEN_INC_PATH}/${GEN_FILE_NAME})
-  string(CONCAT PTI_L0_LOADER_COMMIT_INFO "commit: " ${PTI_L0_LOADER_COMMIT_HASH} " - v" ${PTI_L0_LOADER})
+  string(CONCAT PTI_L0_LOADER_COMMIT_INFO "commit: " ${PTI_LEVELZERO_COMMIT} " - v" ${PTI_LEVELZERO_VERSION})
   add_custom_command(OUTPUT ${L0_GEN_INC_PATH}/${GEN_FILE_NAME}
                      COMMAND "${PYTHON_EXECUTABLE}" ${L0_GEN_SCRIPT}
                      ${L0_GEN_INC_PATH} "${L0_INC_PATH}/level_zero"
@@ -96,20 +98,20 @@ endmacro()
 
 macro(GetSpdlog)
   if(NOT TARGET spdlog::spdlog)
-    find_package(spdlog 1.17.0 QUIET)
+    find_package(spdlog ${PTI_SPDLOG_VERSION} QUIET)
   endif()
 
   if(NOT TARGET spdlog::spdlog)
     include(FetchContent)
     FetchContent_Declare(
       fmt
-      GIT_REPOSITORY https://github.com/fmtlib/fmt
-      GIT_TAG 407c905e45ad75fc29bf0f9bb7c5c2fd3475976f # 12.1.0
+      GIT_REPOSITORY ${PTI_FMT_REPOSITORY}
+      GIT_TAG ${PTI_FMT_COMMIT}
     )
     FetchContent_Declare(
       spdlog
-      GIT_REPOSITORY https://github.com/gabime/spdlog
-      GIT_TAG 79524ddd08a4ec981b7fea76afd08ee05f83755d # v1.17.0
+      GIT_REPOSITORY ${PTI_SPDLOG_REPOSITORY}
+      GIT_TAG ${PTI_SPDLOG_COMMIT}
     )
     set(FMT_SYSTEM_HEADERS
         ON
@@ -194,8 +196,8 @@ macro(GetGTest)
     include(FetchContent)
     FetchContent_Declare(
       googletest
-      GIT_REPOSITORY https://github.com/google/googletest
-      GIT_TAG 52eb8108c5bdec04579160ae17225d66034bd723 # v1.17.0
+      GIT_REPOSITORY ${PTI_GOOGLETEST_REPOSITORY}
+      GIT_TAG ${PTI_GOOGLETEST_COMMIT}
     )
 
     set(INSTALL_GTEST
@@ -236,11 +238,11 @@ macro(CheckSOVersion PROJ_SOVERSION)
   endif()
 endmacro()
 
-macro(GetLevelZero PTI_L0_LOADER PTI_L0_LOADER_COMMIT_HASH)
+macro(GetLevelZero)
   if (NOT TARGET LevelZero::level-zero)
     # Need zelEnableTracingLayer
-    message("-- Fetching L0: ${PTI_L0_LOADER}")
-    string(REPLACE "." ";" LZ_TMP_LIST ${PTI_L0_LOADER})
+    message("-- Fetching L0: ${PTI_LEVELZERO_VERSION}")
+    string(REPLACE "." ";" LZ_TMP_LIST ${PTI_LEVELZERO_VERSION})
     list(GET LZ_TMP_LIST 0 LZ_VER_MAJOR)
     list(GET LZ_TMP_LIST 1 LZ_VER_MINOR)
     list(GET LZ_TMP_LIST 2 LZ_VER_PATCH)
@@ -257,14 +259,13 @@ macro(GetLevelZero PTI_L0_LOADER PTI_L0_LOADER_COMMIT_HASH)
 
     include(FetchContent)
     FetchContent_Declare(
-        LevelZero
-        GIT_REPOSITORY
-        https://github.com/oneapi-src/level-zero.git
-        GIT_TAG ${PTI_L0_LOADER_COMMIT_HASH}
+      LevelZero
+      GIT_REPOSITORY ${PTI_LEVELZERO_REPOSITORY}
+      GIT_TAG ${PTI_LEVELZERO_COMMIT}
     )
     # Prevent content from automatically being installed with PTI
     FetchContent_GetProperties(LevelZero)
-    if(NOT LevelZero_POPULATED)
+    if(NOT levelzero_POPULATED)
         FetchContent_Populate(LevelZero)
         # Add patch to L0 build
         file(WRITE "${levelzero_SOURCE_DIR}/VERSION_PATCH" ${LZ_VER_PATCH})
@@ -315,7 +316,7 @@ macro(GetLevelZero PTI_L0_LOADER PTI_L0_LOADER_COMMIT_HASH)
     # This allows us to keep the normal way to include level zero
     file(GLOB_RECURSE L0_DL_HEADERS
         LIST_DIRECTORIES TRUE
-        "${LZ_BASE_DIR}/levelzero-src/include/*")
+        "${levelzero_SOURCE_DIR}/include/*")
 
     file(COPY ${L0_DL_HEADERS}
         DESTINATION
@@ -353,8 +354,8 @@ macro(get_itt)
     include(FetchContent)
     FetchContent_Declare(
       ittapi
-      GIT_REPOSITORY https://github.com/intel/ittapi.git
-      GIT_TAG 2369c7eb60bbe5db9f0996b0366c68c4c0950100 # v3.26.8
+      GIT_REPOSITORY ${PTI_ITTAPI_REPOSITORY}
+      GIT_TAG ${PTI_ITTAPI_COMMIT}
     )
 
     set(ITT_API_INSTALL OFF CACHE BOOL "ITT is statically linked - avoid install" FORCE)
@@ -416,7 +417,7 @@ macro(AddApiGenTarget L0_GEN_SCRIPT GEN_FILE_NAME L0_TARGET)
   if(TARGET LevelZero::level-zero)
     get_target_property(L0_TARGET_PATH ${L0_TARGET} INTERFACE_INCLUDE_DIRECTORIES)
     include(CMakePrintHelpers)
-    cmake_print_variables(PTI_L0_LOADER PTI_L0_LOADER_COMMIT_HASH L0_TARGET_PATH)
+    cmake_print_variables(PTI_LEVELZERO_VERSION PTI_LEVELZERO_COMMIT L0_TARGET_PATH)
   endif()
 
   # HINTS before PATHS
@@ -443,7 +444,7 @@ macro(AddApiGenTarget L0_GEN_SCRIPT GEN_FILE_NAME L0_TARGET)
     get_target_property(UR_HEADER_PATH unified-runtime::loader INTERFACE_INCLUDE_DIRECTORIES)
   endif()
 
-  string(CONCAT L0_LOADER_INFO "commit: " ${PTI_L0_LOADER_COMMIT_HASH} " - v" ${PTI_L0_LOADER})
+  string(CONCAT L0_LOADER_INFO "commit: " ${PTI_LEVELZERO_COMMIT} " - v" ${PTI_LEVELZERO_VERSION})
   add_custom_target(generate-ids
                     DEPENDS ${L0_GEN_INC_PATH}/${GEN_FILE_NAME}
                     COMMAND "${PYTHON_EXECUTABLE}" ${L0_GEN_SCRIPT}

@@ -157,15 +157,12 @@ if(NOT TARGET Xpti::xpti)
   endif()
 endif()
 
-set(PTI_L0_LOADER 1.32.0)
-set(PTI_L0_LOADER_COMMIT_HASH "d3b3efbdaa27a0aef9a9812cc8fa4260557c1e7c")
-
 if(NOT TARGET LevelZero::level-zero)
-  find_package(LevelZero ${PTI_L0_LOADER})
+  find_package(LevelZero ${PTI_LEVELZERO_VERSION})
 endif()
 
 if(NOT TARGET LevelZero::level-zero)
-  GetLevelZero(${PTI_L0_LOADER} ${PTI_L0_LOADER_COMMIT_HASH})
+  GetLevelZero()
 endif()
 
 GetLevelZeroExtensions()

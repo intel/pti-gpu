@@ -105,15 +105,10 @@ jobs:
           runner-pattern: ${{ vars.PTI_GIT_PROXY_RUNNER_PATTERN }}
 
       - name: Cache third-party dependency sources
-        # Same pattern as unified-oneAPI-drop.yml: on a cache hit the
-        # FetchContent clones (fmt/spdlog/googletest/level-zero/ittapi) never
-        # touch github.com; the key hashes the files that pin the dependency
-        # versions, so any version bump changes the key and refreshes the
-        # cache - the pinned versions cannot go stale.
         uses: actions/cache@v4
         with:
           path: sdk/build-*/_deps
-          key: ${{ runner.os }}-sdk-deps-${{ matrix.uploadname }}-${{ hashFiles('sdk/cmake/Modules/*.cmake', 'sdk/CMakeLists.txt') }}
+          key: ${{ runner.os }}-sdk-deps-${{ matrix.uploadname }}-${{ hashFiles('sdk/cmake/dependency_pins.cmake') }}
 
       - name: Build
         working-directory: sdk
