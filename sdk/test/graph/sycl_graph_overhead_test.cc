@@ -279,7 +279,7 @@ class PtiCollector {
  private:
   std::size_t CallCount(pti_api_id_driver_levelzero api_id) const {
     const auto call_count_it = overhead_kind_map_.find(api_id);
-    return call_count_it == std::cend(overhead_kind_map_) ? 0 : call_count_it->second.second;
+    return call_count_it == overhead_kind_map_.end() ? 0 : call_count_it->second.second;
   }
 
   inline static Records record_storage_{};

@@ -284,7 +284,7 @@ void ZeCommandVisitor::AppendSignalEvent(ze_command_list_handle_t command_list,
   }
 
   auto command_list_info_it = command_list_info_map_.find(command_list);
-  if (command_list_info_it == std::cend(command_list_info_map_)) {
+  if (command_list_info_it == command_list_info_map_.end()) {
     command_list_info_it =
         command_list_info_map_.emplace(command_list, GetCommandListImmutableInfo(command_list))
             .first;
