@@ -2027,11 +2027,23 @@ class ZeMetricProfiler {
     // One save decision per full drain, covering data since the previous drain.
     MetricSamplingWindow sampling_window = UniController::BeginMetricSamplingWindow();
 
+    // Windows MetricsDiscovery returns no values until it sees the counters-programmed report
+    // at the start of the stream, so keep the first drain even while paused.
+    bool keep_stream_start = true;
+    auto should_save = [&sampling_window, &keep_stream_start]() -> bool {
+      bool save = UniController::IsMetricSamplingEnabled(sampling_window);
+#ifdef _WIN32
+      save = save || keep_stream_start;
+#endif
+      keep_stream_start = false;
+      return save;
+    };
+
     desc->profiling_state_.store(PROFILER_ENABLED, std::memory_order_release);
     while (desc->profiling_state_.load(std::memory_order_acquire) != PROFILER_DISABLED) {
       auto size = EventBasedReadMetrics(event, streamer, raw_metrics, MAX_METRIC_BUFFER);
       if (size > 0) {
-        if (!drain_metrics(size, UniController::IsMetricSamplingEnabled(sampling_window))) {
+        if (!drain_metrics(size, should_save())) {
           break;
         }
       }
@@ -2040,7 +2052,7 @@ class ZeMetricProfiler {
     // flush the remaining metrics
     auto size = ReadMetrics(streamer, raw_metrics, MAX_METRIC_BUFFER);
     if (size > 0) {
-      drain_metrics(size, UniController::IsMetricSamplingEnabled(sampling_window));
+      drain_metrics(size, should_save());
     }
     free (raw_metrics);
 
