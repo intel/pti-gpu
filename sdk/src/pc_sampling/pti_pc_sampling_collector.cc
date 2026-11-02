@@ -9,6 +9,7 @@
 #include <spdlog/spdlog.h>
 
 #include <chrono>
+#include <exception>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -17,16 +18,15 @@
 
 namespace pti::pc_sampling {
 
-PtiPcSamplingDataCollector::PtiPcSamplingDataCollector(pti_device_handle_t device,
-                                                       ze_driver_handle_t driver,
-                                                       zet_metric_group_handle_t metric_group,
-                                                       TempRawDataFile& raw_data,
-                                                       bool& samples_dropped)
+PtiPcSamplingDataCollector::PtiPcSamplingDataCollector(
+    pti_device_handle_t device, ze_driver_handle_t driver, zet_metric_group_handle_t metric_group,
+    TempRawDataFile& raw_data, bool& samples_dropped, size_t collection_buffer_size)
     : device_(device),
       driver_(driver),
       metric_group_(metric_group),
       raw_data_(raw_data),
-      samples_dropped_(samples_dropped) {}
+      samples_dropped_(samples_dropped),
+      collection_buffer_size_(collection_buffer_size) {}
 
 pti_result PtiPcSamplingDataCollector::Start(uint32_t sampling_period_ns) {
   constexpr auto kStartTimeout = std::chrono::seconds(5);
@@ -46,6 +46,16 @@ pti_result PtiPcSamplingDataCollector::Start(uint32_t sampling_period_ns) {
 
   samples_dropped_ = false;
   handles_.Reset();
+  SPDLOG_INFO("{}: starting metric streamer with collection buffer size {} bytes", __FUNCTION__,
+              collection_buffer_size_);
+  try {
+    read_buffer_.resize(collection_buffer_size_);
+  } catch (const std::exception& e) {
+    SPDLOG_ERROR("{}: failed to allocate {} byte collection buffer: {}", __FUNCTION__,
+                 collection_buffer_size_, e.what());
+    cleanup_start_failure();
+    return PTI_ERROR_INTERNAL;
+  }
   if (!CreateMetricStreamerContext(driver_, &handles_.context)) {
     cleanup_start_failure();
     return PTI_ERROR_INTERNAL;
@@ -90,12 +100,13 @@ pti_result PtiPcSamplingDataCollector::Stop() {
   // finalizes the handle-owned deferred raw-data spill file.
   thread_.join();
 
-  if (handles_.streamer != nullptr && raw_data_.IsOpen()) {
-    std::vector<uint8_t> local_buffer;
-    ReadMetricStreamerData(handles_.streamer, &local_buffer, &raw_data_, &samples_dropped_);
-  }
+  const bool drain_succeeded =
+      handles_.streamer == nullptr || !raw_data_.IsOpen() ||
+      ReadMetricStreamerData(handles_.streamer, read_buffer_.data(), read_buffer_.size(),
+                             &raw_data_, &samples_dropped_, true);
 
-  if (!raw_data_.Finalize()) {
+  const bool finalize_succeeded = raw_data_.Finalize();
+  if (!finalize_succeeded) {
     SPDLOG_WARN("{}: failed to flush deferred raw data file", __FUNCTION__);
   }
 
@@ -106,6 +117,10 @@ pti_result PtiPcSamplingDataCollector::Stop() {
   handles_.Reset();
   state_.store(State::kStopped, std::memory_order_release);
 
+  if (!drain_succeeded || !finalize_succeeded) {
+    return PTI_ERROR_INTERNAL;
+  }
+
   if (raw_data_.size() == 0) {
     SPDLOG_WARN(
         "{}: no EU stall data received from device {}; likely the profiling window was too short. "
@@ -114,6 +129,10 @@ pti_result PtiPcSamplingDataCollector::Stop() {
     return PTI_WARN_PC_SAMPLING_NO_DATA_COLLECTED;
   }
   return PTI_SUCCESS;
+}
+
+bool PtiPcSamplingDataCollector::IsStopped() const {
+  return state_.load(std::memory_order_acquire) == State::kStopped;
 }
 
 void PtiPcSamplingDataCollector::StreamerThread(uint32_t sampling_period_ns) {
@@ -136,10 +155,10 @@ void PtiPcSamplingDataCollector::StreamerThread(uint32_t sampling_period_ns) {
   state_.store(State::kRunning, std::memory_order_release);
   start_cv_.notify_one();
 
-  std::vector<uint8_t> local_buffer;
   while (state_.load(std::memory_order_acquire) != State::kStopRequested) {
     WaitForMetricStreamerReport(handles_.event, kEventWaitTimeoutNs);
-    ReadMetricStreamerData(handles_.streamer, &local_buffer, &raw_data_, &samples_dropped_);
+    ReadMetricStreamerData(handles_.streamer, read_buffer_.data(), read_buffer_.size(), &raw_data_,
+                           &samples_dropped_, false);
   }
 }
 

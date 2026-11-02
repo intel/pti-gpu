@@ -25,8 +25,25 @@ Configuration Functions
 
 * :ref:`ptiPcSamplingEnable <ptiPcSamplingEnable>` - Create a collection handle
 * :ref:`ptiPcSamplingConfigure <ptiPcSamplingConfigure>` - Configure the device and sampling period (optional)
-* :ref:`ptiPcSamplingQueryCollectionBufferSize <ptiPcSamplingQueryCollectionBufferSize>` - Query recommended buffer size (not implemented yet)
-* :ref:`ptiPcSamplingSetCollectionBufferSize <ptiPcSamplingSetCollectionBufferSize>` - Set collection buffer size (not implemented yet)
+* :ref:`ptiPcSamplingQueryCollectionBufferSize <ptiPcSamplingQueryCollectionBufferSize>` - Query the effective collection buffer size
+* :ref:`ptiPcSamplingSetCollectionBufferSize <ptiPcSamplingSetCollectionBufferSize>` - Set the collection buffer size
+
+Collection buffer size
+----------------------
+
+The collection buffer defaults to 4 KiB. Use ``ptiPcSamplingSetCollectionBufferSize``
+before ``ptiPcSamplingStartCollection`` to set it, and
+``ptiPcSamplingQueryCollectionBufferSize`` to query the effective size in bytes.
+The size must be a multiple of 64 bytes, from 64 bytes through 64 MiB.
+
+The ``PTI_PC_SAMPLING_COLLECTION_BUFFER_SIZE`` environment variable can also set
+the buffer size. Its value must be a decimal size in bytes, a multiple of 64,
+from 64 bytes through 64 MiB.
+A valid value takes precedence over the API setting, and
+``ptiPcSamplingSetCollectionBufferSize`` returns
+``PTI_WARN_PC_SAMPLING_BUFFER_SIZE_OVERRIDDEN_BY_ENV`` when the environment
+variable overrides the requested size. If the variable is unset or invalid, the
+API setting (or the default size) is used.
 
 .. note::
    ``ptiPcSamplingConfigure`` is optional and is only needed to override the defaults. When it is

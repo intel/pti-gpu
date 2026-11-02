@@ -6,8 +6,6 @@
 
 #include "pti/pti_pc_sampling.h"
 
-#include <algorithm>
-
 #include "pc_sampling/pti_pc_sampling_collector.h"
 #include "pc_sampling/pti_pc_sampling_internal.h"
 #include "pti/pti_metrics.h"
@@ -36,12 +34,47 @@ pti_result ptiPcSamplingConfigure(pti_pc_sampling_handle_t handle,
   return pti::pc_sampling::ApplyConfiguration(handle, devices, device_count, sampling_period_ns);
 }
 
-pti_result ptiPcSamplingQueryCollectionBufferSize(pti_pc_sampling_handle_t, size_t*) {
-  return PTI_ERROR_NOT_IMPLEMENTED;
+pti_result ptiPcSamplingQueryCollectionBufferSize(pti_pc_sampling_handle_t handle,
+                                                  size_t* buffer_size) {
+  const pti_result handle_status = pti::pc_sampling::ValidateHandle(handle);
+  if (handle_status != PTI_SUCCESS) {
+    return handle_status;
+  }
+
+  if (buffer_size == nullptr) {
+    SPDLOG_ERROR("{}: buffer_size output pointer is null", __FUNCTION__);
+    return PTI_ERROR_BAD_ARGUMENT;
+  }
+
+  *buffer_size = pti::pc_sampling::GetCollectionBufferSize(handle);
+  return PTI_SUCCESS;
 }
 
-pti_result ptiPcSamplingSetCollectionBufferSize(pti_pc_sampling_handle_t, size_t) {
-  return PTI_ERROR_NOT_IMPLEMENTED;
+pti_result ptiPcSamplingSetCollectionBufferSize(pti_pc_sampling_handle_t handle,
+                                                size_t buffer_size) {
+  const pti_result startable_status = pti::pc_sampling::ValidateStartableHandle(handle);
+  if (startable_status != PTI_SUCCESS) {
+    return startable_status;
+  }
+
+  if (!pti::pc_sampling::IsValidCollectionBufferSize(buffer_size)) {
+    SPDLOG_ERROR("{}: invalid buffer size {}; expected a multiple of {} bytes in [{}, {}]",
+                 __FUNCTION__, buffer_size, pti::pc_sampling::kEuStallSamplingRawReportSize,
+                 pti::pc_sampling::kMinCollectionBufferSize,
+                 pti::pc_sampling::kMaxCollectionBufferSize);
+    return PTI_ERROR_BAD_ARGUMENT;
+  }
+
+  const std::optional<size_t> environment_size =
+      pti::pc_sampling::GetEnvironmentCollectionBufferSize();
+  if (environment_size.has_value()) {
+    SPDLOG_WARN("{}: ignoring requested buffer size {}; {} overrides it with {}", __FUNCTION__,
+                buffer_size, pti::pc_sampling::kCollectionBufferSizeEnv, *environment_size);
+    return PTI_WARN_PC_SAMPLING_BUFFER_SIZE_OVERRIDDEN_BY_ENV;
+  }
+
+  handle->collection_buffer_size_ = buffer_size;
+  return PTI_SUCCESS;
 }
 
 namespace {
@@ -67,9 +100,10 @@ pti_result StartConfiguredCollection(pti_pc_sampling_handle_t handle) {
     return PTI_ERROR_INTERNAL;
   }
 
+  const size_t collection_buffer_size = pti::pc_sampling::GetCollectionBufferSize(handle);
   handle->collector.reset(new (std::nothrow) pti::pc_sampling::PtiPcSamplingDataCollector(
-      profiling_device, driver, metric_group, handle->collected_raw_data_,
-      handle->samples_dropped_));
+      profiling_device, driver, metric_group, handle->collected_raw_data_, handle->samples_dropped_,
+      collection_buffer_size));
   if (handle->collector == nullptr) {
     SPDLOG_ERROR("{}: collector creation returned null", __FUNCTION__);
     return PTI_ERROR_INTERNAL;
@@ -83,6 +117,7 @@ pti_result StartConfiguredCollection(pti_pc_sampling_handle_t handle) {
     return start_status;
   }
 
+  handle->started_collection_buffer_size_ = collection_buffer_size;
   handle->state_ = pti::pc_sampling::PcSamplingState::kStarted;
   return PTI_SUCCESS;
 }
@@ -150,12 +185,11 @@ pti_result ptiPcSamplingStopCollection(pti_pc_sampling_handle_t handle) {
   }
 
   const pti_result stop_status = handle->collector->Stop();
-  if (stop_status != PTI_SUCCESS && stop_status != PTI_WARN_PC_SAMPLING_NO_DATA_COLLECTED) {
-    return stop_status;
+  if (handle->collector->IsStopped()) {
+    handle->collector.reset();
+    handle->state_ = pti::pc_sampling::PcSamplingState::kStopped;
   }
 
-  handle->collector.reset();
-  handle->state_ = pti::pc_sampling::PcSamplingState::kStopped;
   return stop_status;
 }
 

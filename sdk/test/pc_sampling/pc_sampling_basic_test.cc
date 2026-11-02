@@ -72,6 +72,8 @@ TEST(PcSamplingBasicTest, ResultTypeToStringSupportsPcSamplingSpecificErrors) {
                "PTI_ERROR_PC_SAMPLING_CONFIGURATION_FAIL");
   EXPECT_STREQ(ptiResultTypeToString(PTI_WARN_PC_SAMPLING_NO_DATA_COLLECTED),
                "PTI_WARN_PC_SAMPLING_NO_DATA_COLLECTED");
+  EXPECT_STREQ(ptiResultTypeToString(PTI_WARN_PC_SAMPLING_BUFFER_SIZE_OVERRIDDEN_BY_ENV),
+               "PTI_WARN_PC_SAMPLING_BUFFER_SIZE_OVERRIDDEN_BY_ENV");
 }
 
 TEST(PcSamplingBasicTest, PcSamplingStateToStringReturnsCorrectStrings) {

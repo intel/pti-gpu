@@ -22,6 +22,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <charconv>
 #include <cstring>
 #include <iterator>
 #include <limits>
@@ -43,6 +44,7 @@
 #include "pti_pc_sampling_l0.h"
 #include "pti_pc_sampling_raw_data_file.h"
 #include "utils/pti_string_pool.h"
+#include "utils/utils.h"
 
 namespace pti::pc_sampling {
 
@@ -51,6 +53,12 @@ namespace pti::pc_sampling {
 //-----------------------------------------------------------------------------
 
 constexpr uint32_t kDefaultSamplingPeriodNs = 100'000;
+constexpr char kCollectionBufferSizeEnv[] = "PTI_PC_SAMPLING_COLLECTION_BUFFER_SIZE";
+// Level Zero raw reports are 64 bytes, so buffers must contain whole reports.
+constexpr size_t kEuStallSamplingRawReportSize = 64;
+constexpr size_t kDefaultCollectionBufferSize = 4 * 1024;
+constexpr size_t kMinCollectionBufferSize = kEuStallSamplingRawReportSize;
+constexpr size_t kMaxCollectionBufferSize = 64 * 1024 * 1024;
 
 //-----------------------------------------------------------------------------
 // Enumerations
@@ -164,6 +172,11 @@ inline uint64_t NormalizeKernelAddress(uint64_t kernel_address) {
 struct _pti_pc_sampling_handle_t {
   pti::pc_sampling::PcSamplingState state_ = pti::pc_sampling::PcSamplingState::kEnabled;
   uint32_t sampling_period_ns_ = pti::pc_sampling::kDefaultSamplingPeriodNs;
+  // Set through ptiPcSamplingSetCollectionBufferSize; a valid
+  // PTI_PC_SAMPLING_COLLECTION_BUFFER_SIZE environment value takes precedence.
+  size_t collection_buffer_size_ = pti::pc_sampling::kDefaultCollectionBufferSize;
+  // Snapshot of the effective size used by the successfully started collection.
+  std::optional<size_t> started_collection_buffer_size_;
   std::unordered_map<pti_device_handle_t, zet_metric_group_handle_t>
       supported_device_metric_group_map_;
   // Supported devices in Level Zero discovery order (zeDriverGet/zeDeviceGet).
@@ -187,6 +200,43 @@ struct _pti_pc_sampling_handle_t {
 };
 
 namespace pti::pc_sampling {
+
+inline bool IsValidCollectionBufferSize(size_t buffer_size) {
+  return buffer_size >= kMinCollectionBufferSize && buffer_size <= kMaxCollectionBufferSize &&
+         buffer_size % kEuStallSamplingRawReportSize == 0;
+}
+
+inline std::optional<size_t> GetEnvironmentCollectionBufferSize() {
+  const std::string env_value = ::utils::GetEnv(kCollectionBufferSizeEnv);
+  if (env_value.empty()) {
+    return std::nullopt;
+  }
+
+  size_t buffer_size = 0;
+  const char* const end = env_value.data() + env_value.size();
+  const auto [parsed_end, error] = std::from_chars(env_value.data(), end, buffer_size);
+  if (error != std::errc{} || parsed_end != end || !IsValidCollectionBufferSize(buffer_size)) {
+    SPDLOG_WARN("{}: ignoring invalid {} value '{}'; expected a multiple of {} bytes in [{}, {}]",
+                __FUNCTION__, kCollectionBufferSizeEnv, env_value, kEuStallSamplingRawReportSize,
+                kMinCollectionBufferSize, kMaxCollectionBufferSize);
+    return std::nullopt;
+  }
+
+  return buffer_size;
+}
+
+inline size_t GetCollectionBufferSize(const pti_pc_sampling_handle_t handle) {
+  if (handle->started_collection_buffer_size_.has_value()) {
+    return *handle->started_collection_buffer_size_;
+  }
+
+  const std::optional<size_t> environment_size = GetEnvironmentCollectionBufferSize();
+  if (environment_size.has_value()) {
+    SPDLOG_INFO("{}: using environment collection buffer size {}", __FUNCTION__, *environment_size);
+    return *environment_size;
+  }
+  return handle->collection_buffer_size_;
+}
 
 inline void ClearProfiledDeviceData(pti_pc_sampling_handle_t handle) {
   if (handle == nullptr) {

@@ -29,8 +29,8 @@ extern "C" {
  *      Skip it to collect with the default configuration: the first device that supports PC sampling
  *      and the default sampling period of 100000 ns. When used, it must be called before
  *      ptiPcSamplingStartCollection.
- *   3. ptiPcSamplingQueryCollectionBufferSize - not implemented yet (returns PTI_ERROR_NOT_IMPLEMENTED); skip
- *   4. ptiPcSamplingSetCollectionBufferSize - not implemented yet (returns PTI_ERROR_NOT_IMPLEMENTED); skip
+ *   3. Call ptiPcSamplingQueryCollectionBufferSize to query the effective collection buffer size (optional)
+ *   4. Call ptiPcSamplingSetCollectionBufferSize to set the collection buffer size (optional)
  *
  * Collection:
  *   5. Call ptiPcSamplingStartCollection to begin sampling
@@ -172,12 +172,15 @@ ptiPcSamplingConfigure(pti_pc_sampling_handle_t handle,
                        uint32_t sampling_period_ns);
 
 /**
- * @brief Query the recommended PC Sampling collection buffer size
+ * @brief Query the PC Sampling collection buffer size
+ *
+ * Optional call, returns the collection buffer size that will be used for PC Sampling collection.
  *
  * @param[in]  handle          Collection handle
  * @param[out] buffer_size     Pointer to store the collection buffer size in bytes; cannot be NULL
  *
- * @return PTI_ERROR_NOT_IMPLEMENTED
+ * @return PTI_SUCCESS on success
+ * @return PTI_ERROR_BAD_ARGUMENT if handle or buffer_size is NULL
  */
 pti_result PTI_EXPORT
 ptiPcSamplingQueryCollectionBufferSize(pti_pc_sampling_handle_t handle,
@@ -186,10 +189,21 @@ ptiPcSamplingQueryCollectionBufferSize(pti_pc_sampling_handle_t handle,
 /**
  * @brief Set the PC Sampling collection buffer size
  *
- * @param[in] handle          Collection handle
- * @param[in] buffer_size     Collection buffer size in bytes for all configured devices
+ * Sets the size of the reusable host buffer that drains raw metric reports
+ * from the driver. Must be called before ptiPcSamplingStartCollection.
+ * A valid PTI_PC_SAMPLING_COLLECTION_BUFFER_SIZE environment variable takes
+ * precedence; in that case the requested size is ignored.
  *
- * @return PTI_ERROR_NOT_IMPLEMENTED
+ * @param[in] handle          Collection handle
+ * @param[in] buffer_size     Collection buffer size in bytes for all configured devices;
+ *                            must be a positive multiple of 64 bytes, at most 64 MiB
+ *
+ * @return PTI_SUCCESS on success
+ * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL or buffer_size is out of range or not a multiple of 64 bytes
+ * @return PTI_ERROR_PC_SAMPLING_ALREADY_STARTED if collection is running
+ * @return PTI_ERROR_PC_SAMPLING_ALREADY_STOPPED if collection has already been stopped
+ * @return PTI_WARN_PC_SAMPLING_BUFFER_SIZE_OVERRIDDEN_BY_ENV if PTI_PC_SAMPLING_COLLECTION_BUFFER_SIZE
+ *         holds a valid value that overrides buffer_size
  */
 pti_result PTI_EXPORT
 ptiPcSamplingSetCollectionBufferSize(pti_pc_sampling_handle_t handle,

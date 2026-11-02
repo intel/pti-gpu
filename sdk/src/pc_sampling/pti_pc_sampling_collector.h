@@ -15,6 +15,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "pc_sampling/pti_pc_sampling_l0.h"
 #include "pc_sampling/pti_pc_sampling_raw_data_file.h"
@@ -26,7 +27,7 @@ class PtiPcSamplingDataCollector {
  public:
   PtiPcSamplingDataCollector(pti_device_handle_t device, ze_driver_handle_t driver,
                              zet_metric_group_handle_t metric_group, TempRawDataFile& raw_data,
-                             bool& samples_dropped);
+                             bool& samples_dropped, size_t collection_buffer_size);
   ~PtiPcSamplingDataCollector() {
     if (thread_.joinable()) {
       state_.store(State::kStopRequested, std::memory_order_release);
@@ -44,6 +45,7 @@ class PtiPcSamplingDataCollector {
 
   pti_result Start(uint32_t sampling_period_ns);
   pti_result Stop();
+  bool IsStopped() const;
 
  private:
   enum class State : uint32_t {
@@ -70,6 +72,9 @@ class PtiPcSamplingDataCollector {
   MetricStreamerHandles handles_;
   TempRawDataFile& raw_data_;
   bool& samples_dropped_;
+  size_t collection_buffer_size_;
+  // Allocated in Start() so allocation failures are reported before the worker starts.
+  std::vector<uint8_t> read_buffer_;
 };
 
 }  // namespace pti::pc_sampling

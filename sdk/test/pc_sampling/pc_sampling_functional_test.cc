@@ -8,7 +8,12 @@
 //
 // =============================================================
 
+#include <cstdlib>
+#include <limits>
+#include <memory>
 #include <random>
+#include <stdexcept>
+#include <string>
 #include <sycl/sycl.hpp>
 
 #include "pc_sampling_test_fixture.h"
@@ -22,6 +27,60 @@ constexpr uint32_t kSamplingPeriodNs = 10'000;
 
 class PcSamplingCollectionKernel;
 class PcSamplingCollectionKernelAlt;
+
+class ScopedCollectionBufferSizeEnvironment {
+ public:
+  ScopedCollectionBufferSizeEnvironment() {
+#if defined(_WIN32)
+    char* value = nullptr;
+    if (_dupenv_s(&value, nullptr, kName) != 0) {
+      throw std::runtime_error("Failed to read PC sampling collection buffer environment");
+    }
+    std::unique_ptr<char, decltype(&std::free)> value_buffer(value, &std::free);
+    if (value_buffer != nullptr) {
+      saved_value_ = value_buffer.get();
+      was_set_ = true;
+    }
+#else
+    const char* value = std::getenv(kName);
+    if (value != nullptr) {
+      saved_value_ = value;
+      was_set_ = true;
+    }
+#endif
+  }
+
+  ~ScopedCollectionBufferSizeEnvironment() {
+    if (was_set_) {
+      Set(saved_value_.c_str());
+    } else {
+      Unset();
+    }
+  }
+
+  void Set(const char* value) {
+#if defined(_WIN32)
+    _putenv_s(kName, value);
+#else
+    setenv(kName, value, 1);
+#endif
+  }
+
+  void Unset() {
+#if defined(_WIN32)
+    // An empty value removes the variable on Windows.
+    _putenv_s(kName, "");
+#else
+    unsetenv(kName);
+#endif
+  }
+
+ private:
+  static constexpr const char* kName = "PTI_PC_SAMPLING_COLLECTION_BUFFER_SIZE";
+
+  std::string saved_value_;
+  bool was_set_ = false;
+};
 
 // Odd, so repeated multiplication never collapses the value to zero.
 uint32_t RuntimeMultiplier() { return static_cast<uint32_t>(std::random_device{}()) | 1u; }
@@ -162,21 +221,30 @@ TEST_F(PcSamplingTest, QueryApisReturnSpecificLifecycleErrors) {
 //-----------------------------------------------------------------------------
 
 TEST_F(PcSamplingTest, LifecycleSupportsEmptyQueries) {
+  ScopedCollectionBufferSizeEnvironment environment;
+  environment.Unset();
+
   pti_pc_sampling_handle_t handle = nullptr;
   ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
 
   size_t buffer_size = 0;
-  EXPECT_EQ(ptiPcSamplingQueryCollectionBufferSize(handle, &buffer_size),
-            PTI_ERROR_NOT_IMPLEMENTED);
-  EXPECT_EQ(ptiPcSamplingSetCollectionBufferSize(handle, 4096), PTI_ERROR_NOT_IMPLEMENTED);
+  EXPECT_EQ(ptiPcSamplingQueryCollectionBufferSize(handle, nullptr), PTI_ERROR_BAD_ARGUMENT);
+  ASSERT_EQ(ptiPcSamplingQueryCollectionBufferSize(handle, &buffer_size), PTI_SUCCESS);
+  EXPECT_GT(buffer_size, 0u);
+  EXPECT_EQ(ptiPcSamplingSetCollectionBufferSize(handle, buffer_size), PTI_SUCCESS);
 
   size_t device_count = devices_.size() > 0 ? 1 : 0;
   pti_device_handle_t device_handle[1] = {
       (devices_.size() > 0) ? reinterpret_cast<pti_device_handle_t>(devices_[0]) : nullptr};
   ASSERT_EQ(ptiPcSamplingConfigure(handle, device_handle, device_count, 0), PTI_SUCCESS);
+  EXPECT_EQ(ptiPcSamplingSetCollectionBufferSize(handle, buffer_size), PTI_SUCCESS);
   // No kernels profiled, we expect a valid, empty results.
   ASSERT_EQ(ptiPcSamplingStartCollection(handle), PTI_SUCCESS);
+  EXPECT_EQ(ptiPcSamplingSetCollectionBufferSize(handle, buffer_size),
+            PTI_ERROR_PC_SAMPLING_ALREADY_STARTED);
   ASSERT_TRUE(IsStopSuccess(ptiPcSamplingStopCollection(handle)));
+  EXPECT_EQ(ptiPcSamplingSetCollectionBufferSize(handle, buffer_size),
+            PTI_ERROR_PC_SAMPLING_ALREADY_STOPPED);
 
   // After a real collection the stall-reason table is derived from the
   // EuStallSampling metric group and must be non-empty.
@@ -337,6 +405,182 @@ TEST_F(PcSamplingTest, CollectsDataWhenConfigureSkipped) {
   EXPECT_GT(kernel_info._instructions_with_samples_count, 0u);
   EXPECT_TRUE(std::any_of(kernel_aggregated_samples.begin(), kernel_aggregated_samples.end(),
                           [](uint64_t value) { return value != 0; }));
+
+  EXPECT_EQ(ptiPcSamplingDisable(handle), PTI_SUCCESS);
+}
+
+TEST_F(PcSamplingTest, CollectsDataWithEnvironmentConfiguredCollectionBuffer) {
+  sycl::queue queue = sycl::queue(sycl::gpu_selector_v, sycl::property::queue::in_order{});
+
+  ScopedCollectionBufferSizeEnvironment environment;
+  environment.Set("2048");
+
+  pti_pc_sampling_handle_t handle = nullptr;
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
+
+  size_t effective_buffer_size = 0;
+  ASSERT_EQ(ptiPcSamplingQueryCollectionBufferSize(handle, &effective_buffer_size), PTI_SUCCESS);
+  ASSERT_EQ(effective_buffer_size, 2048u);
+  ASSERT_EQ(ptiPcSamplingConfigure(handle, nullptr, 0, 0), PTI_SUCCESS);
+
+  ASSERT_EQ(ptiPcSamplingStartCollection(handle), PTI_SUCCESS);
+  RunLargeKernelWorkload(queue);
+  ASSERT_EQ(ptiPcSamplingStopCollection(handle), PTI_SUCCESS);
+
+  size_t device_count = 0;
+  ASSERT_EQ(ptiPcSamplingGetProfiledDevices(handle, nullptr, &device_count), PTI_SUCCESS);
+  ASSERT_EQ(device_count, 1u);
+  pti_device_handle_t device = nullptr;
+  ASSERT_EQ(ptiPcSamplingGetProfiledDevices(handle, &device, &device_count), PTI_SUCCESS);
+  ASSERT_NE(device, nullptr);
+
+  pti_pc_sampling_device_status_t device_status{};
+  device_status._struct_size = sizeof(device_status);
+  ASSERT_EQ(ptiPcSamplingGetDeviceStatus(handle, device, &device_status), PTI_SUCCESS);
+  EXPECT_GT(device_status._total_sample_count, 0u);
+  EXPECT_GT(device_status._total_pc_count, 0u);
+
+  size_t reason_count = 0;
+  ASSERT_EQ(ptiPcSamplingGetStallReasons(handle, nullptr, &reason_count), PTI_SUCCESS);
+  ASSERT_GT(reason_count, 0u);
+
+  size_t kernel_count = 0;
+  ASSERT_EQ(ptiPcSamplingGetObservedKernelHandles(handle, device, nullptr, &kernel_count),
+            PTI_SUCCESS);
+  ASSERT_EQ(kernel_count, 1u);
+  uint64_t kernel_handle = 0;
+  ASSERT_EQ(ptiPcSamplingGetObservedKernelHandles(handle, device, &kernel_handle, &kernel_count),
+            PTI_SUCCESS);
+
+  pti_pc_sampling_kernel_info_t kernel_info{};
+  kernel_info._struct_size = sizeof(kernel_info);
+  std::vector<uint64_t> aggregated_samples(reason_count, 0);
+  kernel_info._aggregated_samples = aggregated_samples.data();
+  ASSERT_EQ(ptiPcSamplingGetObservedKernelInfo(handle, device, kernel_handle, &kernel_info),
+            PTI_SUCCESS);
+  ASSERT_GT(kernel_info._instructions_with_samples_count, 0u);
+  EXPECT_TRUE(std::any_of(aggregated_samples.begin(), aggregated_samples.end(),
+                          [](uint64_t value) { return value != 0; }));
+
+  std::vector<pti_pc_sampling_instruction_t> instructions(
+      kernel_info._instructions_with_samples_count);
+  std::vector<uint64_t> samples(kernel_info._instructions_with_samples_count * reason_count, 0);
+  ASSERT_EQ(
+      ptiPcSamplingGetSamplesPerInstruction(handle, device, kernel_handle, instructions.data(),
+                                            instructions.size(), samples.data(), samples.size()),
+      PTI_SUCCESS);
+  EXPECT_TRUE(
+      std::any_of(samples.begin(), samples.end(), [](uint64_t value) { return value != 0; }));
+
+  EXPECT_EQ(ptiPcSamplingDisable(handle), PTI_SUCCESS);
+}
+
+TEST_F(PcSamplingTest, CollectsDataWithApiConfiguredCollectionBuffer) {
+  sycl::queue queue = sycl::queue(sycl::gpu_selector_v, sycl::property::queue::in_order{});
+
+  ScopedCollectionBufferSizeEnvironment environment;
+  environment.Unset();
+
+  pti_pc_sampling_handle_t handle = nullptr;
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
+
+  ASSERT_EQ(ptiPcSamplingSetCollectionBufferSize(handle, 2048), PTI_SUCCESS);
+  size_t effective_buffer_size = 0;
+  ASSERT_EQ(ptiPcSamplingQueryCollectionBufferSize(handle, &effective_buffer_size), PTI_SUCCESS);
+  ASSERT_EQ(effective_buffer_size, 2048u);
+
+  ASSERT_EQ(ptiPcSamplingStartCollection(handle), PTI_SUCCESS);
+  environment.Set("1024");
+  ASSERT_EQ(ptiPcSamplingQueryCollectionBufferSize(handle, &effective_buffer_size), PTI_SUCCESS);
+  EXPECT_EQ(effective_buffer_size, 2048u);
+
+  RunLargeKernelWorkload(queue);
+  ASSERT_EQ(ptiPcSamplingStopCollection(handle), PTI_SUCCESS);
+  ASSERT_EQ(ptiPcSamplingQueryCollectionBufferSize(handle, &effective_buffer_size), PTI_SUCCESS);
+  EXPECT_EQ(effective_buffer_size, 2048u);
+
+  size_t device_count = 0;
+  ASSERT_EQ(ptiPcSamplingGetProfiledDevices(handle, nullptr, &device_count), PTI_SUCCESS);
+  ASSERT_EQ(device_count, 1u);
+  pti_device_handle_t device = nullptr;
+  ASSERT_EQ(ptiPcSamplingGetProfiledDevices(handle, &device, &device_count), PTI_SUCCESS);
+  ASSERT_NE(device, nullptr);
+
+  pti_pc_sampling_device_status_t device_status{};
+  device_status._struct_size = sizeof(device_status);
+  ASSERT_EQ(ptiPcSamplingGetDeviceStatus(handle, device, &device_status), PTI_SUCCESS);
+  EXPECT_GT(device_status._total_sample_count, 0u);
+  EXPECT_GT(device_status._total_pc_count, 0u);
+
+  EXPECT_EQ(ptiPcSamplingDisable(handle), PTI_SUCCESS);
+}
+
+TEST_F(PcSamplingTest, CollectionBufferEnvironmentControlsEffectiveSize) {
+  ScopedCollectionBufferSizeEnvironment environment;
+  environment.Unset();
+
+  pti_pc_sampling_handle_t handle = nullptr;
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
+
+  size_t buffer_size = 0;
+  ASSERT_EQ(ptiPcSamplingQueryCollectionBufferSize(handle, &buffer_size), PTI_SUCCESS);
+  const size_t default_buffer_size = buffer_size;
+  ASSERT_GT(default_buffer_size, 0u);
+
+  // Invalid sizes are rejected and leave the effective size unchanged.
+  EXPECT_EQ(ptiPcSamplingSetCollectionBufferSize(nullptr, 2048), PTI_ERROR_BAD_ARGUMENT);
+  EXPECT_EQ(ptiPcSamplingSetCollectionBufferSize(handle, 0), PTI_ERROR_BAD_ARGUMENT);
+  EXPECT_EQ(ptiPcSamplingSetCollectionBufferSize(handle, 63), PTI_ERROR_BAD_ARGUMENT);
+  EXPECT_EQ(ptiPcSamplingSetCollectionBufferSize(handle, 65), PTI_ERROR_BAD_ARGUMENT);
+  EXPECT_EQ(ptiPcSamplingSetCollectionBufferSize(handle, 1025), PTI_ERROR_BAD_ARGUMENT);
+  EXPECT_EQ(ptiPcSamplingSetCollectionBufferSize(handle, 64 * 1024 * 1024 + 64),
+            PTI_ERROR_BAD_ARGUMENT);
+  EXPECT_EQ(ptiPcSamplingSetCollectionBufferSize(handle, (std::numeric_limits<size_t>::max)() - 63),
+            PTI_ERROR_BAD_ARGUMENT);
+  ASSERT_EQ(ptiPcSamplingQueryCollectionBufferSize(handle, &buffer_size), PTI_SUCCESS);
+  EXPECT_EQ(buffer_size, default_buffer_size);
+
+  // Without the environment variable, the API sets the effective size.
+  ASSERT_EQ(ptiPcSamplingSetCollectionBufferSize(handle, 2048), PTI_SUCCESS);
+  ASSERT_EQ(ptiPcSamplingQueryCollectionBufferSize(handle, &buffer_size), PTI_SUCCESS);
+  EXPECT_EQ(buffer_size, 2048u);
+
+  // A valid environment value overrides the API value.
+  environment.Set("1024");
+  ASSERT_EQ(ptiPcSamplingQueryCollectionBufferSize(handle, &buffer_size), PTI_SUCCESS);
+  EXPECT_EQ(buffer_size, 1024u);
+
+  ASSERT_EQ(ptiPcSamplingSetCollectionBufferSize(handle, 4096),
+            PTI_WARN_PC_SAMPLING_BUFFER_SIZE_OVERRIDDEN_BY_ENV);
+  ASSERT_EQ(ptiPcSamplingQueryCollectionBufferSize(handle, &buffer_size), PTI_SUCCESS);
+  EXPECT_EQ(buffer_size, 1024u);
+
+  environment.Set("67108864");
+  ASSERT_EQ(ptiPcSamplingQueryCollectionBufferSize(handle, &buffer_size), PTI_SUCCESS);
+  EXPECT_EQ(buffer_size, 64u * 1024 * 1024);
+
+  environment.Set("64");
+  ASSERT_EQ(ptiPcSamplingQueryCollectionBufferSize(handle, &buffer_size), PTI_SUCCESS);
+  EXPECT_EQ(buffer_size, 64u);
+
+  // Invalid environment values are ignored in favor of the API value.
+  for (const char* invalid_value :
+       {"", "0", "63", "1025", "67108928", "-1", " -64", "+1024", " 1024", "1024 ", "1k",
+        "18446744073709551552", "99999999999999999999999"}) {
+    SCOPED_TRACE(invalid_value);
+    environment.Set(invalid_value);
+    ASSERT_EQ(ptiPcSamplingQueryCollectionBufferSize(handle, &buffer_size), PTI_SUCCESS);
+    EXPECT_EQ(buffer_size, 2048u);
+  }
+
+  ASSERT_EQ(ptiPcSamplingSetCollectionBufferSize(handle, 8192), PTI_SUCCESS);
+  environment.Unset();
+  ASSERT_EQ(ptiPcSamplingQueryCollectionBufferSize(handle, &buffer_size), PTI_SUCCESS);
+  EXPECT_EQ(buffer_size, 8192u);
+
+  ASSERT_EQ(ptiPcSamplingSetCollectionBufferSize(handle, 64), PTI_SUCCESS);
+  ASSERT_EQ(ptiPcSamplingQueryCollectionBufferSize(handle, &buffer_size), PTI_SUCCESS);
+  EXPECT_EQ(buffer_size, 64u);
 
   EXPECT_EQ(ptiPcSamplingDisable(handle), PTI_SUCCESS);
 }
@@ -530,8 +774,12 @@ TEST_F(PcSamplingTest, AggregatesPerKernelAndPerInstructionData) {
 TEST_F(PcSamplingTest, DistinctKernelsEachExposeStallReasonData) {
   sycl::queue queue = sycl::queue(sycl::gpu_selector_v, sycl::property::queue::in_order{});
 
+  ScopedCollectionBufferSizeEnvironment environment;
+  environment.Unset();
+
   pti_pc_sampling_handle_t handle = nullptr;
   ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
+  ASSERT_EQ(ptiPcSamplingSetCollectionBufferSize(handle, 1024 * 1024), PTI_SUCCESS);
   ASSERT_EQ(ptiPcSamplingConfigure(handle, nullptr, 0, kSamplingPeriodNs), PTI_SUCCESS);
 
   ASSERT_EQ(ptiPcSamplingStartCollection(handle), PTI_SUCCESS);

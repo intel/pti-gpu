@@ -13,6 +13,7 @@ Version 1.3.0
 **Updates in this release:**
 
 * **Behavior change:** ``ptiViewEnable(PTI_VIEW_COMMUNICATION)`` now returns the new ``PTI_ERROR_COLLECTOR_UNAVAILABLE`` result code and logs a descriptive warning when ``INTEL_LIBITTNOTIFY64`` selects another collector, the configured collector path does not exist, a bare collector name cannot be identified among loaded modules, or collector configuration fails. Previously, enabling the view returned ``PTI_SUCCESS`` even though PTI could not collect communication records. Callers that require successful enablement, including the oneCCL tracing samples, now fail at enablement. API signatures and the ABI are unchanged.
+* Implement ``ptiPcSamplingQueryCollectionBufferSize`` and ``ptiPcSamplingSetCollectionBufferSize`` to query and configure the PC Sampling collection buffer. Sizes must be multiples of 64 bytes from 64 bytes through 64 MiB. The ``PTI_PC_SAMPLING_COLLECTION_BUFFER_SIZE`` environment variable overrides the API setting when valid; in that case, the setter returns ``PTI_WARN_PC_SAMPLING_BUFFER_SIZE_OVERRIDDEN_BY_ENV``.
 
 Version 1.2.0
 ---------------

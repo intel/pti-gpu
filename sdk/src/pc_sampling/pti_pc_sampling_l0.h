@@ -323,51 +323,65 @@ inline void WaitForMetricStreamerReport(ze_event_handle_t event, uint64_t timeou
   }
 }
 
-inline void ReadMetricStreamerData(zet_metric_streamer_handle_t streamer,
-                                   std::vector<uint8_t>* local_buffer,
-                                   TempRawDataFile* raw_data_file, bool* samples_dropped) {
-  constexpr size_t kMinMetricStreamerReadSize = 4 * 1024;
+constexpr size_t kMaxMetricStreamerReadsPerWorkerDrain = 64;
 
-  if (streamer == nullptr || local_buffer == nullptr || raw_data_file == nullptr ||
+inline bool ReadMetricStreamerData(zet_metric_streamer_handle_t streamer, uint8_t* buffer,
+                                   size_t buffer_size, TempRawDataFile* raw_data_file,
+                                   bool* samples_dropped, bool final_drain) {
+  if (streamer == nullptr || buffer == nullptr || buffer_size == 0 || raw_data_file == nullptr ||
       samples_dropped == nullptr || !raw_data_file->IsOpen()) {
-    return;
+    return false;
   }
 
-  size_t data_size = 0;
-  ze_result_t status = zetMetricStreamerReadData(streamer, UINT32_MAX, &data_size, nullptr);
-  SPDLOG_DEBUG("{}: size query returned {} bytes with status=0x{:x}", __FUNCTION__, data_size,
-               static_cast<uint32_t>(status));
-  if (status == ZE_RESULT_WARNING_DROPPED_DATA) {
+  size_t read_count = 0;
+  while (read_count < kMaxMetricStreamerReadsPerWorkerDrain) {
+    size_t data_size = buffer_size;
+    ze_result_t status = zetMetricStreamerReadData(streamer, UINT32_MAX, &data_size, buffer);
+    ++read_count;
+    SPDLOG_DEBUG("{}: data read returned {} bytes with status=0x{:x}", __FUNCTION__, data_size,
+                 static_cast<uint32_t>(status));
+    if (status == ZE_RESULT_WARNING_DROPPED_DATA) {
+      *samples_dropped = true;
+    } else if (status != ZE_RESULT_SUCCESS) {
+      *samples_dropped = true;
+      SPDLOG_WARN("{}: data read failed with status=0x{:x}", __FUNCTION__,
+                  static_cast<uint32_t>(status));
+      return false;
+    }
+
+    if (data_size > buffer_size) {
+      *samples_dropped = true;
+      SPDLOG_ERROR("{}: metric streamer returned {} bytes for a {} byte buffer", __FUNCTION__,
+                   data_size, buffer_size);
+      return false;
+    }
+
+    if (data_size == 0) {
+      return true;
+    }
+
+    if (!raw_data_file->Append(buffer, data_size)) {
+      *samples_dropped = true;
+      SPDLOG_WARN("{}: failed to spill {} bytes of raw metric data", __FUNCTION__, data_size);
+      return false;
+    }
+
+    SPDLOG_DEBUG("{}: accumulated raw data size is {} bytes", __FUNCTION__, raw_data_file->size());
+
+    if (data_size < buffer_size) {
+      return true;
+    }
+  }
+
+  if (final_drain) {
     *samples_dropped = true;
-  } else if (status != ZE_RESULT_SUCCESS) {
-    SPDLOG_WARN("{}: size query failed with status=0x{:x}", __FUNCTION__,
-                static_cast<uint32_t>(status));
-    return;
+    SPDLOG_WARN(
+        "{}: stopped final metric streamer drain after {} full reads; additional samples "
+        "may have been dropped",
+        __FUNCTION__, read_count);
   }
 
-  if (data_size == 0) {
-    return;
-  }
-
-  local_buffer->resize((std::max)(data_size, kMinMetricStreamerReadSize));
-  data_size = local_buffer->size();
-  status = zetMetricStreamerReadData(streamer, UINT32_MAX, &data_size, local_buffer->data());
-  SPDLOG_DEBUG("{}: data read returned {} bytes with status=0x{:x}", __FUNCTION__, data_size,
-               static_cast<uint32_t>(status));
-  if (status == ZE_RESULT_WARNING_DROPPED_DATA) {
-    *samples_dropped = true;
-  } else if (status != ZE_RESULT_SUCCESS) {
-    SPDLOG_WARN("{}: data read failed with status=0x{:x}", __FUNCTION__,
-                static_cast<uint32_t>(status));
-    return;
-  }
-
-  if (!raw_data_file->Append(local_buffer->data(), data_size)) {
-    SPDLOG_WARN("{}: failed to spill {} bytes of raw metric data", __FUNCTION__, data_size);
-    return;
-  }
-
-  SPDLOG_DEBUG("{}: accumulated raw data size is {} bytes", __FUNCTION__, raw_data_file->size());
+  return true;
 }
 
 /**
