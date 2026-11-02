@@ -138,6 +138,48 @@ pti_result ConfigurePcSampling(const pti_device_handle_t* devices, size_t device
   return PTI_SUCCESS;
 }
 
+pti_result SetPcSamplingCollectionBufferSize(size_t buffer_size, std::ostream& output) {
+  if (!g_pc_sampling_handle) {
+    std::cerr << "PC sampling handle is null. Call EnablePcSampling() first." << std::endl;
+    return PTI_ERROR_BAD_ARGUMENT;
+  }
+
+  const pti_result status = ptiPcSamplingSetCollectionBufferSize(g_pc_sampling_handle, buffer_size);
+  if (status == PTI_WARN_PC_SAMPLING_BUFFER_SIZE_OVERRIDDEN_BY_ENV) {
+    output << "Requested collection buffer size " << buffer_size
+           << " bytes is overridden by PTI_PC_SAMPLING_COLLECTION_BUFFER_SIZE" << std::endl;
+    return PTI_SUCCESS;
+  }
+  if (status != PTI_SUCCESS) {
+    std::cerr << "Failed to set PC sampling collection buffer size: "
+              << ptiResultTypeToString(status) << " (" << static_cast<int>(status) << ")"
+              << std::endl;
+    return status;
+  }
+  return PTI_SUCCESS;
+}
+
+bool PrintPcSamplingCollectionBufferSize(std::ostream& output) {
+  if (!g_pc_sampling_handle) {
+    std::cerr << "PC sampling handle is null. Call EnablePcSampling() first." << std::endl;
+    return false;
+  }
+
+  size_t effective_collection_buffer_size = 0;
+  const pti_result status = ptiPcSamplingQueryCollectionBufferSize(
+      g_pc_sampling_handle, &effective_collection_buffer_size);
+  if (status != PTI_SUCCESS) {
+    std::cerr << "Failed to query PC sampling collection buffer size: "
+              << ptiResultTypeToString(status) << " (" << static_cast<int>(status) << ")"
+              << std::endl;
+    return false;
+  }
+
+  output << "PC sampling collection buffer: " << effective_collection_buffer_size << " bytes"
+         << std::endl;
+  return true;
+}
+
 bool StartPcSamplingCollection(std::ostream& output) {
   output << "\n=== Starting PC Sampling Collection ===" << std::endl;
 

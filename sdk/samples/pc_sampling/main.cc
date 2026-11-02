@@ -12,23 +12,26 @@
  *   1. Initialize environment and enable PTI kernel view
  *   2. Enable PC sampling
  *   3. Configure PC sampling with devices and sampling period (optional)
- *   4. Start PC sampling collection
- *   5. Run compute workloads (two GEMM kernels)
- *   6. Stop PC sampling collection
- *   7. Print collected stall data
- *   8. Disable PC sampling
- *   9. Cleanup environment
+ *   4. Set and query the collection buffer size (optional)
+ *   5. Start PC sampling collection
+ *   6. Run compute workloads (two GEMM kernels)
+ *   7. Stop PC sampling collection
+ *   8. Print collected stall data
+ *   9. Disable PC sampling
+ *  10. Cleanup environment
  *
  * The PC sampling API calls are separated into pc_sampling_client.h/pc_sampling_client.cc
  * to demonstrate how users can integrate metric collection into their applications.
  */
 
 #include <algorithm>
+#include <charconv>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <sycl/sycl.hpp>
+#include <system_error>
 #include <vector>
 
 #include "pc_sampling_client.h"
@@ -157,6 +160,7 @@ struct SampleConfig {
   unsigned matrix_size;
   unsigned repeat_count;
   uint32_t sampling_period_ns;
+  size_t collection_buffer_size;  // 0 keeps the PTI default
 };
 
 void Usage(const char* name) {
@@ -169,32 +173,38 @@ void Usage(const char* name) {
   std::cout << "  --period [-p]   <ns>       Sampling period in nanoseconds (default: "
             << kDefaultSamplingPeriodNs << ", range: " << kMinSamplingPeriodNs << "-"
             << kMaxSamplingPeriodNs << ")" << std::endl;
+  std::cout << "  --buffer [-b]   <bytes>    Collection buffer size in decimal bytes (default: PTI "
+               "default; "
+               "positive multiple of 64, at most 64 MiB)"
+            << std::endl;
   std::cout << "  --help [-h]                Display this help message" << std::endl;
   std::cout << "\nExample:" << std::endl;
   std::cout << "  " << name << " --size 2048 --repeat 5 --period 100000" << std::endl;
-  std::cout << "  " << name << " -s 512 -r 3 -p 25000" << std::endl;
+  std::cout << "  " << name << " -s 512 -r 3 -p 25000 -b 65536" << std::endl;
 }
 
 /**
  * @brief Parse command line arguments and populate configuration.
  * @return true on success, false on error or help request
  */
-bool ParseCommandLine(int argc, char* argv[], SampleConfig& config) {
+enum class CommandLineParseResult { kSuccess, kHelp, kError };
+
+CommandLineParseResult ParseCommandLine(int argc, char* argv[], SampleConfig& config) {
   // Set defaults
   config.matrix_size = kDefaultMatrixSize;
   config.repeat_count = kDefaultRepeatCount;
   config.sampling_period_ns = kDefaultSamplingPeriodNs;
-
+  config.collection_buffer_size = 0;
   try {
     for (int i = 1; i < argc; ++i) {
       if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
         Usage(argv[0]);
-        return false;
+        return CommandLineParseResult::kHelp;
       } else if (strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "--size") == 0) {
         if (++i >= argc) {
           std::cerr << "Error: --size requires an argument" << std::endl;
           Usage(argv[0]);
-          return false;
+          return CommandLineParseResult::kError;
         }
         unsigned temp = std::stoul(argv[i]);
         config.matrix_size = std::clamp(temp, kMinMatrixSize, kMaxMatrixSize);
@@ -206,7 +216,7 @@ bool ParseCommandLine(int argc, char* argv[], SampleConfig& config) {
         if (++i >= argc) {
           std::cerr << "Error: --repeat requires an argument" << std::endl;
           Usage(argv[0]);
-          return false;
+          return CommandLineParseResult::kError;
         }
         unsigned temp = std::stoul(argv[i]);
         config.repeat_count = std::min(temp, kMaxRepeatCount);
@@ -217,7 +227,7 @@ bool ParseCommandLine(int argc, char* argv[], SampleConfig& config) {
         if (++i >= argc) {
           std::cerr << "Error: --period requires an argument" << std::endl;
           Usage(argv[0]);
-          return false;
+          return CommandLineParseResult::kError;
         }
         uint32_t temp = std::stoul(argv[i]);
         config.sampling_period_ns = std::clamp(temp, kMinSamplingPeriodNs, kMaxSamplingPeriodNs);
@@ -225,19 +235,38 @@ bool ParseCommandLine(int argc, char* argv[], SampleConfig& config) {
           std::cout << "Note: Sampling period clamped to valid range [" << kMinSamplingPeriodNs
                     << ", " << kMaxSamplingPeriodNs << "] ns" << std::endl;
         }
+      } else if (strcmp(argv[i], "-b") == 0 || strcmp(argv[i], "--buffer") == 0) {
+        if (++i >= argc) {
+          std::cerr << "Error: --buffer requires an argument" << std::endl;
+          Usage(argv[0]);
+          return CommandLineParseResult::kError;
+        }
+        const char* const buffer_value = argv[i];
+        const char* const buffer_value_end = buffer_value + std::strlen(buffer_value);
+        size_t parsed_buffer_size = 0;
+        const auto [parsed_end, parse_error] =
+            std::from_chars(buffer_value, buffer_value_end, parsed_buffer_size);
+        if (parse_error != std::errc{} || parsed_end != buffer_value_end ||
+            parsed_buffer_size == 0) {
+          std::cerr << "Error: invalid --buffer value '" << buffer_value
+                    << "'; expected a positive decimal byte count" << std::endl;
+          Usage(argv[0]);
+          return CommandLineParseResult::kError;
+        }
+        config.collection_buffer_size = parsed_buffer_size;
       } else {
         std::cerr << "Error: Unknown option '" << argv[i] << "'" << std::endl;
         Usage(argv[0]);
-        return false;
+        return CommandLineParseResult::kError;
       }
     }
   } catch (const std::exception& e) {
     std::cerr << "Error: Failed to parse command line arguments: " << e.what() << std::endl;
     Usage(argv[0]);
-    return false;
+    return CommandLineParseResult::kError;
   }
 
-  return true;
+  return CommandLineParseResult::kSuccess;
 }
 
 //-----------------------------------------------------------------------------
@@ -247,8 +276,12 @@ bool ParseCommandLine(int argc, char* argv[], SampleConfig& config) {
 int main(int argc, char* argv[]) {
   // Parse command line arguments
   SampleConfig config;
-  if (!ParseCommandLine(argc, argv, config)) {
-    return EXIT_SUCCESS;  // Help was shown or parsing failed
+  const CommandLineParseResult parse_result = ParseCommandLine(argc, argv, config);
+  if (parse_result == CommandLineParseResult::kHelp) {
+    return EXIT_SUCCESS;
+  }
+  if (parse_result == CommandLineParseResult::kError) {
+    return EXIT_FAILURE;
   }
 
   std::cout << "\n========================================" << std::endl;
@@ -286,7 +319,7 @@ int main(int argc, char* argv[]) {
   }
 
   // Step 3: Configure PC sampling (ptiPcSamplingConfigure)
-  // This step is optional: skipping it makes Step 4 collect with the PTI defaults
+  // This step is optional: skipping it makes Step 5 collect with the PTI defaults
   // Pass nullptr and 0 to profile all available devices.
   // Users can pass specific device handles to profile a subset:
   //   pti_device_handle_t devices[] = {device_handle_1, device_handle_2};
@@ -298,7 +331,17 @@ int main(int argc, char* argv[]) {
     return EXIT_FAILURE;
   }
 
-  // Step 4: Start PC sampling collection (ptiPcSamplingStartCollection)
+  // Step 4: Set (optional) and query the collection buffer size
+  // (ptiPcSamplingSetCollectionBufferSize / ptiPcSamplingQueryCollectionBufferSize)
+  if ((config.collection_buffer_size != 0 &&
+       SetPcSamplingCollectionBufferSize(config.collection_buffer_size) != PTI_SUCCESS) ||
+      !PrintPcSamplingCollectionBufferSize()) {
+    DisablePcSampling();
+    CleanupProfilingEnvironment();
+    return EXIT_FAILURE;
+  }
+
+  // Step 5: Start PC sampling collection (ptiPcSamplingStartCollection)
   if (!StartPcSamplingCollection()) {
     std::cerr << "Failed to start PC sampling collection" << std::endl;
     DisablePcSampling();
@@ -306,7 +349,7 @@ int main(int argc, char* argv[]) {
     return EXIT_FAILURE;
   }
 
-  // Step 5: Run compute workloads (two GEMM kernels)
+  // Step 6: Run compute workloads (two GEMM kernels)
   // Run the same kernels but with different names so they will be identified as different kernels
   // in the profiling data.
   std::cout << "\n=== Running Compute Workload ===" << std::endl;
@@ -337,7 +380,7 @@ int main(int argc, char* argv[]) {
 
   std::cout << "GEMM kernel executions completed" << std::endl;
 
-  // Step 6: Stop PC sampling collection (ptiPcSamplingStopCollection)
+  // Step 7: Stop PC sampling collection (ptiPcSamplingStopCollection)
   if (!StopPcSamplingCollection()) {
     std::cerr << "Failed to stop PC sampling collection" << std::endl;
     DisablePcSampling();
@@ -345,7 +388,7 @@ int main(int argc, char* argv[]) {
     return EXIT_FAILURE;
   }
 
-  // Step 7: Print collected stall data before releasing the handle
+  // Step 8: Print collected stall data before releasing the handle
   if (!PrintPcSamplingData()) {
     std::cerr << "Failed to print stall data" << std::endl;
     DisablePcSampling();
@@ -353,14 +396,14 @@ int main(int argc, char* argv[]) {
     return EXIT_FAILURE;
   }
 
-  // Step 8: Disable PC sampling (ptiPcSamplingDisable)
+  // Step 9: Disable PC sampling (ptiPcSamplingDisable)
   if (!DisablePcSampling()) {
     std::cerr << "Failed to disable PC sampling" << std::endl;
     CleanupProfilingEnvironment();
     return EXIT_FAILURE;
   }
 
-  // Step 9: Cleanup environment (PTI view cleanup)
+  // Step 10: Cleanup environment (PTI view cleanup)
   CleanupProfilingEnvironment();
 
   std::cout << "\n========================================" << std::endl;

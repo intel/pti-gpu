@@ -34,6 +34,16 @@ pti_result EnablePcSampling(std::ostream& output = std::cout);
 pti_result ConfigurePcSampling(const pti_device_handle_t* devices, size_t device_count,
                                uint32_t sampling_period_ns, std::ostream& output = std::cout);
 
+// Set the collection-buffer size (ptiPcSamplingSetCollectionBufferSize).
+// Optional: PTI uses its default size otherwise. A valid PTI_PC_SAMPLING_COLLECTION_BUFFER_SIZE
+// environment variable takes precedence; that case is reported but not treated as a failure.
+// Must be called after EnablePcSampling() and before StartPcSamplingCollection().
+pti_result SetPcSamplingCollectionBufferSize(size_t buffer_size, std::ostream& output = std::cout);
+
+// Query and print the collection-buffer size resolved by PTI.
+// Must be called after EnablePcSampling() and before StartPcSamplingCollection().
+bool PrintPcSamplingCollectionBufferSize(std::ostream& output = std::cout);
+
 // Start PC sampling collection.
 // This corresponds to ptiPcSamplingStartCollection().
 // Must be called after EnablePcSampling(). Applies the default configuration when
