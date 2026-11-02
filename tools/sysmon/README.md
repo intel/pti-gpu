@@ -76,9 +76,9 @@ Min Core Frequency(MHz),                300
 
 ## Prerequisites
 - [CMake](https://cmake.org/) (version 3.12 and above)
-- [Git](https://git-scm.com/) (version 1.8 and above)
-- [Python](https://www.python.org/) (version 2.7 and above)
-- [oneAPI Level Zero loader](https://github.com/oneapi-src/level-zero)
+- [oneAPI Level Zero loader](https://github.com/oneapi-src/level-zero) and its development headers
+  (`level_zero/ze_api.h`, `level_zero/zes_api.h`; e.g. the `libze-dev` package). Headers or a loader in
+  another location can be passed with `-DCMAKE_INCLUDE_PATH=<dir>` and `-DCMAKE_LIBRARY_PATH=<dir>`.
 - [Intel(R) Graphics Compute Runtime for oneAPI Level Zero and OpenCL(TM) Driver](https://github.com/intel/compute-runtime)
 
 ## Build and Run
@@ -91,6 +91,8 @@ cd build
 cmake -DCMAKE_BUILD_TYPE=Release ..
 make
 ```
+sysmon is self-contained: the `tools/sysmon` directory can also be built outside the PTI repository. In that
+case pass the version reported by `--version` with `-DSYSMON_VERSION=<version>`.
 Use this command line to run the utility:
 ```sh
 ./sysmon

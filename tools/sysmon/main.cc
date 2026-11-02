@@ -1,6 +1,7 @@
 #include <array>
 #include <bitset>
 #include <cstdio>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <map>
@@ -11,8 +12,7 @@
 #include <level_zero/ze_api.h>
 #include <level_zero/zes_api.h>
 
-#include "utils.h"
-#include "ze_utils.h"
+#include "sysmon_utils.h"
 
 #define BYTES_IN_KB (1024.0f)
 #define BYTES_IN_MB (1024.0f * 1024)
@@ -89,12 +89,12 @@ static std::ostream &operator<<(
 }
 
 static uint64_t GetDeviceMemSize(ze_device_handle_t device) {
-  PTI_ASSERT(device != nullptr);
+  SYSMON_ASSERT(device != nullptr);
   ze_result_t status = ZE_RESULT_SUCCESS;
 
   uint32_t props_count = 0;
   status = zeDeviceGetMemoryProperties(device, &props_count, nullptr);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
   if (props_count == 0) {
     return 0;
@@ -103,7 +103,7 @@ static uint64_t GetDeviceMemSize(ze_device_handle_t device) {
   std::vector<ze_device_memory_properties_t> props_list(
       props_count, {ZE_STRUCTURE_TYPE_DEVICE_MEMORY_PROPERTIES, });
   status = zeDeviceGetMemoryProperties(device, &props_count, props_list.data());
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
   uint64_t total_mem_size = 0;
   for (auto& props : props_list) {
@@ -116,7 +116,7 @@ static uint64_t GetDeviceMemSize(ze_device_handle_t device) {
 static void PrintShorInfo(
     ze_driver_handle_t driver, zes_device_handle_t device,
     uint32_t device_id) {
-  PTI_ASSERT(device != nullptr);
+  SYSMON_ASSERT(device != nullptr);
   ze_result_t status = ZE_RESULT_SUCCESS;
 
   // Save the original format state
@@ -127,41 +127,57 @@ static void PrintShorInfo(
 
   zes_device_properties_t props{ZES_STRUCTURE_TYPE_DEVICE_PROPERTIES, };
   status = zesDeviceGetProperties(device, &props);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
-  std::cout << "GPU " << device_id << ": " << props.core.name;
+  // The name and the EU topology come from the core API, as in -d:
+  // zes_device_properties_t::core is deprecated since Level Zero 1.7 and its EU
+  // fields may not be filled (GSD-13969). A value that can't be read is printed
+  // as "unknown" rather than 0.
+  ze_device_properties_t core_props{sysmon::GetDevicePropertiesType(driver), };
+  const bool core_props_valid =
+      zeDeviceGetProperties(device, &core_props) == ZE_RESULT_SUCCESS;
+  auto print_count = [core_props_valid](uint32_t value) {
+    if (core_props_valid && value > 0) {
+      std::cout << value;
+    } else {
+      std::cout << UNKNOWN;
+    }
+  };
+
+  std::cout << "GPU " << device_id << ": " <<
+    (core_props_valid ? core_props.name : UNKNOWN);
   std::cout << SPACES;
 
   zes_pci_properties_t pci_props{ZES_STRUCTURE_TYPE_PCI_PROPERTIES, };
   status = zesDevicePciGetProperties(device, &pci_props);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
   std::cout << "PCI Bus: " << pci_props << std::endl;
 
   ze_driver_properties_t driver_props{ZE_STRUCTURE_TYPE_DRIVER_PROPERTIES, };
   status = zeDriverGetProperties(driver, &driver_props);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
   std::cout << "Vendor: " << props.vendorName << SPACES;
   std::cout << "Driver Version: " <<
     GetDriverString(driver_props.driverVersion) << SPACES;
   std::cout << "Subdevices: " << props.numSubdevices << std::endl;
 
-  uint32_t eu_count =
-    props.core.numSlices *
-    props.core.numSubslicesPerSlice *
-    props.core.numEUsPerSubslice;
-  std::cout << "EU Count: " << eu_count << SPACES;
-  std::cout << "Threads Per EU: " << props.core.numThreadsPerEU << SPACES;
-  std::cout << "EU SIMD Width: " <<
-    props.core.physicalEUSimdWidth << SPACES;
+  std::cout << "EU Count: ";
+  print_count(core_props.numSlices * core_props.numSubslicesPerSlice *
+              core_props.numEUsPerSubslice);
+  std::cout << SPACES << "Threads Per EU: ";
+  print_count(core_props.numThreadsPerEU);
+  std::cout << SPACES << "EU SIMD Width: ";
+  print_count(core_props.physicalEUSimdWidth);
+  std::cout << SPACES;
 
   std::cout << "Total Memory(MB): " << std::fixed << std::setprecision(3) <<
     ToString(GetDeviceMemSize(device) / BYTES_IN_MB) << std::endl;
 
   uint32_t domain_count = 0;
   status = zesDeviceEnumFrequencyDomains(device, &domain_count, nullptr);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
   std::cout << "Core Frequency(MHz): ";
 
@@ -169,18 +185,18 @@ static void PrintShorInfo(
     std::vector<zes_freq_handle_t> domain_list(domain_count);
     status = zesDeviceEnumFrequencyDomains(
         device, &domain_count, domain_list.data());
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
     for (uint32_t i = 0; i < domain_count; ++i) {
       zes_freq_properties_t domain_props{
           ZES_STRUCTURE_TYPE_FREQ_PROPERTIES, };
       status = zesFrequencyGetProperties(domain_list[i], &domain_props);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
       if (domain_props.type == ZES_FREQ_DOMAIN_GPU) {
         zes_freq_state_t state{ZES_STRUCTURE_TYPE_FREQ_STATE, };
         status = zesFrequencyGetState(domain_list[i], &state);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
         double current_frequency =
           (state.actual < domain_props.min) ? domain_props.min : state.actual;
@@ -205,13 +221,13 @@ static void PrintShorInfo(
     std::vector<zes_temp_handle_t> sensor_list(sensor_count);
     status = zesDeviceEnumTemperatureSensors(
         device, &sensor_count, sensor_list.data());
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
     for (uint32_t i = 0; i < sensor_count; ++i) {
       zes_temp_properties_t temp_props{
           ZES_STRUCTURE_TYPE_TEMP_PROPERTIES, };
       status = zesTemperatureGetProperties(sensor_list[i], &temp_props);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
       if (temp_props.type == ZES_TEMP_SENSORS_GPU) {
         double temperature = 0.0f;
@@ -238,7 +254,7 @@ static void PrintShorInfo(
 
 static std::vector<zes_process_state_t> GetDeviceProcesses(
     zes_device_handle_t device) {
-  PTI_ASSERT(device != nullptr);
+  SYSMON_ASSERT(device != nullptr);
   ze_result_t status = ZE_RESULT_SUCCESS;
 
   uint32_t proc_count = 0;
@@ -250,7 +266,7 @@ static std::vector<zes_process_state_t> GetDeviceProcesses(
   std::vector<zes_process_state_t> state_list(proc_count);
   status = zesDeviceProcessesGetState(
       device, &proc_count, state_list.data());
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
   return state_list;
 }
@@ -293,7 +309,7 @@ static std::string GetEnginesString (uint64_t engines) {
 }
 
 static void PrintProcesses(zes_device_handle_t device) {
-  PTI_ASSERT(device != nullptr);
+  SYSMON_ASSERT(device != nullptr);
   ze_result_t status = ZE_RESULT_SUCCESS;
 
   std::cout << "Running Processes: ";
@@ -339,8 +355,8 @@ void PrintDeviceList(const std::vector<ze_driver_handle_t>& driver_list) {
   ze_result_t status = ZE_RESULT_SUCCESS;
 
   for (size_t i = 0; i < driver_list.size(); ++i) {
-    ze_api_version_t version = utils::ze::GetDriverVersion(driver_list[i]);
-    PTI_ASSERT(version != ZE_API_VERSION_FORCE_UINT32);
+    ze_api_version_t version = sysmon::GetDriverVersion(driver_list[i]);
+    SYSMON_ASSERT(version != ZE_API_VERSION_FORCE_UINT32);
 
     std::cout << "Driver #" << i << ": API Version " <<
       ZE_MAJOR_VERSION(version) << "." << ZE_MINOR_VERSION(version);
@@ -350,31 +366,31 @@ void PrintDeviceList(const std::vector<ze_driver_handle_t>& driver_list) {
     std::cout << std::endl;
 
     std::vector<ze_device_handle_t> device_list =
-      utils::ze::GetDeviceList(driver_list[i]);
+      sysmon::GetDeviceList(driver_list[i]);
     if (device_list.empty()) {
       continue;
     }
 
     for (size_t j = 0; j < device_list.size(); ++j) {
       ze_device_properties_t device_properties{
-          ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES, };
+          sysmon::GetDevicePropertiesType(driver_list[i]), };
       status = zeDeviceGetProperties(device_list[j], &device_properties);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
       std::cout << "-- Device #" << j << ": " <<
         device_properties.name << std::endl;
 
       std::vector<ze_device_handle_t> sub_device_list =
-        utils::ze::GetSubDeviceList(device_list[j]);
+        sysmon::GetSubDeviceList(device_list[j]);
       if (sub_device_list.empty()) {
         continue;
       }
 
       for (size_t k = 0; k < sub_device_list.size(); ++k) {
         ze_device_properties_t sub_device_properties{
-            ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES, };
+            sysmon::GetDevicePropertiesType(driver_list[i]), };
         status = zeDeviceGetProperties(
             sub_device_list[k], &sub_device_properties);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
         std::cout << "---- Subdevice #" << k << ": " <<
           sub_device_properties.name << std::endl;
       }
@@ -385,17 +401,12 @@ void PrintDeviceList(const std::vector<ze_driver_handle_t>& driver_list) {
 void PrintDeviceInfo(
     ze_driver_handle_t driver,
     ze_device_handle_t device) {
-  PTI_ASSERT(driver != nullptr);
-  PTI_ASSERT(device != nullptr);
+  SYSMON_ASSERT(driver != nullptr);
+  SYSMON_ASSERT(device != nullptr);
 
-  ze_structure_type_t stype =
-      utils::ze::GetDriverVersion(driver) >= ZE_API_VERSION_1_2 ?
-      ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2 :
-      ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
-
-  ze_device_properties_t props{stype, };
+  ze_device_properties_t props{sysmon::GetDevicePropertiesType(driver), };
   ze_result_t status = zeDeviceGetProperties(device, &props);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
   std::cout << std::setw(TEXT_WIDTH) <<
     std::left << "Name," << props.name << std::endl;
@@ -441,7 +452,7 @@ void PrintDeviceInfo(
 
   std::string timer_resolution = "Timer Resolution(";
   timer_resolution +=
-    utils::ze::GetDriverVersion(driver) < ZE_API_VERSION_1_2 ? "ns" : "clks";
+    sysmon::GetDriverVersion(driver) < ZE_API_VERSION_1_2 ? "ns" : "clks";
   timer_resolution += "),";
   std::cout << std::setw(TEXT_WIDTH) <<
     timer_resolution << props.timerResolution << std::endl;
@@ -460,12 +471,12 @@ void PrintDeviceInfo(
 }
 
 void PrintComputeInfo(ze_device_handle_t device) {
-  PTI_ASSERT(device != nullptr);
+  SYSMON_ASSERT(device != nullptr);
 
   ze_device_compute_properties_t props{
     ZE_STRUCTURE_TYPE_DEVICE_COMPUTE_PROPERTIES, };
   ze_result_t status = zeDeviceGetComputeProperties(device, &props);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
   std::cout << std::setw(TEXT_WIDTH) << std::left <<
     "Max Total Group Size," << props.maxTotalGroupSize << std::endl;
@@ -489,7 +500,7 @@ void PrintComputeInfo(ze_device_handle_t device) {
     ToString(props.maxSharedLocalMemory / BYTES_IN_KB) << std::endl;
 
   if (props.numSubGroupSizes > 0) {
-    PTI_ASSERT(props.numSubGroupSizes <= ZE_SUBGROUPSIZE_COUNT);
+    SYSMON_ASSERT(props.numSubGroupSizes <= ZE_SUBGROUPSIZE_COUNT);
     std::cout << std::setw(TEXT_WIDTH) << std::left <<
       "Subgroup Sizes Supported,";
     for (uint32_t i = 0; i < props.numSubGroupSizes - 1; ++i) {
@@ -521,12 +532,12 @@ void PrintFloatingPointFlags(
 }
 
 void PrintModuleInfo(ze_device_handle_t device) {
-  PTI_ASSERT(device != nullptr);
+  SYSMON_ASSERT(device != nullptr);
 
   ze_device_module_properties_t props{
     ZE_STRUCTURE_TYPE_DEVICE_MODULE_PROPERTIES, };
   ze_result_t status = zeDeviceGetModuleProperties(device, &props);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
   std::cout << std::setw(TEXT_WIDTH) << std::left <<
     "SPIR-V Version Supported," <<
@@ -551,7 +562,7 @@ void PrintModuleInfo(ze_device_handle_t device) {
     if (props.flags & ZE_DEVICE_MODULE_FLAG_DP4A) {
       flags += "dp4a;";
     }
-    PTI_ASSERT(!flags.empty());
+    SYSMON_ASSERT(!flags.empty());
     flags.pop_back();
     std::cout << flags << std::endl;
   }
@@ -584,13 +595,13 @@ void PrintFrequencyInfo(
   uint32_t freq_domain_count = 0;
 
   status = zesDeviceEnumFrequencyDomains(device, &freq_domain_count, nullptr);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
   if (freq_domain_count > 0) {
     std::vector<zes_freq_handle_t> freq_domain_list(freq_domain_count);
     status = zesDeviceEnumFrequencyDomains(
         device, &freq_domain_count, freq_domain_list.data());
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
     std::vector<zes_freq_handle_t> GPU_freq_domains;
 
@@ -599,7 +610,7 @@ void PrintFrequencyInfo(
           ZES_STRUCTURE_TYPE_FREQ_PROPERTIES, };
       status = zesFrequencyGetProperties(
           freq_domain_list[i], &freq_domain_props);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
       if (freq_domain_props.type == ZES_FREQ_DOMAIN_GPU) {
         GPU_freq_domains.push_back(freq_domain_list[i]);
@@ -611,11 +622,11 @@ void PrintFrequencyInfo(
           ZES_STRUCTURE_TYPE_FREQ_PROPERTIES, };
       status = zesFrequencyGetProperties(
           GPU_freq_domains[i], &freq_domain_props);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
       zes_freq_state_t state{ZES_STRUCTURE_TYPE_FREQ_STATE, };
       status = zesFrequencyGetState(GPU_freq_domains[i], &state);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
       if ((freq_domain_props.onSubdevice &&
           freq_domain_props.subdeviceId == subdevice_id) ||
@@ -665,20 +676,20 @@ void PrintPowerInfo(
 
   uint32_t power_domain_count = 0;
   status = zesDeviceEnumPowerDomains(device, &power_domain_count, nullptr);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
   if (power_domain_count > 0) {
     std::vector<zes_pwr_handle_t> power_domain_list(power_domain_count);
     status = zesDeviceEnumPowerDomains(
         device, &power_domain_count, power_domain_list.data());
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
     for (uint32_t i = 0; i < power_domain_count; ++i) {
       zes_power_properties_t power_domain_props{
           ZES_STRUCTURE_TYPE_POWER_PROPERTIES, };
       status = zesPowerGetProperties(
           power_domain_list[i], &power_domain_props);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
       if ((power_domain_props.onSubdevice  &&
           power_domain_props.subdeviceId == subdevice_id) ||
@@ -718,19 +729,19 @@ void PrintFirmwareInfo(
 
   uint32_t firmwares_count = 0;
   status = zesDeviceEnumFirmwares(device, &firmwares_count, nullptr);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
   if (firmwares_count > 0) {
     std::vector<zes_firmware_handle_t> firmwares(firmwares_count);
     status = zesDeviceEnumFirmwares(
         device, &firmwares_count, firmwares.data());
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
     for (uint32_t i = 0; i < firmwares_count; ++i) {
       zes_firmware_properties_t firmwares_props{
           ZES_STRUCTURE_TYPE_FIRMWARE_PROPERTIES, };
       status = zesFirmwareGetProperties(firmwares[i], &firmwares_props);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
       if ((firmwares_props.onSubdevice  &&
           firmwares_props.subdeviceId == subdevice_id) ||
@@ -756,17 +767,17 @@ void PrintMemoryInfo(
   if (subdevice_id == UINT32_MAX) {
     uint32_t mem_props_count = 0;
     status = zeDeviceGetMemoryProperties(device, &mem_props_count, nullptr);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
     if (mem_props_count > 0) {
       std::vector<ze_device_memory_properties_t> mem_props_list(
           mem_props_count, {ZE_STRUCTURE_TYPE_DEVICE_MEMORY_PROPERTIES, });
       status = zeDeviceGetMemoryProperties(
           device, &mem_props_count, mem_props_list.data());
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
       for (uint32_t i = 0; i < mem_props_count; ++i) {
-        PTI_ASSERT(mem_props_list[i].name != nullptr);
+        SYSMON_ASSERT(mem_props_list[i].name != nullptr);
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
           "Memory Name," <<
           mem_props_list[i].name << std::endl;
@@ -788,7 +799,7 @@ void PrintMemoryInfo(
 
   uint32_t mem_modules_count = 0;
   status = zesDeviceEnumMemoryModules(device, &mem_modules_count, nullptr);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
   std::map<int, std::string> mem_health_types = {
     {ZES_MEM_HEALTH_UNKNOWN, "UNKNOWN"},
@@ -827,13 +838,13 @@ void PrintMemoryInfo(
     std::vector<zes_mem_handle_t> mem_modules(mem_modules_count);
     status = zesDeviceEnumMemoryModules(
         device, &mem_modules_count, mem_modules.data());
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
     for (uint32_t i = 0; i < mem_modules_count; ++i) {
       zes_mem_properties_t mem_props{
           ZES_STRUCTURE_TYPE_MEM_PROPERTIES, };
       status = zesMemoryGetProperties(mem_modules[i], &mem_props);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
       if ((mem_props.onSubdevice  &&
           mem_props.subdeviceId == subdevice_id) ||
@@ -920,7 +931,7 @@ void PrintEngineInfo(
     std::vector<zes_engine_handle_t> engine_groups(engine_groups_count);
     status = zesDeviceEnumEngineGroups(
         device, &engine_groups_count, engine_groups.data());
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
     std::map<zes_engine_group_t, uint32_t> engine_map;
 
@@ -928,7 +939,7 @@ void PrintEngineInfo(
       zes_engine_properties_t engine_props{
           ZES_STRUCTURE_TYPE_ENGINE_PROPERTIES, };
       status = zesEngineGetProperties(engine_groups[i], &engine_props);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
       if ((engine_props.onSubdevice  &&
           engine_props.subdeviceId == subdevice_id) ||
@@ -965,19 +976,19 @@ void PrintFabricPortInfo(
 
   uint32_t fabric_ports_count = 0;
   status = zesDeviceEnumFabricPorts(device, &fabric_ports_count, nullptr);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
   if (fabric_ports_count > 0) {
     std::vector<zes_fabric_port_handle_t> farbic_ports(fabric_ports_count);
     status = zesDeviceEnumFabricPorts(
         device, &fabric_ports_count, farbic_ports.data());
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
     for (uint32_t i = 0; i < fabric_ports_count; ++i) {
       zes_fabric_port_properties_t fabric_port_props{
           ZES_STRUCTURE_TYPE_FABRIC_PORT_PROPERTIES, };
       status = zesFabricPortGetProperties(farbic_ports[i], &fabric_port_props);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
       if ((fabric_port_props.onSubdevice  &&
           fabric_port_props.subdeviceId == subdevice_id) ||
@@ -1004,19 +1015,19 @@ void PrintFanInfo(
 
   uint32_t fan_count = 0;
   status = zesDeviceEnumFans(device, &fan_count, nullptr);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
   if (fan_count > 0) {
     std::vector<zes_fan_handle_t> fans(fan_count);
     status = zesDeviceEnumFans(
         device, &fan_count, fans.data());
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
     for (uint32_t i = 0; i < fan_count; ++i) {
       zes_fan_properties_t fan_props{
           ZES_STRUCTURE_TYPE_FAN_PROPERTIES, };
       status = zesFanGetProperties(fans[i], &fan_props);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
       if ((fan_props.onSubdevice  &&
           fan_props.subdeviceId == subdevice_id) ||
@@ -1048,13 +1059,13 @@ void PrintTemperatureInfo(
     std::vector<zes_temp_handle_t> sensor_list(sensor_count);
     status = zesDeviceEnumTemperatureSensors(
         device, &sensor_count, sensor_list.data());
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
     for (uint32_t i = 0; i < sensor_count; ++i) {
       zes_temp_properties_t temp_props{
           ZES_STRUCTURE_TYPE_TEMP_PROPERTIES, };
       status = zesTemperatureGetProperties(sensor_list[i], &temp_props);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
       if ((temp_props.onSubdevice &&
           temp_props.subdeviceId == subdevice_id) ||
@@ -1088,18 +1099,19 @@ void PrintTemperatureInfo(
 }
 
 static void PrintSubdeviceDetails(
-    zes_device_handle_t device, uint32_t subdevice_id) {
-  PTI_ASSERT(device != nullptr);
+    ze_driver_handle_t driver, zes_device_handle_t device,
+    uint32_t subdevice_id) {
+  SYSMON_ASSERT(driver != nullptr);
+  SYSMON_ASSERT(device != nullptr);
 
   std::vector<zes_device_handle_t> subdevice_list =
-    utils::ze::GetSubDeviceList(device);
-  PTI_ASSERT(subdevice_id < subdevice_list.size());
+    sysmon::GetSubDeviceList(device);
+  SYSMON_ASSERT(subdevice_id < subdevice_list.size());
 
-  ze_device_properties_t props{
-      ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES, };
+  ze_device_properties_t props{sysmon::GetDevicePropertiesType(driver), };
   ze_result_t status = zeDeviceGetProperties(
       subdevice_list[subdevice_id], &props);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
   std::cout << std::setw(TEXT_WIDTH) <<
     std::left << "Name," << props.name << std::endl;
@@ -1136,12 +1148,12 @@ static void PrintSubdeviceDetails(
 
 static void PrintDetails(ze_driver_handle_t driver,
     zes_device_handle_t device, uint32_t device_id) {
-  PTI_ASSERT(device != nullptr);
+  SYSMON_ASSERT(device != nullptr);
   ze_result_t status = ZE_RESULT_SUCCESS;
 
   zes_device_properties_t props{ZES_STRUCTURE_TYPE_DEVICE_PROPERTIES, };
   status = zesDeviceGetProperties(device, &props);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
   std::cout << std::setw(DEL_WIDTH) << std::setfill('=') <<
     '=' << std::setfill(' ') << std::endl;
@@ -1176,7 +1188,7 @@ static void PrintDetails(ze_driver_handle_t driver,
 
   zes_pci_properties_t pci_props{ZES_STRUCTURE_TYPE_PCI_PROPERTIES, };
   status = zesDevicePciGetProperties(device, &pci_props);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
   std::cout << std::setw(TEXT_WIDTH) << std::left <<
     "PCI Bus," << pci_props << std::endl;
@@ -1198,7 +1210,7 @@ static void PrintDetails(ze_driver_handle_t driver,
   ze_driver_properties_t driver_props{
         ZE_STRUCTURE_TYPE_DRIVER_PROPERTIES, };
   status = zeDriverGetProperties(driver, &driver_props);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  SYSMON_ASSERT(status == ZE_RESULT_SUCCESS);
 
   std::cout << std::setw(TEXT_WIDTH) << std::left <<
     "Level Zero GPU Driver Version," <<
@@ -1217,7 +1229,7 @@ static void PrintDetails(ze_driver_handle_t driver,
     for (size_t subdevice = 0; subdevice < props.numSubdevices; ++subdevice) {
       std::cout << std::setw(DEL_WIDTH) << std::setfill('-') <<
         '-' << std::setfill(' ') << std::endl;
-      PrintSubdeviceDetails(device, subdevice);
+      PrintSubdeviceDetails(driver, device, subdevice);
     }
   }
 
@@ -1244,13 +1256,13 @@ int main(int argc, char* argv[]) {
       mode = MODE_DETAILS;
     } else if (std::string(argv[1]) == "--version") {
 #ifdef PTI_VERSION
-      std::cout << TOSTRING(PTI_VERSION) << std::endl;
+      std::cout << SYSMON_TOSTRING(PTI_VERSION) << std::endl;
 #endif
       return 0;
     }
   }
 
-  utils::SetEnv("ZES_ENABLE_SYSMAN", "1");
+  sysmon::SetEnv("ZES_ENABLE_SYSMAN", "1");
 
   ze_init_driver_type_desc_t driver_type_desc {
     ZE_STRUCTURE_TYPE_INIT_DRIVER_TYPE_DESC,
@@ -1269,7 +1281,7 @@ int main(int argc, char* argv[]) {
   } else {
     status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
     if (status == ZE_RESULT_SUCCESS) {
-      driver_list = utils::ze::GetDriverList();
+      driver_list = sysmon::GetDriverList();
     }
   }
 
@@ -1283,11 +1295,11 @@ int main(int argc, char* argv[]) {
   if (status != ZE_RESULT_SUCCESS) {
     status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
     if (status == ZE_RESULT_SUCCESS && driver_list.empty()) {
-      driver_list = utils::ze::GetDriverList();
+      driver_list = sysmon::GetDriverList();
     }
   }
 
-  PTI_ASSERT(mode == MODE_DEVICE_LIST || mode == MODE_DETAILS ||
+  SYSMON_ASSERT(mode == MODE_DEVICE_LIST || mode == MODE_DETAILS ||
              mode == MODE_PROCESSES);
   switch(mode) {
     case MODE_DEVICE_LIST: {
@@ -1298,7 +1310,7 @@ int main(int argc, char* argv[]) {
     case MODE_PROCESSES: {
       uint32_t device_id = 0;
       for (auto driver : driver_list) {
-        for (auto device : utils::ze::GetDeviceList(driver)) {
+        for (auto device : sysmon::GetDeviceList(driver)) {
           if(mode == MODE_PROCESSES) {
             PrintShorInfo(driver, device, device_id);
             PrintProcesses(device);

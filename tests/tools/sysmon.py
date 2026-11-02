@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess
 import sys
 
@@ -18,15 +19,36 @@ def build(path):
     return stderr
   return None
 
+# Default mode and -p print, for every GPU:
+#   GPU <id>: <name>    PCI Bus: ...
+#   ...
+#   EU Count: <n>    Threads Per EU: <n>    EU SIMD Width: <n>    Total Memory(MB): ...
+# The EU values must be positive numbers; "0" or "unknown" means sysmon could
+# not read them (GSD-13969: "EU SIMD Width: 0" on BMG).
+EU_TOPOLOGY = re.compile(
+    r"EU Count: (\S+)\s+Threads Per EU: (\S+)\s+EU SIMD Width: (\S+)")
+
+def parse_short_info(output):
+  lines = output.split("\n")
+  total_devices = 0
+  topology = []
+  for line in lines:
+    if re.match(r"GPU \d+: ", line):
+      total_devices += 1
+    match = EU_TOPOLOGY.search(line)
+    if match:
+      topology.append(match.groups())
+  if total_devices < 1 or len(topology) != total_devices:
+    return False
+  for values in topology:
+    for value in values:
+      if not value.isdigit() or int(value) < 1:
+        return False
+  return True
+
 def parse(output, option):
-  if option == "-p":
-    lines = output.split("\n")
-    total_devices = 0
-    for line in lines:
-      if line.find("GPU") != -1:
-        total_devices += 1
-    if total_devices < 1:
-      return False
+  if option == "none" or option == "-p":
+    return parse_short_info(output)
   elif option == "-l":
     count_drivers = 0
     count_devices = 0
@@ -38,7 +60,7 @@ def parse(output, option):
         count_devices += 1
     if count_drivers < 1:
       return False
-    if count_drivers < 1:
+    if count_devices < 1:
       return False
   elif option == "-d":
     lines = output.split("\n")
@@ -52,7 +74,7 @@ def parse(output, option):
   return True
 
 def run(path, option):
-  command = ["./sysmon", option]
+  command = ["./sysmon"] if option == "none" else ["./sysmon", option]
   stdout, stderr = utils.run_process(command, path)
   if stderr:
     return stderr
@@ -76,7 +98,9 @@ def main(option):
 
 if __name__ == "__main__":
   option = "-p"
-  if len(sys.argv) > 1 and sys.argv[1] == "-l":
+  if len(sys.argv) > 1 and sys.argv[1] == "none":
+    option = "none"
+  elif len(sys.argv) > 1 and sys.argv[1] == "-l":
     option = "-l"
   elif len(sys.argv) > 1 and sys.argv[1] == "-d":
     option = "-d"
