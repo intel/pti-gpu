@@ -81,8 +81,8 @@ int main(int argc, char** argv) {
     ze_kernel_handle_t kernel = nullptr;
     Check(zeKernelCreate(module, &kernel_desc, &kernel), "zeKernelCreate");
 
-    constexpr uint32_t size = 1024;
-    constexpr uint32_t repeats = 8;
+    constexpr uint32_t size = 2048;
+    constexpr uint32_t repeats = 20;
     constexpr size_t bytes = static_cast<size_t>(size) * size * sizeof(float);
     std::vector<float> a(size * size, 0.128f);
     std::vector<float> b(size * size, 0.256f);

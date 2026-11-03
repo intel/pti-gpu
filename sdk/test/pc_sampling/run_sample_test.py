@@ -58,7 +58,7 @@ def run_check(launcher, workload, module=None, expected_output=None, kernel_name
             return SKIP_EXIT_CODE
         if expected_output is None:
             expected_output = (
-                "Level Zero GEMM: 8 launches, valid output"
+                "Level Zero GEMM: 20 launches, valid output"
                 if module is not None
                 else "GEMM results are CORRECT"
             )
