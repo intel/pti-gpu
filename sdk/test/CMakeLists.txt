@@ -27,10 +27,6 @@ if (NOT TARGET spdlog::spdlog)
   find_package(spdlog REQUIRED)
 endif()
 
-if (NOT TARGET LevelZero::level-zero)
-  find_package(LevelZero REQUIRED)
-endif()
-
 # Detects whether the system Level Zero loader exports zetDeviceEnableMetricsExp
 # and zetDeviceDisableMetricsExp. On Linux uses check_library_exists against
 # libze_loader.so; on Windows uses dumpbin /EXPORTS against ze_loader.dll in
@@ -65,8 +61,6 @@ if (NOT TARGET Xpti::xpti)
   message(STATUS "Xpti could not be found. Xpti specific tests will not be"
                  " built.")
 endif()
-
-GetLevelZeroExtensions()
 
 if(CMAKE_RUNTIME_OUTPUT_DIRECTORY)
   set(PTI_TOP_LEVEL_TEST_BIN_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")

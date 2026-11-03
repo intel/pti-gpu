@@ -157,15 +157,7 @@ if(NOT TARGET Xpti::xpti)
   endif()
 endif()
 
-if(NOT TARGET LevelZero::level-zero)
-  find_package(LevelZero ${PTI_LEVELZERO_VERSION})
-endif()
-
-if(NOT TARGET LevelZero::level-zero)
-  GetLevelZero()
-endif()
-
-GetLevelZeroExtensions()
+include(cmake/levelzero.cmake)
 
 get_itt()
 

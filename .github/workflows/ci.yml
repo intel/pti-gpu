@@ -127,6 +127,8 @@ jobs:
           set /A JOBS=%NUMBER_OF_PROCESSORS%/2
           echo CMAKE_BUILD_PARALLEL_LEVEL=%JOBS%>>%GITHUB_ENV%
 
+      # Can't dynamically acquire yet - needs to be an agreement between
+      # `tools/unitrace` and `sdk`
       - name: Get Level Zero Loader Version
         id: loader-ver
         run: |
@@ -165,7 +167,7 @@ jobs:
             -DBUILD_TESTING=ON ^
             -DLevelZero_ROOT=${{ github.workspace }}/sdk/level-zero-sdk ^
             -DFETCHCONTENT_BASE_DIR=${{ runner.temp }}/_deps ^
-            -DCMAKE_OBJECT_PATH_MAX=200
+            -DCMAKE_OBJECT_PATH_MAX=300
           cmake --build build
 
       - name: Test

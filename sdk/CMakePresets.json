@@ -277,11 +277,7 @@
       "displayName": "Windows CI Release Config",
       "description": "Windows CI Release Config. Uses icx and Ninja.",
       "inherits": "windows-icx-release",
-      "binaryDir": "${sourceDir}/wbr",
-      "cacheVariables": {
-        "CMAKE_OBJECT_PATH_MAX": "4096",
-        "LevelZero_ROOT": "${sourceDir}/level-zero-sdk"
-      }
+      "binaryDir": "${sourceDir}/wbr"
     },
     {
       "name": "windows-oneAPI-release",
@@ -291,6 +287,7 @@
       "cacheVariables": {
         "CMAKE_INSTALL_LIBDIR": "lib",
         "CMAKE_DISABLE_FIND_PACKAGE_spdlog": true,
+        "CMAKE_DISABLE_FIND_PACKAGE_LevelZero": true,
         "PTI_PRESET_USED": "${presetName}"
       }
     },
@@ -299,11 +296,7 @@
       "displayName": "Windows CI Debug Config",
       "description": "Windows CI Debug Config. Uses icx and Ninja.",
       "inherits": "windows-icx-debug",
-      "binaryDir": "${sourceDir}/wbd",
-      "cacheVariables": {
-        "CMAKE_OBJECT_PATH_MAX": "4096",
-        "LevelZero_ROOT": "${sourceDir}/level-zero-sdk"
-      }
+      "binaryDir": "${sourceDir}/wbd"
     },
     {
       "name": "windows-debug",

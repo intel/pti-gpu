@@ -91,7 +91,7 @@ find_path(
 
 if(LevelZero_PkgConfig_DIR)
   file(READ "${LevelZero_PkgConfig_DIR}/libze_loader.pc" LevelZero_PkgConfig)
-  string(REGEX MATCH "[0-9]+\.[0-9]+\.[0-9]+" LEVEL_ZERO_VER_FOUND "${LevelZero_PkgConfig}")
+  string(REGEX MATCH "[0-9]+\\.[0-9]+\\.[0-9]+" LEVEL_ZERO_VER_FOUND "${LevelZero_PkgConfig}")
   set(LevelZero_VERSION ${LEVEL_ZERO_VER_FOUND})
 endif()
 
@@ -100,7 +100,7 @@ endif()
 # present when downloading the sdk from GitHub releases:
 # https://github.com/oneapi-src/level-zero/releases
 if(NOT DEFINED LevelZero_VERSION AND WIN32)
-  string(REGEX MATCH "[0-9]+\.[0-9]+\.[0-9]+" LEVEL_ZERO_VER_FOUND "${LevelZero_LIBRARY_DIR}")
+  string(REGEX MATCH "[0-9]+\\.[0-9]+\\.[0-9]+" LEVEL_ZERO_VER_FOUND "${LevelZero_LIBRARY_DIR}")
   if (DEFINED LEVEL_ZERO_VER_FOUND AND NOT LEVEL_ZERO_VER_FOUND STREQUAL "")
     set(LevelZero_VERSION ${LEVEL_ZERO_VER_FOUND})
   endif()

@@ -77,7 +77,6 @@ jobs:
       - name: Configure Git to use GitHub PAT
         run: |
           git config --global url."https://user:${{ secrets.pat_pti_tools }}@github.com".insteadOf "https://github.com"
-
       - name: GitHub Proxy Usage
         uses: ./.github/actions/github-proxy-usage
         with:
@@ -164,8 +163,6 @@ jobs:
 
     timeout-minutes: 30
 
-    env:
-      LEVEL_ZERO_LOADER_VERSION: 1.32.0
     defaults:
       run:
         shell: cmd
@@ -191,37 +188,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Configure Environment
+        run: |
+          set /A JOBS=%NUMBER_OF_PROCESSORS%/2
+          echo CMAKE_BUILD_PARALLEL_LEVEL=%JOBS%>>%GITHUB_ENV%
+
       - name: Detect code changes
         id: check
         uses: ./.github/actions/detectChanges
 
-      - name: Get Level Zero Loader Version
+      - name: Cache third-party dependency sources
         if: steps.check.outputs.code == 'true'
-        id: loader-ver
-        run: |
-          @echo off
-          REM Make sure there is no whitespace between ...>>...
-          echo ze_loader_ver=%LEVEL_ZERO_LOADER_VERSION%>>%GITHUB_OUTPUT%
-
-      - uses: actions/cache@v4
-        if: steps.check.outputs.code == 'true'
-        id: cache
+        uses: actions/cache@v4
         with:
-          path: sdk/level-zero-sdk
-          key: ${{ runner.os }}-Ze-Loader-${{ steps.loader-ver.outputs.ze_loader_ver }}
-
-      - name: Download Dependencies
-        if: steps.check.outputs.code == 'true' && steps.cache.outputs.cache-hit != 'true'
-        run: |
-          @echo off
-          call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
-          call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
-          rmdir /S /Q level-zero-sdk
-          del /s level-zero-sdk_%LEVEL_ZERO_LOADER_VERSION%.zip
-          echo https://github.com/oneapi-src/level-zero/releases/download/v%LEVEL_ZERO_LOADER_VERSION%/level-zero-win-sdk-%LEVEL_ZERO_LOADER_VERSION%.zip
-          curl.exe -L -O https://github.com/oneapi-src/level-zero/releases/download/v%LEVEL_ZERO_LOADER_VERSION%/level-zero-win-sdk-%LEVEL_ZERO_LOADER_VERSION%.zip
-          7z x level-zero-win-sdk-%LEVEL_ZERO_LOADER_VERSION%.zip -olevel-zero-sdk
-          echo "Successfully Downloaded Level Zero Loader Version %LEVEL_ZERO_LOADER_VERSION%"
+          path: ${{ runner.temp }}/_deps
+          key: ${{ runner.os }}-${{ runner.name }}-sdk-deps-${{ hashFiles('sdk/cmake/dependency_pins.cmake') }}
 
       - name: Build
         if: steps.check.outputs.code == 'true'
@@ -229,10 +210,9 @@ jobs:
           @echo off
           call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
           call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
-          set /A JOBS=%NUMBER_OF_PROCESSORS%/2
-          rmdir /S /Q ${{ matrix.build-dir }}
-          cmake --preset ${{ matrix.preset }}
-          cmake --build --preset ${{ matrix.preset }} --parallel %JOBS%
+          cmake --preset ${{ matrix.preset }} ^
+            -DFETCHCONTENT_BASE_DIR=${{ runner.temp }}/_deps
+          cmake --build --preset ${{ matrix.preset }}
 
       - name: Test
         if: steps.check.outputs.code == 'true'

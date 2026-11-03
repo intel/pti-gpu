@@ -12,10 +12,6 @@
 find_package(Threads REQUIRED)
 
 if(NOT TARGET LevelZero::level-zero)
-  find_package(LevelZero)
-endif()
-
-if(NOT TARGET LevelZero::level-zero)
   message(STATUS "Level Zero needed to build graph tests.")
   return()
 endif()
