@@ -9,6 +9,7 @@
 
 #include <atomic>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -826,8 +827,10 @@ class ClCollector {
               status = clGetDeviceInfo(subdev, CL_DEVICE_NAME, 0, NULL, &name_size);
               if (status == CL_SUCCESS) {
                 std::string str_dev_name(name_size+1, '\0');
-                status = clGetDeviceInfo(subdev, CL_DEVICE_NAME, name_size, (void*)str_dev_name.c_str(), NULL);
+                status = clGetDeviceInfo(subdev, CL_DEVICE_NAME, name_size, str_dev_name.data(), NULL);
                 if (status == CL_SUCCESS) {
+                  // drop trailing NULs so they don't end up in trace output
+                  str_dev_name.resize(std::strlen(str_dev_name.c_str()));
                   GetDevicesNameMap().insert({subdev, std::make_pair(device_id, std::move(str_dev_name))});
                 }
               }
@@ -845,8 +848,10 @@ class ClCollector {
         status = clGetDeviceInfo(dev, CL_DEVICE_NAME, 0, NULL, &name_size);
         if (status == CL_SUCCESS) {
           std::string str_dev_name(name_size+1, '\0');
-          status = clGetDeviceInfo(dev, CL_DEVICE_NAME, name_size, (void*)str_dev_name.c_str(), NULL);
+          status = clGetDeviceInfo(dev, CL_DEVICE_NAME, name_size, str_dev_name.data(), NULL);
           if (status == CL_SUCCESS) {
+            // drop trailing NULs so they don't end up in trace output
+            str_dev_name.resize(std::strlen(str_dev_name.c_str()));
             GetDevicesNameMap().insert({dev, std::make_pair(device_id, std::move(str_dev_name))});
           }
         }
