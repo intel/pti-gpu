@@ -83,8 +83,13 @@ void StopCollectionAndReport() {
 
 // Releases whatever it acquired on failure.
 bool InitializeCollector() {
-  ConfigureOutput();
-  std::ostream& output = *g_output;
+  std::ostream* output_stream;
+  {
+    std::lock_guard<std::mutex> lock(g_stop_mutex);
+    ConfigureOutput();
+    output_stream = g_output;
+  }
+  std::ostream& output = *output_stream;
   output << "\n=== PC Sampling Profiler Collector ===" << std::endl;
 
   if (!InitializeProfilingEnvironment(output)) {
