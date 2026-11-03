@@ -29,7 +29,11 @@ set(OPENMP_FLAGS
   $<$<PLATFORM_ID:Windows>:-Qiopenmp -Qopenmp-targets=spir64>
 )
 
-target_compile_options(omp_vec_add PUBLIC ${OPENMP_FLAGS})
+# spir64 does not support PTI's __declspec(dllimport)
+# This might be a compiler issue.
+target_compile_options(omp_vec_add PUBLIC ${OPENMP_FLAGS}
+  $<$<PLATFORM_ID:Windows>:-Wno-ignored-attributes>)
+
 target_link_options(omp_vec_add PUBLIC ${OPENMP_FLAGS})
 
 # Allow building in-source and out-of-source

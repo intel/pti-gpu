@@ -30,12 +30,11 @@
 #include <string>
 #include <system_error>
 
+#include "library_loader.h"
 #include "pti_filesystem.h"
 #include "utils.h"
 
 namespace {
-
-using ModuleHandle = std::unique_ptr<void, decltype(&::dlclose)>;
 
 class IttLibEnvTest : public ::testing::Test {
  protected:
@@ -152,14 +151,14 @@ TEST_F(IttLibEnvTest, UnloadedLibraryNameRemainsUnloaded) {
   ASSERT_TRUE(pti::utils::filesystem::exists(PTI_TEST_LOADER_EXTERNAL_LIBRARY));
   const auto name =
       pti::utils::filesystem::path(PTI_TEST_LOADER_EXTERNAL_LIBRARY).filename().string();
-  ModuleHandle before(::dlopen(name.c_str(), RTLD_LAZY | RTLD_NOLOAD), ::dlclose);
+  auto before = LibraryLoader::Probe(name);
   ASSERT_EQ(before, nullptr);
   ::utils::SetEnv(itt_lib_env::kIttLibEnvVarName, name.c_str());
 
   EXPECT_EQ(itt_lib_env::ConfigureIttCollector(self_path_),
             itt_lib_env::IttCollectorConfig::kUnresolvedLibraryName);
   EXPECT_EQ(::utils::GetEnv(itt_lib_env::kIttLibEnvVarName), name);
-  ModuleHandle after(::dlopen(name.c_str(), RTLD_LAZY | RTLD_NOLOAD), ::dlclose);
+  auto after = LibraryLoader::Probe(name);
   EXPECT_EQ(after, nullptr);
 }
 

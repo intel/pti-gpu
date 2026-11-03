@@ -12,6 +12,7 @@
 #include <string>
 #include <system_error>
 
+#include "utils/library_loader.h"
 #include "utils/pti_filesystem.h"
 #include "utils/utils.h"
 
@@ -39,18 +40,17 @@ IttCollectorConfig ConfigureIttCollector(const std::string& this_module_path) {
   if (env_value.find('/') == std::string::npos) {
     // ITT resolves bare names through the dynamic loader, not the working
     // directory. Observe loaded modules without loading a foreign collector.
-    using ModuleHandle = std::unique_ptr<void, decltype(&::dlclose)>;
-    ModuleHandle selected_module(::dlopen(env_value.c_str(), RTLD_LAZY | RTLD_NOLOAD), ::dlclose);
+    auto selected_module = LibraryLoader::Probe(env_value);
     if (!selected_module) {
       return IttCollectorConfig::kUnresolvedLibraryName;
     }
-
-    ModuleHandle pti_module(::dlopen(this_module_path.c_str(), RTLD_LAZY | RTLD_NOLOAD), ::dlclose);
+    auto pti_module = LibraryLoader::Probe(this_module_path);
     if (!pti_module) {
       return IttCollectorConfig::kConfigurationFailed;
     }
-    return selected_module.get() == pti_module.get() ? IttCollectorConfig::kAlreadyPti
-                                                     : IttCollectorConfig::kExternalLibrary;
+    return selected_module->LibraryHandle() == pti_module->LibraryHandle()
+               ? IttCollectorConfig::kAlreadyPti
+               : IttCollectorConfig::kExternalLibrary;
   }
 
   std::error_code error;

@@ -60,6 +60,14 @@ class LibraryLoader {
     }
     return std::unique_ptr<LibraryLoader>(new LibraryLoader(handle));
   }
+
+  static std::unique_ptr<LibraryLoader> Probe(const std::string& lib_name) {
+    auto* const handle = dlopen(lib_name.c_str(), RTLD_LAZY | RTLD_NOLOAD);
+    if (!handle) {
+      return nullptr;
+    }
+    return std::unique_ptr<LibraryLoader>(new LibraryLoader(handle));
+  }
 #endif  // __linux__
 
   LibraryLoader(const LibraryLoader&) = delete;
@@ -82,6 +90,8 @@ class LibraryLoader {
 #endif
     return reinterpret_cast<T>(reinterpret_cast<SymHandle>(sym_addr));  // NOLINT
   }
+
+  Handle LibraryHandle() const { return handle_; }
 
   virtual ~LibraryLoader() {
     if (handle_) {

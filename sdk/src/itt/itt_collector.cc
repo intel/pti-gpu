@@ -71,6 +71,7 @@ bool IttCollector::IsAvailable() const {
       return false;
   }
   // Never reached.
+  return false;
 }
 
 // Static method definitions

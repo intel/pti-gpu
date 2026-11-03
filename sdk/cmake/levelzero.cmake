@@ -51,6 +51,7 @@ macro(GetLevelZero)
         $<$<CXX_COMPILER_ID:IntelLLVM>:
             -Wno-error
             -Wno-unused-parameter
+            -Wno-unused-function
             -Wno-cast-function-type-mismatch
             -Wno-extra-semi
             $<$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,19.0.0>:-Wno-variadic-macro-arguments-omitted>
@@ -63,10 +64,12 @@ macro(GetLevelZero)
             -Wno-error
             -Wno-unused-parameter
             $<$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,8.0.0>:-Wno-extra-semi>
+            $<$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,4.8.0>:-Wno-pedantic>
         >
         $<$<CXX_COMPILER_ID:Clang>:
             -Wno-error
             -Wno-unused-parameter
+            -Wno-unused-function
             $<$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,3.0.0>:-Wno-extra-semi>
             $<$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,19.0.0>:-Wno-variadic-macro-arguments-omitted>
         >
