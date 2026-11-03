@@ -125,7 +125,7 @@ jobs:
       - name: Configure Environment
         run: |
           set /A JOBS=%NUMBER_OF_PROCESSORS%/2
-          echo CMAKE_BUILD_PARALLEL_LEVEL=%JOBS%>>%GITHUB_ENV%
+          >>%GITHUB_ENV% echo CMAKE_BUILD_PARALLEL_LEVEL=%JOBS%
 
       # Can't dynamically acquire yet - needs to be an agreement between
       # `tools/unitrace` and `sdk`
@@ -133,8 +133,7 @@ jobs:
         id: loader-ver
         run: |
           @echo off
-          REM Make sure there is no whitespace between ...>>...
-          echo ze_loader_ver=%LEVEL_ZERO_LOADER_VERSION%>>%GITHUB_OUTPUT%
+          >>%GITHUB_OUTPUT% echo ze_loader_ver=%LEVEL_ZERO_LOADER_VERSION%
 
       - uses: actions/cache@v4
         id: cache

@@ -104,10 +104,14 @@ jobs:
           proxy: ${{ vars.PTI_GIT_PROXY }}
           runner-pattern: ${{ vars.PTI_GIT_PROXY_RUNNER_PATTERN }}
 
+      # Cache only the FetchContent sources and sub-builds, not <dep>-build: the
+      # top-level .ninja_log is not cached, so Ninja rebuilds those objects anyway.
       - name: Cache third-party dependency sources
         uses: actions/cache@v4
         with:
-          path: sdk/build-*/_deps
+          path: |
+            sdk/build-*/_deps/*-src
+            sdk/build-*/_deps/*-subbuild
           key: ${{ runner.os }}-sdk-deps-${{ matrix.uploadname }}-${{ hashFiles('sdk/cmake/dependency_pins.cmake') }}
 
       - name: Build

@@ -83,11 +83,16 @@ jobs:
           proxy: ${{ vars.PTI_GIT_PROXY }}
           runner-pattern: ${{ vars.PTI_GIT_PROXY_RUNNER_PATTERN }}
 
+      # Cache only the FetchContent sources and sub-builds, not <dep>-build: the
+      # top-level .ninja_log is not cached, so Ninja rebuilds those objects anyway.
       - name: Cache third-party dependency sources
+        if: steps.check.outputs.code == 'true'
         uses: actions/cache@v4
         with:
-          path: sdk/build-*/_deps
-          key: ${{ runner.os }}-sdk-deps-${{ hashFiles('sdk/cmake/dependency_pins.cmake') }}
+          path: |
+            sdk/build-*/_deps/*-src
+            sdk/build-*/_deps/*-subbuild
+          key: ${{ runner.os }}-sdk-deps-${{ join(fromJSON(matrix.tags), '-') }}-${{ hashFiles('sdk/cmake/dependency_pins.cmake') }}
 
       - name: Build
         if: steps.check.outputs.code == 'true'
@@ -191,17 +196,24 @@ jobs:
       - name: Configure Environment
         run: |
           set /A JOBS=%NUMBER_OF_PROCESSORS%/2
-          echo CMAKE_BUILD_PARALLEL_LEVEL=%JOBS%>>%GITHUB_ENV%
+          >>%GITHUB_ENV% echo CMAKE_BUILD_PARALLEL_LEVEL=%JOBS%
+          >>%GITHUB_ENV% echo PTI_FETCH_DEPS_DIR=%RUNNER_TEMP%/_deps
 
       - name: Detect code changes
         id: check
         uses: ./.github/actions/detectChanges
 
+      # runner.name is in the key because *-subbuild/CMakeCache.txt records the
+      # absolute RUNNER_TEMP path, which differs between runners.
+      # CMake will fail if the path changes.
+      # Whereas, Linux jobs run in containers and see the same path.
       - name: Cache third-party dependency sources
         if: steps.check.outputs.code == 'true'
         uses: actions/cache@v4
         with:
-          path: ${{ runner.temp }}/_deps
+          path: |
+            ${{ env.PTI_FETCH_DEPS_DIR }}/*-src
+            ${{ env.PTI_FETCH_DEPS_DIR }}/*-subbuild
           key: ${{ runner.os }}-${{ runner.name }}-sdk-deps-${{ hashFiles('sdk/cmake/dependency_pins.cmake') }}
 
       - name: Build
@@ -211,7 +223,7 @@ jobs:
           call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
           call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
           cmake --preset ${{ matrix.preset }} ^
-            -DFETCHCONTENT_BASE_DIR=${{ runner.temp }}/_deps
+            -DFETCHCONTENT_BASE_DIR=%PTI_FETCH_DEPS_DIR%
           cmake --build --preset ${{ matrix.preset }}
 
       - name: Test
