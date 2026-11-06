@@ -128,32 +128,6 @@ jobs:
           source /opt/intel/oneapi/setvars.sh
           python ./tools/sysmon/test/test_sysmon.py
 
-      - name: Build-and-test-cl_gpu_metrics
-        if: contains(fromJSON(matrix.tags), 'PVC')
-        run: |
-          source /opt/intel/oneapi/setvars.sh
-          python ./tests/run.py -s cl_gpu_metrics
-
-      - name: Build-and-test-instcount
-        if: false
-        #if: contains(fromJSON(matrix.tags), 'PVC')
-        run: |
-          source /opt/intel/oneapi/setvars.sh
-          python ./tests/run.py -s instcount
-
-      - name: Build-and-test-ze_debug_info
-        if: false
-        #if: contains(fromJSON(matrix.tags), 'PVC')
-        run: |
-          source /opt/intel/oneapi/setvars.sh
-          python ./tests/run.py -s ze_debug_info
-
-      - name: Build-and-test-cl_debug_info
-        if: contains(fromJSON(matrix.tags), 'PVC')
-        run: |
-          source /opt/intel/oneapi/setvars.sh
-          python ./tests/run.py -s cl_debug_info
-
   pti-tools-build-and-test-windows:
 
     name: Test unitrace on Windows

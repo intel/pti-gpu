@@ -225,42 +225,7 @@ jobs:
           source /opt/intel/oneapi/setvars.sh
           python ./test_unitrace.py
 
-      - name: Build-and-test-onetrace
-        run: |
-          source /opt/intel/oneapi/setvars.sh
-          python ./tests/run.py -s onetrace
-
-      - name: Build-and-test-oneprof
-        run: |
-          source /opt/intel/oneapi/setvars.sh
-          python ./tests/run.py -s oneprof
-
       - name: Build-and-test-sysmon
         run: |
           source /opt/intel/oneapi/setvars.sh
           python ./tools/sysmon/test/test_sysmon.py
-
-      - name: Build-and-test-cl_gpu_metrics
-        run: |
-          source /opt/intel/oneapi/setvars.sh
-          python ./tests/run.py -s cl_gpu_metrics
-
-      - name: Build-and-test-cl_debug_info
-        run: |
-          source /opt/intel/oneapi/setvars.sh
-          python ./tests/run.py -s cl_debug_info
-
-      - name: Build-and-test-instcount
-        if: false
-        run: |
-          source /opt/intel/oneapi/setvars.sh
-          python ./tests/run.py -s instcount
-
-      - name: Build-and-test-ze_debug_info
-        #
-        # It fails for all containers after oneAPI-2025.2
-        #
-        if: false
-        run: |
-          source /opt/intel/oneapi/setvars.sh
-          python3 ./tests/run.py -s ze_debug_info

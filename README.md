@@ -1,32 +1,14 @@
 # Profiling Tools Interfaces for GPU (PTI for GPU)
 
-> [!WARNING]
-> The samples and auxiliary tools (other than `tools/unitrace`) are no longer
-> under active development and will be removed soon. Candidates for removal:
-> 
-> - `chapters`
-> - `samples`
-> - `loader`
-> - `tests`
-> - `tools/ze_tracer`
-> - `tools/memaccess`
-> - `tools/gpuinfo`
-> - `tools/oneprof`
-> - `tools/onetrace`
-> - `tools/instcount`
-> - `tools/sysmon`
-> 
-> Identical functionality can be found in `unitrace` for most of the tools. For
-> GTPin-related tools, one can find tools and usage samples at <https://www.intel.com/content/www/us/en/developer/articles/tool/gtpin.html>.
-
 ## Overview
 
-This repository describes the ways of collecting performance data for Intel(R)
-Processor Graphics and provides a set of samples that help to start.
+This repository provides tools and a library for collecting performance data
+on Intel(R) Graphics: the unitrace and sysmon tools, and the PTI SDK
+profiling library.
 
 ## License
 
-Samples for Profiling Tools Interfaces for GPU (PTI for GPU) are distributed
+Profiling Tools Interfaces for GPU (PTI for GPU) is distributed
 under the MIT License.
 
 You may obtain a copy of the License at <https://opensource.org/license/MIT>
@@ -44,40 +26,13 @@ You may obtain a copy of the License at <https://opensource.org/license/MIT>
 - Intel® Data Center GPU Max Series
 - Intel® Arc™ Graphics
 
-*Some samples may have higher hardware requirements.*
-
 ## Regularly Tested Configurations
 
 - Ubuntu 24.04 with Intel® Arc™ B580 Graphics
 - Ubuntu 24.04 with Intel® Data Center GPU Max Series
 - Windows 11 with Intel® Arc™ B580 Graphics
 
-## Profiling Chapters
-
-1. Runtime API Tracing
-    - for [OpenCL(TM)](chapters/runtime_api_tracing/OpenCL.md)
-    - for [oneAPI Level Zero (Level Zero)](chapters/runtime_api_tracing/LevelZero.md)
-    - for [OpenMP*](chapters/runtime_api_tracing/OMPT.md)
-2. Device Activity Tracing
-    - for [OpenCL(TM)](chapters/device_activity_tracing/OpenCL.md)
-    - for [oneAPI Level Zero (Level Zero)](chapters/device_activity_tracing/LevelZero.md)
-    - for [SYCL/DPC++](chapters/device_activity_tracing/DPCXX.md)
-3. Binary/Source Correlation
-    - for [OpenCL(TM)](chapters/binary_source_correlation/OpenCL.md)
-    - for [oneAPI Level Zero (Level Zero)](chapters/binary_source_correlation/LevelZero.md)
-4. Metrics Collection
-    - based on [oneAPI Level Zero (Level Zero) Metric API](chapters/metrics_collection/LevelZero.md)
-    - based on [Intel(R) Metrics Discovery Application Programming Interface](chapters/metrics_collection/MetricsDiscoveryAPI.md)
-    - based on [Performance Monitoring (PM) Register](chapters/metrics_collection/PerfMonReg.md)
-5. Binary Instrumentation
-    - based on [Graphics Technology Pin (GT Pin)](chapters/binary_instrumentation/GTPin.md)
-    - based on [OpenCL(TM) built-in intrinsics](chapters/binary_instrumentation/OpenCLBuiltIn.md)
-6. Code Annotation
-    - based on [Instrumentation and Tracing Technology API (ITT API)](chapters/code_annotation/ITT.md)
-7. System Management
-    - for [oneAPI Level Zero (Level Zero)](chapters/system_management/LevelZero.md)
-
-## Profiling & Debug Tools
+## Tools and SDK
 
 - [unitrace](tools/unitrace/README.md) - unified tracing and profiling tool. In
   addition to Level Zero and/or OpenCL, this tool is capable of profiling
@@ -85,59 +40,11 @@ You may obtain a copy of the License at <https://opensource.org/license/MIT>
   MPI etc., for scale-up and scale-out applications. It also supports profiling
   hardware metrics (including instruction-level EU stalls) and software events
   at the same time.
-- [gpuinfo](tools/gpuinfo/README.md) - provides basic information about the
-  GPUs installed in a system, and the list of HW metrics one can collect
-  for it;
-- [instcount](tools/instcount/README.md) - prints GPU kernel assembly (GEN ISA)
-  annotated by instruction execution count;
 - [sysmon](tools/sysmon/README.md) - Linux "top" like utility to monitor GPUs
   installed on a system;
-- [pti](sdk/README.md) - profiling library one can link against to gain the
+- [sdk](sdk/README.md) - profiling library one can link against to gain the
   capability of profiling SYCL and Level Zero; used by PyTorch Profiler for the
   Intel® XPU Activity.
-
-## Sample Tools & Utilities
-
-- tools for OpenCL(TM), DPC++ (with OpenCL(TM) backend) and OpenMP* GPU
-  offload (with OpenCL(TM) backend):
-  - [cl_hot_functions](samples/cl_hot_functions/README.md) - provides a list of
-    hottest OpenCL(TM) API calls by backend (CPU and GPU);
-  - [cl_hot_kernels](samples/cl_hot_kernels/README.md) - provides a list of
-    hottest OpenCL(TM) kernels by backend (CPU and GPU);
-  - [cl_debug_info](samples/cl_debug_info/README.md) - prints source and
-    assembly (GEN ISA) for kernels on GPU;
-  - [cl_gpu_metrics](samples/cl_gpu_metrics/README.md) - provides a list of
-    hottest OpenCL(TM) GPU kernels along with percent of cycles it was active,
-    stall and idle (based on continuous metrics collection mode);
-  - [cl_gpu_query](samples/cl_gpu_query/README.md) - provides a list of hottest
-    OpenCL(TM) GPU kernels along with percent of cycles it was active, stall
-    and idle (based on query metrics collection mode);
-- tools for Level Zero, DPC++ (with Level Zero backend) and OpenMP* GPU
-  offload (with Level Zero backend):
-  - [ze_hot_functions](samples/ze_hot_functions/README.md) - provides a list of
-    hottest Level Zero API calls;
-  - [ze_hot_kernels](samples/ze_hot_kernels/README.md) - provides a list of
-    hottest Level Zero kernels;
-  - [ze_debug_info](samples/ze_debug_info/README.md) - prints source and
-    assembly (GEN ISA) for kernels on GPU;
-  - [ze_metric_query](samples/ze_metric_query/README.md) - provides a list of
-    hottest Level Zero GPU kernels along with percent of cycles it was active,
-    stall and idle (metrics are collected in *query* mode);
-  - [ze_metric_streamer](samples/ze_metric_streamer/README.md) - provides a
-    list of hottest Level Zero GPU kernels along with percent of cycles it was
-    active, stall and idle (metrics are collected in *streamer* mode);
-- tools for OpenMP*:
-  - [omp_hot_regions](samples/omp_hot_regions/README.md) - provides a list of
-    hottest parallel (for CPU) and target (for GPU) OpenMP* regions;
-- utilities:
-  - [dpc_info](samples/dpc_info/README.md) - prints information on available
-    platforms and devices in DPC++;
-  - [ze_info](samples/ze_info/README.md) - prints information on available
-    platforms and devices in Level Zero;
-  - [ze_metric_info](samples/ze_metric_info/README.md) - prints the list of HW
-    metrics one can collect with the help of Level Zero;
-  - [gpu_perfmon_set](samples/gpu_perfmon_set/README.md) - allows to choose
-    HW metric for collection in EU PerfMon register;
 
 ## Prerequisites
 
@@ -182,7 +89,6 @@ You may obtain a copy of the License at <https://opensource.org/license/MIT>
       ```
 
 - [Metrics Library for Metrics Discovery API (Metrics Library for MD API)](https://github.com/intel/metrics-library)
-- [Graphics Technology Pin (GT Pin)](https://software.intel.com/content/www/us/en/develop/articles/gtpin.html)
 - [Intel(R) oneAPI Base Toolkit](https://software.intel.com/content/www/us/en/develop/tools/oneapi/base-toolkit.html)
 - [libdrm](https://gitlab.freedesktop.org/mesa/drm)
   - on Ubuntu one may perform:
@@ -191,74 +97,12 @@ You may obtain a copy of the License at <https://opensource.org/license/MIT>
     sudo apt-get install libdrm-dev
     ```
 
-More information of what is needed for particular sample can be found on
-sample description page.
+More information on what each tool needs can be found in its README.
 
-## Build and Run
+## Build
 
-In general, to build samples one need to perform the following steps
-(specific instructions for particular sample can be found on sample
-description page):
-
-```sh
-cd <pti_root>/samples/<sample_root>
-mkdir build
-cd build
-cmake -DCMAKE_BUILD_TYPE=Release ..
-make
-```
-
-To point out to specific headers and libraries one may use
-`-DCMAKE_INCLUDE_PATH` and `-DCMAKE_LIBRARY_PATH` options
-correspondingly, e.g.:
-
-```sh
-cmake -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_INCLUDE_PATH=/tmp/level_zero/include \
-  -DCMAKE_LIBRARY_PATH=/tmp/level_zero/lib \
-  ..
-```
-
-Run instructions may vary from sample to sample significantly, so they are
-provided on particular sample description page.
-
-## Testing
-
-There is a way to build and test all the samples in one command, e.g.:
-
-```sh
-LD_LIBRARY_PATH=/usr/local/lib python <pti_root>/tests/run.py
-```
-
-In case of failed tests, error output will be available in `stderr.log` file.
-
-It's also possible to test an exact sample or a group of samples, e.g.:
-
-```sh
-# build and test an exact sample "cl_hot_functions"
-python <pti_root>/tests/run.py -s cl_hot_functions
-# build and test all L0 samples
-python <pti_root>/tests/run.py -s ze
-```
-
-To run testing in debug mode one may use `-d` option, e.g.:
-
-```sh
-python <pti_root>/tests/run.py -s ze_gemm -d
-```
-
-The script creates `build` directory inside each sample folder while testing.
-To remove all of these folders, use:
-
-```sh
-python <pti_root>/tests/run.py -c
-```
-
-## Unitrace and PTI SDK Experimental Build
-
-The two products in active development are Unitrace and PTI SDK. A new,
-top-level, CMakeLists.txt file can be used to build them together.  
-To build them, use CMake in the root of this repository.
+The top-level CMakeLists.txt builds Unitrace and PTI SDK together. To build
+them, use CMake in the root of this repository.
 
 ```console
 source /opt/intel/oneapi/setvars.sh
