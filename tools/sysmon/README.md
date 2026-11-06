@@ -93,7 +93,7 @@ make
 ```
 sysmon is self-contained: the `tools/sysmon` directory can also be built outside the PTI repository. In that
 case pass the version reported by `--version` with `-DSYSMON_VERSION=<version>`.
-Use this command line to run the utility:
+Use this command line to run the utility in the default (`-p`) mode:
 ```sh
 ./sysmon
 ```
@@ -101,3 +101,13 @@ To run this utility in `top` like mode, one can use the following command:
 ```sh
 watch -n 1 ./sysmon # Call sysmon every 1 second
 ```
+## Testing
+`test/test_sysmon.py` builds sysmon and checks its output in each mode: without options (the default, same as `-p`),
+`-p`, `-l` and `-d`.
+It needs only Python 3 and the build prerequisites above, so it works outside the PTI repository too:
+```sh
+python3 <pti>/tools/sysmon/test/test_sysmon.py                      # build in tools/sysmon/build, check all modes
+python3 <pti>/tools/sysmon/test/test_sysmon.py --mode=-l --mode=-d  # check selected modes only
+python3 <pti>/tools/sysmon/test/test_sysmon.py --build-dir /tmp/sysmon-build --build-type Debug
+```
+The exit code is 0 when all checked modes pass.

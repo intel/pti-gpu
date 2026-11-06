@@ -1,3 +1,9 @@
+//==============================================================
+// Copyright (C) Intel Corporation
+//
+// SPDX-License-Identifier: MIT
+// =============================================================
+
 #include <array>
 #include <bitset>
 #include <cstdio>

@@ -126,7 +126,7 @@ jobs:
         if: contains(fromJSON(matrix.tags), 'PVC')
         run: |
           source /opt/intel/oneapi/setvars.sh
-          python ./tests/run.py -s sysmon
+          python ./tools/sysmon/test/test_sysmon.py
 
       - name: Build-and-test-cl_gpu_metrics
         if: contains(fromJSON(matrix.tags), 'PVC')
