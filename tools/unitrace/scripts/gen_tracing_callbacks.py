@@ -1108,6 +1108,7 @@ def main():
       "zeEventDestroy",
       "zeEventHostReset",
       "zeEventPoolCreate",
+      "zeEventCounterBasedCreate",
       "zeCommandListAppendEventReset",
       "zeCommandListAppendLaunchKernel",
       "zeCommandListAppendLaunchCooperativeKernel",

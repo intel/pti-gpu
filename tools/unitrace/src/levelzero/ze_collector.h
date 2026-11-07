@@ -3366,6 +3366,19 @@ class ZeCollector {
     }
   }
 
+  static void OnExitEventCounterBasedCreate(
+      ze_event_counter_based_create_params_t *params,
+      ze_result_t result,
+      void* global_data,
+      void** /* instance_data */) {
+    if (result == ZE_RESULT_SUCCESS && params->pphEvent && *params->pphEvent) {
+      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+      collector->events_mutex_.lock();
+      collector->counter_based_events_.insert(**params->pphEvent);
+      collector->events_mutex_.unlock();
+    }
+  }
+
   static void OnEnterEventDestroy(
       ze_event_destroy_params_t *params,
       void *global_data, void ** /* instance_data */, std::vector<uint64_t> *kids) {
