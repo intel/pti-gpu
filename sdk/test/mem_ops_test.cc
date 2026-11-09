@@ -557,6 +557,97 @@ TEST_F(MemoryOperationTest, SuccessfulMemCopyUserAllocated) {
                                ::testing::HasSubstr(kSubstringMemoryTypeUserAllocated)));
 }
 
+// A peer-to-peer copy runs on the device of the queue it is submitted to: the destination
+// device when it pulls the data from its peer, the source device when it pushes them.
+class MemoryCopyP2PTest : public ::pti::test::utils::RecordCollectionFixture {
+ protected:
+  void SetUp() override {
+    std::vector<sycl::device> devices;
+    try {
+      devices = sycl::platform(sycl::gpu_selector_v).get_devices();
+    } catch (const sycl::exception& e) {
+      GTEST_SKIP() << "No SYCL GPU platform available: " << e.what();
+    }
+    for (const auto& source : devices) {
+      for (const auto& destination : devices) {
+        if (source != destination && SameModel(source, destination) &&
+            CanAccessPeer(source, destination) && CanAccessPeer(destination, source)) {
+          source_ = source;
+          destination_ = destination;
+          return;
+        }
+      }
+    }
+    GTEST_SKIP() << "No pair of devices of the same model with peer access";
+  }
+
+  static ze_device_handle_t Native(const sycl::device& device) {
+    return sycl::get_native<sycl::backend::ext_oneapi_level_zero>(device);
+  }
+
+  static ze_device_properties_t Properties(const sycl::device& device) {
+    ze_device_properties_t props{};
+    props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2;
+    EXPECT_EQ(zeDeviceGetProperties(Native(device), &props), ZE_RESULT_SUCCESS);
+    return props;
+  }
+
+  // An integrated and a discrete GPU may report peer access and still crash on a copy.
+  static bool SameModel(const sycl::device& device, const sycl::device& peer) {
+    return Properties(device).deviceId == Properties(peer).deviceId;
+  }
+
+  static bool CanAccessPeer(const sycl::device& device, const sycl::device& peer) {
+    ze_bool_t can_access = 0;
+    return zeDeviceCanAccessPeer(Native(device), Native(peer), &can_access) == ZE_RESULT_SUCCESS &&
+           can_access;
+  }
+
+  static std::vector<uint8_t> Uuid(const sycl::device& device) {
+    const auto props = Properties(device);
+    return {std::begin(props.uuid.id), std::end(props.uuid.id)};
+  }
+
+  sycl::device source_;
+  sycl::device destination_;
+};
+
+TEST_F(MemoryCopyP2PTest, RecordsTheDeviceThatExecutedTheCopy) {
+  const sycl::context context({source_, destination_});
+  const sycl::property_list in_order{sycl::property::queue::in_order()};
+  sycl::queue on_source(context, source_, in_order);
+  sycl::queue on_destination(context, destination_, in_order);
+  using CopyType = float;
+  constexpr std::size_t kCount = 64;
+  constexpr std::size_t kBytes = kCount * sizeof(CopyType);
+  auto source_memory = pti::test::utils::CreateDeviceUsmVector<CopyType>(on_source, kCount);
+  auto destination_memory =
+      pti::test::utils::CreateDeviceUsmVector<CopyType>(on_destination, kCount);
+
+  InitCollection();
+  EnableViews(PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P);
+  on_destination.memcpy(destination_memory.get(), source_memory.get(), kBytes).wait();
+  on_source.memcpy(destination_memory.get(), source_memory.get(), kBytes).wait();
+  FinalizeCollection();
+
+  auto& records = record_storage_.p2p_memcpy_records;
+  ASSERT_EQ(std::size(records), 2);
+  std::sort(records.begin(), records.end(), [](const auto* first, const auto* second) {
+    return first->_start_timestamp < second->_start_timestamp;
+  });
+  const auto* pull = reinterpret_cast<const pti_view_record_memory_copy_p2p_v3*>(records[0]);
+  const auto* push = reinterpret_cast<const pti_view_record_memory_copy_p2p_v3*>(records[1]);
+
+  for (const auto* record : {pull, push}) {
+    EXPECT_EQ(record->_src_device_handle, Native(source_));
+    EXPECT_EQ(record->_dst_device_handle, Native(destination_));
+  }
+  EXPECT_EQ(pull->_device_handle, Native(destination_));
+  EXPECT_THAT(pull->_device_uuid, ::testing::ElementsAreArray(Uuid(destination_)));
+  EXPECT_EQ(push->_device_handle, Native(source_));
+  EXPECT_THAT(push->_device_uuid, ::testing::ElementsAreArray(Uuid(source_)));
+}
+
 TEST(MemoryTypeStringificationTest, ToStringReturnsCorrectStringsForAllMemoryTypes) {
   EXPECT_THAT(ptiViewMemoryTypeToString(pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_SHARED),
               ::testing::HasSubstr(kSubstringMemoryTypeShared));

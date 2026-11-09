@@ -59,6 +59,7 @@ Record structures contain profiling data passed to callbacks:
 * :ref:`pti_view_record_memory_copy_v2 <pti_view_record_memory_copy_v2>` - Memory copy record v2 (extended)
 * :ref:`pti_view_record_memory_copy_p2p <pti_view_record_memory_copy_p2p>` - Peer-to-peer copy record
 * :ref:`pti_view_record_memory_copy_p2p_v2 <pti_view_record_memory_copy_p2p_v2>` - Peer-to-peer copy record v2 (extended)
+* :ref:`pti_view_record_memory_copy_p2p_v3 <pti_view_record_memory_copy_p2p_v3>` - Peer-to-peer copy record v3 (adds the executing device)
 * :ref:`pti_view_record_memory_fill <pti_view_record_memory_fill>` - Memory fill record
 * :ref:`pti_view_record_memory_fill_v2 <pti_view_record_memory_fill_v2>` - Memory fill record v2 (extended)
 * :ref:`pti_view_record_synchronization <pti_view_record_synchronization>` - Synchronization record
@@ -185,6 +186,10 @@ Structures
 
 .. _pti_view_record_memory_copy_p2p_v2:
 .. doxygenstruct::   pti_view_record_memory_copy_p2p_v2
+   :members:
+
+.. _pti_view_record_memory_copy_p2p_v3:
+.. doxygenstruct::   pti_view_record_memory_copy_p2p_v3
    :members:
 
 .. _pti_view_record_memory_fill:

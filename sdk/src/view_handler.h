@@ -1098,12 +1098,14 @@ inline void DoCommonMemCopy(T& record, const ZeKernelCommandExecutionRecord& rec
 }
 
 inline void MemCopyP2PEvent(const ZeKernelCommandExecutionRecord& rec) {
-  pti_view_record_memory_copy_p2p_v2 record;
+  pti_view_record_memory_copy_p2p_v3 record{};
   DoCommonMemCopy(record, rec);
   SetMemCpyIdsP2P(record, rec);
   record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P;
   record._src_device_handle = static_cast<pti_device_handle_t>(rec.device_);
   record._dst_device_handle = static_cast<pti_device_handle_t>(rec.dst_device_);
+  record._device_handle = static_cast<pti_device_handle_t>(rec.exec_device_);
+  std::copy_n(rec.exec_device_uuid, PTI_MAX_DEVICE_UUID_SIZE, record._device_uuid);
   Instance().InsertRecord(record, record._thread_id);
 }
 

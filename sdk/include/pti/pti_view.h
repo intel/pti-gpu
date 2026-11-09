@@ -409,12 +409,55 @@ typedef struct pti_view_record_memory_copy_p2p_v2 {
   uint64_t _sycl_queue_id;                          //!< Device front-end queue id
   pti_device_handle_t _src_device_handle;           //!< Device handle of source memory
   pti_device_handle_t _dst_device_handle;           //!< Device handle of destination memory
-  uint32_t _engine_ordinal;                         //!< Source device engine ordinal on which copy was executed
-  uint32_t _engine_index;                           //!< Source device engine index on which copy was executed
+  uint32_t _engine_ordinal;                         //!< Engine ordinal, on the device that executed the copy
+  uint32_t _engine_index;                           //!< Engine index, on the device that executed the copy
 } pti_view_record_memory_copy_p2p_v2;
 
 PTI_STATIC_ASSERT(offsetof(pti_view_record_memory_copy_p2p_v2, _src_device_handle) == sizeof(pti_view_record_memory_copy_p2p),
      "pti_view_record_memory_copy_p2p_v2 must be an extension of pti_view_record_memory_copy_p2p");
+
+/**
+ * @brief Peer to Peer Memory Copy Operation View version3 record type
+ *
+ * Adds the device that executed the copy. That is the device of the queue the copy was
+ * submitted to, which is the destination device when it pulls the data from its peer,
+ * and the source device when it pushes them.
+ */
+typedef struct pti_view_record_memory_copy_p2p_v3 {
+  pti_view_record_base _view_kind;                  //!< Base record
+  pti_view_memcpy_type _memcpy_type;                //!< Memory copy type
+  pti_view_memory_type _mem_src;                    //!< Memory type
+  pti_view_memory_type _mem_dst;                    //!< Memory type
+  pti_backend_queue_t _queue_handle;                //!< Device back-end queue handle
+  pti_backend_ctx_t _context_handle;                //!< Context handle
+  const char* _name;                                //!< Back-end API name making a memory copy
+  char _src_pci_address[PTI_MAX_PCI_ADDRESS_SIZE];  //!< Source Device pci_address
+  char _dst_pci_address[PTI_MAX_PCI_ADDRESS_SIZE];  //!< Destination Device pci_address
+  uint8_t _src_uuid[PTI_MAX_DEVICE_UUID_SIZE];      //!< Source Device uuid
+  uint8_t _dst_uuid[PTI_MAX_DEVICE_UUID_SIZE];      //!< Destination Device uuid
+  uint64_t _mem_op_id;                              //!< Memory operation ID, unique among
+                                                    //!< all memory operations instances
+  uint32_t _correlation_id;                         //!< ID that correlates this record with records
+                                                    //!< of other Views
+  uint32_t _thread_id;                              //!< Thread ID from which operation submitted
+  uint64_t _append_timestamp;                       //!< Timestamp of memory copy appending to
+                                                    //!< back-end command list, ns
+  uint64_t _start_timestamp;                        //!< Timestamp of memory copy start on device, ns
+  uint64_t _end_timestamp;                          //!< Timestamp of memory copy completion on device, ns
+  uint64_t _submit_timestamp;                       //!< Timestamp of memory copy command list submission
+                                                    //!< to device, ns
+  uint64_t _bytes;                                  //!< number of bytes copied
+  uint64_t _sycl_queue_id;                          //!< Device front-end queue id
+  pti_device_handle_t _src_device_handle;           //!< Device handle of source memory
+  pti_device_handle_t _dst_device_handle;           //!< Device handle of destination memory
+  uint32_t _engine_ordinal;                         //!< Engine ordinal, on the device that executed the copy
+  uint32_t _engine_index;                           //!< Engine index, on the device that executed the copy
+  pti_device_handle_t _device_handle;               //!< Device handle on which copy was executed
+  uint8_t _device_uuid[PTI_MAX_DEVICE_UUID_SIZE];   //!< Uuid of device on which copy was executed
+} pti_view_record_memory_copy_p2p_v3;
+
+PTI_STATIC_ASSERT(offsetof(pti_view_record_memory_copy_p2p_v3, _device_handle) == sizeof(pti_view_record_memory_copy_p2p_v2),
+     "pti_view_record_memory_copy_p2p_v3 must be an extension of pti_view_record_memory_copy_p2p_v2");
 
 /**
  * @brief Device Memory Fill operation View record type

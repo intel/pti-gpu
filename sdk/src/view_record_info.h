@@ -32,7 +32,7 @@ inline constexpr std::array<std::size_t, kSizeOfViewRecordTable> kViewSizeLookup
     sizeof(pti_view_record_external_correlation),     // PTI_VIEW_EXTERNAL_CORRELATION
     sizeof(pti_view_record_memory_copy_v2),           // PTI_VIEW_DEVICE_GPU_MEM_COPY
     sizeof(pti_view_record_memory_fill_v2),           // PTI_VIEW_DEVICE_GPU_MEM_FILL
-    sizeof(pti_view_record_memory_copy_p2p_v2),       // PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P
+    sizeof(pti_view_record_memory_copy_p2p_v3),       // PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P
     sizeof(pti_view_record_synchronization),          // PTI_VIEW_DEVICE_SYNCHRONIZATION
     sizeof(pti_view_record_comms),                    // PTI_VIEW_COMMUNICATION
 };

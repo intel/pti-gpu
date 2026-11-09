@@ -78,6 +78,10 @@ struct ZeKernelCommandExecutionRecord {
   uint8_t src_device_uuid[PTI_MAX_DEVICE_UUID_SIZE];
   uint8_t dst_device_uuid[PTI_MAX_DEVICE_UUID_SIZE];
 
+  // Device of the queue a memory command was submitted to (unset for other commands).
+  ze_device_handle_t exec_device_ = nullptr;
+  uint8_t exec_device_uuid[PTI_MAX_DEVICE_UUID_SIZE]{};
+
   bool implicit_scaling_;
   std::string name_;
   const char* sycl_func_name_;

@@ -1316,6 +1316,10 @@ class ZeCollector {
 
       rec.command_type_ = command->props.type;
       if (command->props.type == KernelCommandType::kMemory) {
+        rec.exec_device_ = command->device;
+        if (command->device != nullptr) {
+          CopyDeviceUuid(command->device, static_cast<uint8_t*>(rec.exec_device_uuid));
+        }
         rec.device_ = command->props.src_device;
         rec.dst_device_ = command->props.dst_device;
         if (command->props.src_device != nullptr) {
