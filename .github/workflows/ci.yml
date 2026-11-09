@@ -108,7 +108,7 @@ jobs:
     runs-on: [self-hosted, Windows, pti, ARC]
     timeout-minutes: 20
     env:
-      LEVEL_ZERO_LOADER_VERSION: 1.32.0
+      LEVEL_ZERO_LOADER_VERSION: 1.35.0
     defaults:
       run:
         shell: cmd

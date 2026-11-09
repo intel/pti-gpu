@@ -6,12 +6,12 @@
 
 #include "ze_command_visitor.h"
 
-#include <level_zero/driver_experimental/zex_visit.h>
 #include <level_zero/ze_api.h>
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <stdexcept>
 #include <string_view>
 #include <tuple>
@@ -26,6 +26,7 @@
 #include "ze_gpu_command.h"
 #include "ze_local_collection_helpers.h"
 #include "ze_utils.h"
+#include "zex_visit.h"
 
 #if defined(PTI_TRACE_SYCL)
 #include "sycl_collector.h"
@@ -76,9 +77,9 @@ auto* MakeVisitors() {
         {};
     std::transform(GetVisitorTable().begin(), GetVisitorTable().end(), visitors_temp.begin(),
                    [](const auto& str_func) {
-                     return ze_concrete_visitor_ext_desc_t{
-                         ZEX_STRUCTURE_TYPE_CONCRETE_VISITOR_EXT_DESC, nullptr,
-                         str_func.first.data(), str_func.second};
+                     return ze_concrete_visitor_ext_desc_t{kZexStructureTypeConcreteVisitorExtDesc,
+                                                           nullptr, str_func.first.data(),
+                                                           str_func.second};
                    });
     return visitors_temp;
   }();
@@ -224,8 +225,8 @@ ZeCommandVisitor::ZeCommandVisitor(ZeExts::Visit visitor_extension,
                                    ZeEventPoolManager* event_pool_manager)
     : visitor_extension_(visitor_extension),
       event_pool_manager_(event_pool_manager),
-      visit_desc_({ZEX_STRUCTURE_TYPE_COMMAND_VISIT_EXT_DESC, MakeVisitors(), this, nullptr,
-                   nullptr, ZE_VISIT_EXT_DEFAULT_OP_REAPPEND, nullptr}),
+      visit_desc_({kZexStructureTypeCommandVisitExtDesc, MakeVisitors(), this, nullptr, nullptr,
+                   ZE_COMMAND_VISIT_EXT_DEFAULT_OP_REAPPEND, nullptr}),
       internal_error_(ZE_RESULT_SUCCESS) {
   if (!event_pool_manager_) {
     throw std::invalid_argument("Event pool manager cannot be null");
@@ -236,7 +237,7 @@ ZeCommandVisitor::ZeCommandVisitor(ZeExts::Visit visitor_extension,
 }
 
 ZeCommandVisitor::Result ZeCommandVisitor::CollectResultAndReset() {
-  visit_desc_.hReappendTargetCmdList = nullptr;
+  visit_desc_.hReappendTargetCommandList = nullptr;
   current_device_desc_ = {};
   current_command_list_info_ = {};
   Result result;
@@ -251,7 +252,7 @@ ZeCommandVisitor::Result ZeCommandVisitor::CollectResultAndReset() {
 }
 
 bool ZeCommandVisitor::VisitingNativeGraph() const {
-  return visit_desc_.hReappendTargetCmdList == nullptr;
+  return visit_desc_.hReappendTargetCommandList == nullptr;
 }
 
 std::optional<ZeCommandVisitor::TimestampInfo> ZeCommandVisitor::AppendQueryTimestamp(
@@ -309,7 +310,7 @@ ZeCommandVisitor::Result ZeCommandVisitor::Visit(
     ze_command_list_handle_t command_list, ze_command_list_handle_t instrumented_command_list) {
   current_device_desc_ = device_desc;
   current_command_list_info_ = info;
-  visit_desc_.hReappendTargetCmdList = instrumented_command_list;
+  visit_desc_.hReappendTargetCommandList = instrumented_command_list;
   auto result = visitor_extension_.ze_command_list_visit(command_list, &visit_desc_);
   SPDLOG_TRACE("Visit result: {:x}", static_cast<std::uint32_t>(result));
   if (HasError() || result != ZE_RESULT_SUCCESS) {
@@ -348,7 +349,7 @@ ZeCommandVisitor::Result ZeCommandVisitor::GraphVisit(const ZeDeviceDescriptor& 
   return CollectResultAndReset();
 }
 
-ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernel(
+ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernel(
     ze_command_list_handle_t hCommandList, ze_kernel_handle_t hKernel,
     const ze_group_count_t* pLaunchFuncArgs, ze_event_handle_t hSignalEvent, uint32_t numWaitEvents,
     ze_event_handle_t* phWaitEvents, void* userData) {
@@ -357,8 +358,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernel(
     auto event =
         visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
 
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCmdList
-                                    ? visitor->visit_desc_.hReappendTargetCmdList
+    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
+                                    ? visitor->visit_desc_.hReappendTargetCommandList
                                     : hCommandList;
 
     ZE_COMMAND(visitor, zeCommandListAppendLaunchKernel, target_command_list, hKernel,
@@ -387,7 +388,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernel(
   });
 }
 
-ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernelWithArguments(
+ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernelWithArguments(
     ze_command_list_handle_t hCommandList, ze_kernel_handle_t hKernel,
     const ze_group_count_t groupCounts, const ze_group_size_t groupSizes, void** pArguments,
     const void* pNext, ze_event_handle_t hSignalEvent, uint32_t numWaitEvents,
@@ -397,8 +398,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernelWi
     auto event =
         visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
 
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCmdList
-                                    ? visitor->visit_desc_.hReappendTargetCmdList
+    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
+                                    ? visitor->visit_desc_.hReappendTargetCommandList
                                     : hCommandList;
 
     ZE_VISITOR_COMMAND(visitor, zeCommandListAppendLaunchKernelWithArguments, target_command_list,
@@ -422,7 +423,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernelWi
   });
 }
 
-ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernelWithParameters(
+ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernelWithParameters(
     ze_command_list_handle_t hCommandList, ze_kernel_handle_t hKernel,
     const ze_group_count_t* pGroupCounts, const void* pNext, ze_event_handle_t hSignalEvent,
     uint32_t numWaitEvents, ze_event_handle_t* phWaitEvents, void* userData) {
@@ -431,8 +432,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernelWi
     auto event =
         visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
 
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCmdList
-                                    ? visitor->visit_desc_.hReappendTargetCmdList
+    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
+                                    ? visitor->visit_desc_.hReappendTargetCommandList
                                     : hCommandList;
 
     ZE_VISITOR_COMMAND(visitor, zeCommandListAppendLaunchKernelWithParameters, target_command_list,
@@ -460,7 +461,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernelWi
   });
 }
 
-ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchCooperativeKernel(
+ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchCooperativeKernel(
     ze_command_list_handle_t hCommandList, ze_kernel_handle_t hKernel,
     const ze_group_count_t* pLaunchFuncArgs, ze_event_handle_t hSignalEvent, uint32_t numWaitEvents,
     ze_event_handle_t* phWaitEvents, void* userData) {
@@ -469,8 +470,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchCooperat
     auto event =
         visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
 
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCmdList
-                                    ? visitor->visit_desc_.hReappendTargetCmdList
+    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
+                                    ? visitor->visit_desc_.hReappendTargetCommandList
                                     : hCommandList;
 
     ZE_COMMAND(visitor, zeCommandListAppendLaunchCooperativeKernel, target_command_list, hKernel,
@@ -498,7 +499,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchCooperat
   });
 }
 
-ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernelIndirect(
+ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernelIndirect(
     ze_command_list_handle_t hCommandList, ze_kernel_handle_t hKernel,
     const ze_group_count_t* pLaunchArgumentsBuffer, ze_event_handle_t hSignalEvent,
     uint32_t numWaitEvents, ze_event_handle_t* phWaitEvents, void* userData) {
@@ -507,8 +508,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernelIn
     auto event =
         visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
 
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCmdList
-                                    ? visitor->visit_desc_.hReappendTargetCmdList
+    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
+                                    ? visitor->visit_desc_.hReappendTargetCommandList
                                     : hCommandList;
 
     ZE_COMMAND(visitor, zeCommandListAppendLaunchKernelIndirect, target_command_list, hKernel,
@@ -531,7 +532,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernelIn
   });
 }
 
-ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryCopy(
+ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryCopy(
     ze_command_list_handle_t hCommandList, void* dstptr, const void* srcptr, size_t size,
     ze_event_handle_t hSignalEvent, uint32_t numWaitEvents, ze_event_handle_t* phWaitEvents,
     void* userData) {
@@ -540,8 +541,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryCopy(
     auto event =
         visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
 
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCmdList
-                                    ? visitor->visit_desc_.hReappendTargetCmdList
+    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
+                                    ? visitor->visit_desc_.hReappendTargetCommandList
                                     : hCommandList;
 
     ZE_COMMAND(visitor, zeCommandListAppendMemoryCopy, target_command_list, dstptr, srcptr, size,
@@ -559,7 +560,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryCopy(
   });
 }
 
-ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryFill(
+ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryFill(
     ze_command_list_handle_t hCommandList, void* ptr, const void* pattern, size_t pattern_size,
     size_t size, ze_event_handle_t hSignalEvent, uint32_t numWaitEvents,
     ze_event_handle_t* phWaitEvents, void* userData) {
@@ -568,8 +569,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryFill(
     auto event =
         visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
 
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCmdList
-                                    ? visitor->visit_desc_.hReappendTargetCmdList
+    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
+                                    ? visitor->visit_desc_.hReappendTargetCommandList
                                     : hCommandList;
 
     ZE_COMMAND(visitor, zeCommandListAppendMemoryFill, target_command_list, ptr, pattern,
@@ -588,7 +589,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryFill(
   });
 }
 
-ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryCopyRegion(
+ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryCopyRegion(
     ze_command_list_handle_t hCommandList, void* dstptr, const ze_copy_region_t* dstRegion,
     uint32_t dstPitch, uint32_t dstSlicePitch, const void* srcptr,
     const ze_copy_region_t* srcRegion, uint32_t srcPitch, uint32_t srcSlicePitch,
@@ -599,8 +600,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryCopyRegi
     auto event =
         visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
 
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCmdList
-                                    ? visitor->visit_desc_.hReappendTargetCmdList
+    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
+                                    ? visitor->visit_desc_.hReappendTargetCommandList
                                     : hCommandList;
 
     ZE_COMMAND(visitor, zeCommandListAppendMemoryCopyRegion, target_command_list, dstptr, dstRegion,
@@ -626,7 +627,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryCopyRegi
   });
 }
 
-ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryCopyFromContext(
+ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryCopyFromContext(
     ze_command_list_handle_t hCommandList, void* dstptr, ze_context_handle_t hContextSrc,
     const void* srcptr, size_t size, ze_event_handle_t hSignalEvent, uint32_t numWaitEvents,
     ze_event_handle_t* phWaitEvents, void* userData) {
@@ -635,8 +636,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryCopyFrom
     auto event =
         visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
 
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCmdList
-                                    ? visitor->visit_desc_.hReappendTargetCmdList
+    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
+                                    ? visitor->visit_desc_.hReappendTargetCommandList
                                     : hCommandList;
 
     ZE_COMMAND(visitor, zeCommandListAppendMemoryCopyFromContext, target_command_list, dstptr,
@@ -653,7 +654,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryCopyFrom
   });
 }
 
-ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopy(
+ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopy(
     ze_command_list_handle_t hCommandList, ze_image_handle_t hDstImage, ze_image_handle_t hSrcImage,
     ze_event_handle_t hSignalEvent, uint32_t numWaitEvents, ze_event_handle_t* phWaitEvents,
     void* userData) {
@@ -662,8 +663,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopy(
     auto event =
         visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
 
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCmdList
-                                    ? visitor->visit_desc_.hReappendTargetCmdList
+    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
+                                    ? visitor->visit_desc_.hReappendTargetCommandList
                                     : hCommandList;
 
     ZE_COMMAND(visitor, zeCommandListAppendImageCopy, target_command_list, hDstImage, hSrcImage,
@@ -683,7 +684,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopy(
   });
 }
 
-ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyRegion(
+ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyRegion(
     ze_command_list_handle_t hCommandList, ze_image_handle_t hDstImage, ze_image_handle_t hSrcImage,
     const ze_image_region_t* pDstRegion, const ze_image_region_t* pSrcRegion,
     ze_event_handle_t hSignalEvent, uint32_t numWaitEvents, ze_event_handle_t* phWaitEvents,
@@ -693,8 +694,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyRegio
     auto event =
         visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
 
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCmdList
-                                    ? visitor->visit_desc_.hReappendTargetCmdList
+    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
+                                    ? visitor->visit_desc_.hReappendTargetCommandList
                                     : hCommandList;
 
     ZE_COMMAND(visitor, zeCommandListAppendImageCopyRegion, target_command_list, hDstImage,
@@ -712,7 +713,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyRegio
   });
 }
 
-ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyToMemory(
+ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyToMemory(
     ze_command_list_handle_t hCommandList, void* dstptr, ze_image_handle_t hSrcImage,
     const ze_image_region_t* pSrcRegion, ze_event_handle_t hSignalEvent, uint32_t numWaitEvents,
     ze_event_handle_t* phWaitEvents, void* userData) {
@@ -721,8 +722,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyToMem
     auto event =
         visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
 
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCmdList
-                                    ? visitor->visit_desc_.hReappendTargetCmdList
+    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
+                                    ? visitor->visit_desc_.hReappendTargetCommandList
                                     : hCommandList;
 
     ZE_COMMAND(visitor, zeCommandListAppendImageCopyToMemory, target_command_list, dstptr,
@@ -741,7 +742,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyToMem
   });
 }
 
-ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyFromMemory(
+ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyFromMemory(
     ze_command_list_handle_t hCommandList, ze_image_handle_t hDstImage, const void* srcptr,
     const ze_image_region_t* pDstRegion, ze_event_handle_t hSignalEvent, uint32_t numWaitEvents,
     ze_event_handle_t* phWaitEvents, void* userData) {
@@ -750,8 +751,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyFromM
     auto event =
         visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
 
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCmdList
-                                    ? visitor->visit_desc_.hReappendTargetCmdList
+    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
+                                    ? visitor->visit_desc_.hReappendTargetCommandList
                                     : hCommandList;
 
     ZE_COMMAND(visitor, zeCommandListAppendImageCopyFromMemory, target_command_list, hDstImage,
@@ -776,7 +777,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyFromM
   });
 }
 
-ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyToMemoryExt(
+ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyToMemoryExt(
     ze_command_list_handle_t hCommandList, void* dstptr, ze_image_handle_t hSrcImage,
     const ze_image_region_t* pSrcRegion, uint32_t destRowPitch, uint32_t destSlicePitch,
     ze_event_handle_t hSignalEvent, uint32_t numWaitEvents, ze_event_handle_t* phWaitEvents,
@@ -786,8 +787,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyToMem
     auto event =
         visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
 
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCmdList
-                                    ? visitor->visit_desc_.hReappendTargetCmdList
+    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
+                                    ? visitor->visit_desc_.hReappendTargetCommandList
                                     : hCommandList;
 
     ZE_VISITOR_COMMAND(visitor, zeCommandListAppendImageCopyToMemoryExt, target_command_list,
@@ -808,7 +809,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyToMem
   });
 }
 
-ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyFromMemoryExt(
+ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyFromMemoryExt(
     ze_command_list_handle_t hCommandList, ze_image_handle_t hDstImage, const void* srcptr,
     const ze_image_region_t* pDstRegion, uint32_t srcRowPitch, uint32_t srcSlicePitch,
     ze_event_handle_t hSignalEvent, uint32_t numWaitEvents, ze_event_handle_t* phWaitEvents,
@@ -818,8 +819,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyFromM
     auto event =
         visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
 
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCmdList
-                                    ? visitor->visit_desc_.hReappendTargetCmdList
+    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
+                                    ? visitor->visit_desc_.hReappendTargetCommandList
                                     : hCommandList;
 
     ZE_VISITOR_COMMAND(visitor, zeCommandListAppendImageCopyFromMemoryExt, target_command_list,
@@ -846,19 +847,19 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyFromM
   });
 }
 
-ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendEventReset(
+ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendEventReset(
     ze_command_list_handle_t hCommandList, ze_event_handle_t hEvent, void* userData) {
   auto* visitor = static_cast<ZeCommandVisitor*>(userData);
   return ExceptionHandler(visitor, __func__, [&] {
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCmdList
-                                    ? visitor->visit_desc_.hReappendTargetCmdList
+    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
+                                    ? visitor->visit_desc_.hReappendTargetCommandList
                                     : hCommandList;
 
     ZE_COMMAND(visitor, zeCommandListAppendEventReset, target_command_list, hEvent);
   });
 }
 
-ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendBarrier(
+ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendBarrier(
     ze_command_list_handle_t hCommandList, ze_event_handle_t hSignalEvent, uint32_t numWaitEvents,
     ze_event_handle_t* phWaitEvents, void* userData) {
   auto* visitor = static_cast<ZeCommandVisitor*>(userData);
@@ -866,8 +867,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendBarrier(
     auto event =
         visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
 
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCmdList
-                                    ? visitor->visit_desc_.hReappendTargetCmdList
+    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
+                                    ? visitor->visit_desc_.hReappendTargetCommandList
                                     : hCommandList;
 
     ZE_COMMAND(visitor, zeCommandListAppendBarrier, target_command_list, event.Get(), numWaitEvents,
@@ -884,7 +885,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendBarrier(
   });
 }
 
-ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryRangesBarrier(
+ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryRangesBarrier(
     ze_command_list_handle_t hCommandList, uint32_t numRanges, const size_t* pRangeSizes,
     const void** pRanges, ze_event_handle_t hSignalEvent, uint32_t numWaitEvents,
     ze_event_handle_t* phWaitEvents, void* userData) {
@@ -893,8 +894,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryRangesBa
     auto event =
         visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
 
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCmdList
-                                    ? visitor->visit_desc_.hReappendTargetCmdList
+    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
+                                    ? visitor->visit_desc_.hReappendTargetCommandList
                                     : hCommandList;
 
     ZE_COMMAND(visitor, zeCommandListAppendMemoryRangesBarrier, target_command_list, numRanges,

@@ -7,9 +7,13 @@
 #ifndef LEVEL_ZERO_ZE_EXTENSIONS_H_
 #define LEVEL_ZERO_ZE_EXTENSIONS_H_
 
-#include <level_zero/driver_experimental/zex_visit.h>
+#include <level_zero/ze_api.h>
 #include <level_zero/ze_intel_gpu.h>
 #include <spdlog/spdlog.h>
+
+#ifndef ZE_COMMAND_VISIT_EXT_NAME
+#error "PTI requires Level Zero headers >= 1.35.0 (ZE_extension_command_visit)"
+#endif
 
 #include "ze_utils.h"
 

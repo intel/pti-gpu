@@ -1,6 +1,5 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include <level_zero/driver_experimental/zex_visit.h>
 #include <level_zero/ze_api.h>
 
 #include <chrono>
@@ -135,7 +134,7 @@ class LocalModeZeGemmTest : public testing::Test {
     }
 
     if (command_list_visit_supported_) {
-      cmd_list_desc.flags |= ZE_COMMAND_LIST_FLAG_ENABLE_CMD_VISITING;
+      cmd_list_desc.flags |= ZE_COMMAND_LIST_FLAG_ENABLE_COMMAND_VISIT;
     }
 
     status = zeCommandListCreate(ctx_, dev_, &cmd_list_desc, &cmd_list_);
