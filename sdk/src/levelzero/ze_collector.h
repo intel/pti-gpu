@@ -26,6 +26,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <limits>
 #include <list>
 #include <map>
 #include <memory>
@@ -3575,9 +3576,37 @@ class ZeCollector {
     delete[] swapped_lists;
   }
 
+  // PTI_GRAPH_SYNC_TIMEOUT_MS: timeout for waiting on the previous replay of a graph.
+  // Default 10000 ms; a negative value means wait forever.
+  static uint64_t GetGraphExecutionTimeoutNs() {
+    static const uint64_t timeout_ns = []() -> uint64_t {
+      constexpr uint64_t kDefaultNs =
+          std::chrono::nanoseconds(std::chrono::milliseconds(10000)).count();
+      const std::string env = utils::GetEnv("PTI_GRAPH_SYNC_TIMEOUT_MS");
+      if (env.empty()) {
+        return kDefaultNs;
+      }
+      try {
+        std::size_t parsed = 0;
+        const long long ms = std::stoll(env, &parsed);
+        if (parsed != env.size()) {
+          return kDefaultNs;
+        }
+        constexpr uint64_t kNsPerMs = 1000000ULL;
+        if (ms < 0 ||
+            static_cast<uint64_t>(ms) > (std::numeric_limits<uint64_t>::max)() / kNsPerMs) {
+          return (std::numeric_limits<uint64_t>::max)();
+        }
+        return static_cast<uint64_t>(ms) * kNsPerMs;
+      } catch (...) {
+        return kDefaultNs;
+      }
+    }();
+    return timeout_ns;
+  }
+
   std::pair<ze_event_handle_t, bool> SynchronizePreviousExecution(ZeGraphInfo* graph_info) {
-    static constexpr auto kExecutionTimeout =
-        std::chrono::nanoseconds(std::chrono::milliseconds(250)).count();
+    const auto kExecutionTimeout = GetGraphExecutionTimeoutNs();
     auto& execution = graph_info->execution;
     if (!execution.graph_execution_event || execution.graph_execution_event->Empty()) {
       SPDLOG_TRACE("No previous execution of graph {} to synchronize",
