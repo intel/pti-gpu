@@ -29,7 +29,7 @@ Cache Variables
 The following cache variables may also be set:
 
 ``unified-runtime_INCLUDE_DIR``
-  The directory containing ``sycl/ur_api.h``.
+  The directory containing ``ur_api.h`` or ``sycl/ur_api.h``.
 ``unified-runtime_LIBRARY``
 The path to the Unified Runtime library.
 
@@ -72,7 +72,17 @@ endif()
 
 find_path(
   unified-runtime_INCLUDE_DIR
-# the file order seems impacts if it finds UR in the dir under CMPLR_ROOT
+  NAMES ur_api.h sycl/ur_api.h
+  HINTS ${UNIFIED_RUNTIME_ROOT_DIR}
+  PATH_SUFFIXES include
+                include/unified-runtime
+                linux/include
+  NO_DEFAULT_PATH
+)
+
+# Will be ignored if above find_path succeded. This is a a fallback.
+find_path(
+  unified-runtime_INCLUDE_DIR
   NAMES ur_api.h sycl/ur_api.h
   HINTS ${UNIFIED_RUNTIME_ROOT_DIR}
         ENV CPATH
@@ -81,6 +91,7 @@ find_path(
         ENV INCLUDE
         ENV CMPLR_ROOT
   PATH_SUFFIXES include
+                include/unified-runtime
                 linux/include
 )
 

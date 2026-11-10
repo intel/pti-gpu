@@ -1140,6 +1140,8 @@ TEST_F(ClassApiFixtureTest, ValidateApiIdsNotChanged) {
   EXPECT_STREQ(api_name, "urIPCPutEventHandleExp");
   PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 325, &api_name));
   EXPECT_STREQ(api_name, "urIPCOpenEventHandleExp");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 326, &api_name));
+  EXPECT_STREQ(api_name, "urGraphGetIdExp");
 
   PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 1, &api_name));
   EXPECT_EQ((std::strcmp(api_name, "zeInit") == 0), true);
@@ -1641,6 +1643,52 @@ TEST_F(ClassApiFixtureTest, ValidateApiIdsNotChanged) {
   EXPECT_STREQ(api_name, "zeGraphDumpContentsExt");
   PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 250, &api_name));
   EXPECT_STREQ(api_name, "zeGraphDestroyExt");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 251, &api_name));
+  EXPECT_STREQ(api_name, "zeDeviceGetCompilerInfo");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 252, &api_name));
+  EXPECT_STREQ(api_name, "zeDeviceGetCompilerInfoSupported");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 253, &api_name));
+  EXPECT_STREQ(api_name, "zeCommandQueueSetPriorityExt");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 254, &api_name));
+  EXPECT_STREQ(api_name, "zeCommandQueueSetQosExt");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 255, &api_name));
+  EXPECT_STREQ(api_name, "zeCommandQueueGetQosExt");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 256, &api_name));
+  EXPECT_STREQ(api_name, "zeCommandQueueSignalExternalSemaphoreExt");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 257, &api_name));
+  EXPECT_STREQ(api_name, "zeCommandQueueWaitExternalSemaphoreExt");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 258, &api_name));
+  EXPECT_STREQ(api_name, "zeCommandListAppendSignalEventWithParameters");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 259, &api_name));
+  EXPECT_STREQ(api_name, "zeCommandListAppendWaitOnEventsWithParameters");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 260, &api_name));
+  EXPECT_STREQ(api_name, "zeCommandListVisitExt");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 261, &api_name));
+  EXPECT_STREQ(api_name, "zeCommandListGetNextCommandIdExt");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 262, &api_name));
+  EXPECT_STREQ(api_name, "zeCommandListGetNextCommandIdWithKernelsExt");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 263, &api_name));
+  EXPECT_STREQ(api_name, "zeCommandListUpdateMutableCommandsExt");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 264, &api_name));
+  EXPECT_STREQ(api_name, "zeCommandListIsMutableExt");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 265, &api_name));
+  EXPECT_STREQ(api_name, "zeCommandListUpdateMutableCommandSignalEventExt");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 266, &api_name));
+  EXPECT_STREQ(api_name, "zeCommandListUpdateMutableCommandWaitEventsExt");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 267, &api_name));
+  EXPECT_STREQ(api_name, "zeCommandListUpdateMutableCommandKernelsExt");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 268, &api_name));
+  EXPECT_STREQ(api_name, "zeKernelGetModuleHandle");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 269, &api_name));
+  EXPECT_STREQ(api_name, "zeModuleGetDeviceHandle");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 270, &api_name));
+  EXPECT_STREQ(api_name, "zeGraphPauseCaptureExt");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 271, &api_name));
+  EXPECT_STREQ(api_name, "zeGraphResumeCaptureExt");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 272, &api_name));
+  EXPECT_STREQ(api_name, "zeGraphGetIdExt");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 273, &api_name));
+  EXPECT_STREQ(api_name, "zeGraphVisitExt");
 }
 
 // Force failure of granular api with incorrect api_ids and ensure error code returned.

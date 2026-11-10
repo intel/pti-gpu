@@ -206,9 +206,14 @@
         "CMAKE_MODULE_LINKER_FLAGS": "-Wl,-z,relro,-z,now,-z,noexecstack,--build-id=sha1",
         "CMAKE_EXE_LINKER_FLAGS": "-Wl,-z,relro,-z,now,-z,noexecstack,--build-id=sha1",
         "PTI_BUILD_SAMPLES": "OFF",
-        "PTI_BUILD_TESTING": "OFF",
-        "PTI_BUILD_URGEMM": "OFF"
+        "PTI_BUILD_TESTING": "OFF"
       }
+    },
+    {
+      "name": "linux-generate-ids",
+      "displayName": "Linux Generate API IDs x64 GCC Ninja Config",
+      "description": "Convenience build on Linux for generating API IDs",
+      "inherits" : "linux-abi"
     },
     {
       "name": "windows-icx-debug",
@@ -413,6 +418,12 @@
     "configurePreset": "linux-abi",
     "displayName": "Linux ABI Check Build",
     "targets": ["pti_view", "pti"]
+  },
+  {
+    "name": "linux-generate-ids",
+    "configurePreset": "linux-generate-ids",
+    "displayName": "Linux API Generate Build",
+    "targets": ["generate-ids"]
   },
   {
     "name": "windows-debug",

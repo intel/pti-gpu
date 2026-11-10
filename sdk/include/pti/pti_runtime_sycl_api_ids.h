@@ -294,6 +294,7 @@ typedef enum _pti_api_id_runtime_sycl {
     urIPCGetEventHandleExp_id=323,
     urIPCPutEventHandleExp_id=324,
     urIPCOpenEventHandleExp_id=325,
+    urGraphGetIdExp_id=326,
  } pti_api_id_runtime_sycl;
 
 #endif
