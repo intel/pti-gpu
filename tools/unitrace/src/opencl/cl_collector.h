@@ -369,6 +369,10 @@ class ClCollector {
   }
 
   void FlushData() {
+    // May run outside any tracing callback (session-stop watcher, __itt_detach(),
+    // teardown). ProcessKernelInstances() holds lock_ while calling clGetEventInfo;
+    // if that call were traced, the exit callback would relock lock_ on this thread.
+    const ClScopedTracingReentrancyGuard reentrancy_guard;
     ProcessKernelInstances();
     DumpKernelProfiles();
   }
@@ -2165,6 +2169,18 @@ class ClCollector {
   inline static thread_local int trace_nesting_level_ = -1; // in case an extension is called within an OCL call
   inline static thread_local uint64_t trace_start_time_[max_trace_nesting_level_] = {0}; // start time of traced API
   inline static thread_local bool trace_now_ = false; // prevent recursive tracing
+
+  // Sets trace_now_ for the enclosing scope and restores the previous value.
+  class ClScopedTracingReentrancyGuard {
+   public:
+    ClScopedTracingReentrancyGuard() : saved_(trace_now_) { trace_now_ = true; }
+    ~ClScopedTracingReentrancyGuard() { trace_now_ = saved_; }
+    ClScopedTracingReentrancyGuard(const ClScopedTracingReentrancyGuard&) = delete;
+    ClScopedTracingReentrancyGuard& operator=(const ClScopedTracingReentrancyGuard&) = delete;
+
+   private:
+    bool saved_;
+  };
 
   cl_device_id device_ = nullptr;
   LoggerFactory* logger_factory_ = nullptr;

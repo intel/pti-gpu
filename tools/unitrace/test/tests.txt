@@ -302,6 +302,15 @@ platform = Linux
 command  = run_test.py --signal=SIGTERM --signal-after=5 ze_gemm 1024 1000000
 scenario = -k
 
+# `unitrace --stop <session>` while ze_gemm still has GPU work in flight: the
+# watcher thread flushes the collector outside any tracing callback, which used
+# to re-enter the collector and abort the app with "Resource deadlock avoided".
+# Repeated 20x; each run must exit 0 and print a non-empty device timing report.
+# Skipped (77) if the GPU finishes the workload before --stop is sent.
+[ze_gemm_session_stop]
+command           = session_stop_test.py {unitrace} {bin}
+defaults-scenario = False
+
 [ze_grph_api]
 platform      = Windows
 command       = run_test.py ze_graph_api

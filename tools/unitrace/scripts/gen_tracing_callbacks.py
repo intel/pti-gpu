@@ -987,7 +987,7 @@ def gen_extension_wrapper(f, func: FunctionDecl):
   f.write("  ZeCollector* collector = s_global_ze_collector_;\n")
   # Set recursion guard so that any L0 API calls made from within
   # our callbacks do not re-enter kernel_tracing callbacks via zelTracer.
-  f.write("  s_extension_api_tracing_in_progress_ = true;\n")
+  f.write("  const ZeScopedTracingReentrancyGuard reentrancy_guard;\n")
   f.write("  if (collector != nullptr) {\n")
   f.write("    " + func.name + "OnEnter(&params, ZE_RESULT_SUCCESS, collector, &instance_data);\n")
   f.write("  }\n")
@@ -1005,7 +1005,6 @@ def gen_extension_wrapper(f, func: FunctionDecl):
   f.write("  if (collector != nullptr) {\n")
   f.write("    " + func.name + "OnExit(&params, result, collector, &instance_data);\n")
   f.write("  }\n")
-  f.write("  s_extension_api_tracing_in_progress_ = false;\n")
   f.write("\n")
   f.write("  return result;\n")
   f.write("}\n\n")

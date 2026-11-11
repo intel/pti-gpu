@@ -558,8 +558,9 @@ class UniController{
       // so OnSessionStopped() -> Flush() -> ProcessAllCommandsSubmitted() can
       // take global_device_submissions_mutex_ without re-entering it. (This is
       // why the deferred-callback hazard documented on IsCollectionEnabled()
-      // does not apply here.) The session_stopped_notified_ one-shot guard is
-      // shared with those deferred sites, so the flush runs at most once.
+      // does not apply here.) FlushData() itself suppresses tracing of its own
+      // API calls. The session_stopped_notified_ one-shot guard is shared with
+      // those deferred sites, so the flush runs at most once.
       if (session_stopped_callback_ && !session_stopped_notified_.exchange(true)) {
         session_stopped_callback_();
       }

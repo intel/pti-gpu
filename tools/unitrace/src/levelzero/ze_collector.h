@@ -1330,15 +1330,28 @@ class ZeCollector;
 // Global collector pointer for extension API wrappers
 static ZeCollector* s_global_ze_collector_ = nullptr;
 
-// Recursion guard for extension API wrappers.
-// Extension APIs are intercepted via zeDriverGetExtensionFunctionAddress and do
-// not go through the Level Zero tracing layer (zelTracer), so L0's built-in
-// ZE_HANDLE_TRACER_RECURSION guard (tracing_layer::tracingInProgress) does not
-// apply. This flag prevents zelTracer callbacks from re-entering when L0 APIs
-// are called from within extension API wrapper callbacks.
-// This could be replaced by ZE_HANDLE_TRACER_RECURSION if Level Zero exposes
-// access to tracing_layer::tracingInProgress via a public API.
+// Recursion guard. When set on a thread, every generated tracing callback
+// returns immediately, so L0 calls made by the collector itself are not traced.
+// Needed where L0's own ZE_HANDLE_TRACER_RECURSION does not apply: extension
+// API wrappers (they bypass the tracing layer) and FlushData() when it runs
+// outside any callback (session-stop watcher, __itt_detach(), teardown).
+// Could be replaced by ZE_HANDLE_TRACER_RECURSION if L0 exposes
+// tracing_layer::tracingInProgress publicly.
 static thread_local bool s_extension_api_tracing_in_progress_ = false;
+
+// Sets the guard for the enclosing scope and restores the previous value.
+class ZeScopedTracingReentrancyGuard {
+ public:
+  ZeScopedTracingReentrancyGuard() : saved_(s_extension_api_tracing_in_progress_) {
+    s_extension_api_tracing_in_progress_ = true;
+  }
+  ~ZeScopedTracingReentrancyGuard() { s_extension_api_tracing_in_progress_ = saved_; }
+  ZeScopedTracingReentrancyGuard(const ZeScopedTracingReentrancyGuard&) = delete;
+  ZeScopedTracingReentrancyGuard& operator=(const ZeScopedTracingReentrancyGuard&) = delete;
+
+ private:
+  bool saved_;
+};
 
 static void SetGlobalZeCollector(ZeCollector* collector) {
   if (collector != nullptr && s_global_ze_collector_ != nullptr) {
@@ -1470,6 +1483,10 @@ class ZeCollector {
   ZeCollector& operator=(const ZeCollector& that) = delete;
 
   void FlushData() {
+    // May run outside any tracing callback; a traced zeEventQueryStatus would
+    // re-lock global_device_submissions_mutex_ on this thread.
+    const ZeScopedTracingReentrancyGuard reentrancy_guard;
+
     ProcessAllCommandsSubmitted(nullptr);
 
     global_device_submissions_mutex_.lock();
