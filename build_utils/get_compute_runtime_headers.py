@@ -4,7 +4,7 @@ import os
 import build_utils
 
 url = "https://github.com/intel/compute-runtime.git"
-commit = "050536ff3b6f830199ec99cff8ffcac3d804c40a"  # release 26.31.39395.14
+commit = "77d21ec752a6abd7f1b34c85decbff25766b64aa"  # 26.44.40734.8
 
 def postprocess(file_path):
     """Post-process header file: remove non-local tracing header includes.
