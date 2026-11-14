@@ -1,9 +1,3 @@
-# ⛔️ DEPRECATED: This project is no longer maintained
-
-> **Warning**: This repository is obsolete. We will not be providing updates or support.
-
-Please use [unitrace](../unitrace) instead. Unitrace has support of all the options. Report in case of any issue found. We will be happy to help.
-
 # Level Zero Tracer
 ## Overview
 This tool is an analogue of [Intercept Layer for OpenCL(TM) Applications](https://github.com/intel/opencl-intercept-layer) designed to support Level Zero.

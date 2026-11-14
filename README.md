@@ -1,23 +1,20 @@
 # Profiling Tools Interfaces for GPU (PTI for GPU)
 
-> [!WARNING]
-> The samples and auxiliary tools (other than `tools/unitrace`) are no longer
-> under active development and will be removed soon. Candidates for removal:
-> 
-> - `chapters`
-> - `samples`
-> - `loader`
-> - `tests`
-> - `tools/ze_tracer`
-> - `tools/memaccess`
-> - `tools/gpuinfo`
-> - `tools/oneprof`
-> - `tools/onetrace`
-> - `tools/instcount`
-> - `tools/sysmon`
-> 
-> Identical functionality can be found in `unitrace` for most of the tools. For
-> GTPin-related tools, one can find tools and usage samples at <https://www.intel.com/content/www/us/en/developer/articles/tool/gtpin.html>.
+## About this fork
+
+This fork is a maintained continuation of the PTI-GPU tools and samples that
+upstream marked as no longer under active development. The PTI SDK and
+`unitrace` are not part of this fork.
+
+- Targets Linux with both the i915 and xe kernel drivers. Testing is
+  currently done on i915; xe validation is in progress. The Windows build
+  paths are kept, but Windows is not tested here.
+- Tools: [onetrace](tools/onetrace/README.md), [oneprof](tools/oneprof/README.md),
+  [ze_tracer](tools/ze_tracer/README.md), [cl_tracer](tools/cl_tracer/README.md),
+  [gpuinfo](tools/gpuinfo/README.md), [instcount](tools/instcount/README.md),
+  [memaccess](tools/memaccess/README.md), [sysmon](tools/sysmon/README.md).
+- Also included: the [samples](#sample-tools--utilities), the profiling
+  [chapters](#profiling-chapters), and the `tests/run.py` test driver.
 
 ## Overview
 
@@ -33,8 +30,8 @@ You may obtain a copy of the License at <https://opensource.org/license/MIT>
 
 ## Supported OS
 
-- Linux
-- Windows
+- Linux (i915 and xe kernel drivers): developed and tested (xe validation in progress)
+- Windows: build paths kept, not tested in this fork
 
 ## Supported Platforms
 
@@ -46,11 +43,9 @@ You may obtain a copy of the License at <https://opensource.org/license/MIT>
 
 *Some samples may have higher hardware requirements.*
 
-## Regularly Tested Configurations
+## Tested Configurations
 
-- Ubuntu 24.04 with Intel® Arc™ B580 Graphics
-- Ubuntu 24.04 with Intel® Data Center GPU Max Series
-- Windows 11 with Intel® Arc™ B580 Graphics
+- Ubuntu 24.04 with Intel® Data Center GPU Max Series (i915)
 
 ## Profiling Chapters
 
@@ -79,22 +74,22 @@ You may obtain a copy of the License at <https://opensource.org/license/MIT>
 
 ## Profiling & Debug Tools
 
-- [unitrace](tools/unitrace/README.md) - unified tracing and profiling tool. In
-  addition to Level Zero and/or OpenCL, this tool is capable of profiling
-  software layers in the software stack, for example, SYCL and plugins, oneCCL,
-  MPI etc., for scale-up and scale-out applications. It also supports profiling
-  hardware metrics (including instruction-level EU stalls) and software events
-  at the same time.
+- [onetrace](tools/onetrace/README.md) - host and device tracing tool for
+  OpenCL(TM) and Level Zero backends (including DPC++ and OpenMP* GPU offload);
+- [ze_tracer](tools/ze_tracer/README.md) - host and device tracing tool for
+  Level Zero;
+- [cl_tracer](tools/cl_tracer/README.md) - host and device tracing tool for
+  OpenCL(TM);
+- [oneprof](tools/oneprof/README.md) - GPU HW metrics collection tool;
 - [gpuinfo](tools/gpuinfo/README.md) - provides basic information about the
   GPUs installed in a system, and the list of HW metrics one can collect
   for it;
 - [instcount](tools/instcount/README.md) - prints GPU kernel assembly (GEN ISA)
   annotated by instruction execution count;
+- [memaccess](tools/memaccess/README.md) - GT Pin based analysis of GPU kernel
+  memory accesses;
 - [sysmon](tools/sysmon/README.md) - Linux "top" like utility to monitor GPUs
   installed on a system;
-- [pti](sdk/README.md) - profiling library one can link against to gain the
-  capability of profiling SYCL and Level Zero; used by PyTorch Profiler for the
-  Intel® XPU Activity.
 
 ## Sample Tools & Utilities
 
@@ -196,6 +191,42 @@ sample description page.
 
 ## Build and Run
 
+### Building everything
+
+The top-level CMake project builds every tool and sample, each as a
+separate CMake sub-build in `build/tools/<name>` and `build/samples/<name>`:
+
+```sh
+source /opt/intel/oneapi/setvars.sh  # needed for the DPC++/OpenMP samples
+cmake -S . -B build -GNinja -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+cmake --install build --prefix <install_dir>  # installs the tools into <install_dir>/bin
+```
+
+Options:
+
+| Option | Default | Description |
+|---|---|---|
+| `PTI_GPU_BUILD_TOOLS` | `ON` | Build the tools |
+| `PTI_GPU_BUILD_SAMPLES` | `ON` | Build the samples |
+| `PTI_GPU_TOOLS` | all | List of tools to build, e.g. `"onetrace;sysmon"` |
+| `PTI_GPU_SAMPLES` | all | List of samples to build |
+| `PTI_GPU_SKIP` | empty | List of tools or samples to skip, e.g. `"instcount;memaccess"` |
+| `BUILD_TESTING` | `OFF` | Add a `legacy` ctest that runs `tests/run.py` |
+
+Samples that need `icpx` (DPC++ and OpenMP) are skipped automatically if the
+compiler is not found, and the `*_debug_info` samples are skipped if the IGA
+library (`libiga64.so`) is not found. `instcount` and `memaccess` download
+GT Pin at configure time.
+
+Per-tool packages can be created with CPack, e.g.:
+
+```sh
+cd build && cpack -G TGZ  # or DEB / RPM
+```
+
+### Building a single sample or tool
+
 In general, to build samples one need to perform the following steps
 (specific instructions for particular sample can be found on sample
 description page):
@@ -252,18 +283,6 @@ To remove all of these folders, use:
 
 ```sh
 python <pti_root>/tests/run.py -c
-```
-
-## Unitrace and PTI SDK Experimental Build
-
-The two products in active development are Unitrace and PTI SDK. A new,
-top-level, CMakeLists.txt file can be used to build them together.  
-To build them, use CMake in the root of this repository.
-
-```console
-source /opt/intel/oneapi/setvars.sh
-cmake -S . -B build -GNinja -DCMAKE_BUILD_TYPE=Release
-cmake --build build
 ```
 
 **Tested software versions one may find in [SOFTWARE](SOFTWARE) file.**
