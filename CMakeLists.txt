@@ -33,7 +33,9 @@ project(
   LANGUAGES C CXX)
 
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  message(FATAL_ERROR "PTI-GPU tools and samples support Linux only")
+  # The build_utils Windows paths are kept, but this fork develops and
+  # tests on Linux only.
+  message(WARNING "Only Linux is tested in this fork; ${CMAKE_SYSTEM_NAME} builds may not work")
 endif()
 
 include(ExternalProject)
@@ -99,9 +101,15 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # Cheap dependency probes. A missing dependency skips the affected components
-# with a message instead of failing the whole build.
-find_program(PTI_GPU_ICPX icpx)
-find_library(PTI_GPU_IGA_LIB NAMES iga64)
+# with a message instead of failing the whole build. Linux only: on Windows
+# the samples pick other compilers and build_utils locates IGA by its DLL.
+if(WIN32)
+  set(PTI_GPU_ICPX ON)
+  set(PTI_GPU_IGA_LIB ON)
+else()
+  find_program(PTI_GPU_ICPX icpx)
+  find_library(PTI_GPU_IGA_LIB NAMES iga64)
+endif()
 
 # Settings forwarded to each sub-project when they are set here.
 set(PTI_GPU_EP_CMAKE_ARGS "-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}")

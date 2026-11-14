@@ -4,7 +4,8 @@
 # SPDX-License-Identifier: MIT
 # =============================================================
 #
-# CPack configuration: one package per tool (Linux only: TGZ, DEB, RPM).
+# CPack configuration: one package per tool (TGZ, DEB, RPM on Linux; ZIP on
+# Windows, untested).
 # Expects PTI_GPU_ENABLED_TOOLS from the top-level CMakeLists.txt; each tool
 # is installed as a component of the same name.
 
@@ -25,10 +26,14 @@ set(CPACK_THREADS ${NPROC})
 
 set(CPACK_STRIP_FILES OFF)
 
-set(CPACK_GENERATOR "TGZ;DEB")
-find_program(PTI_GPU_RPMBUILD rpmbuild)
-if(PTI_GPU_RPMBUILD)
-  list(APPEND CPACK_GENERATOR "RPM")
+if(WIN32)
+  set(CPACK_GENERATOR "ZIP")
+else()
+  set(CPACK_GENERATOR "TGZ;DEB")
+  find_program(PTI_GPU_RPMBUILD rpmbuild)
+  if(PTI_GPU_RPMBUILD)
+    list(APPEND CPACK_GENERATOR "RPM")
+  endif()
 endif()
 
 set(CPACK_PACKAGE_NAME "${PROJECT_NAME}")
