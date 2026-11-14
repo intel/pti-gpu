@@ -42,6 +42,41 @@ inline ze_device_handle_t GetZeDevice(uint32_t device_id) {
   return nullptr;
 }
 
+struct ZePciAddress {
+  uint32_t domain;
+  uint32_t bus;
+  uint32_t device;
+  uint32_t function;
+};
+
+// Reads the device PCI address through the core PCI properties extension, so
+// sysman (ZES_ENABLE_SYSMAN or zesInit) does not have to be enabled inside the
+// profiled application. Falls back to sysman if the extension is unavailable;
+// that only works when the application enabled sysman itself.
+inline bool GetZeDevicePciAddress(ze_device_handle_t device,
+                                  ZePciAddress* address) {
+  PTI_ASSERT(device != nullptr);
+  PTI_ASSERT(address != nullptr);
+
+  ze_pci_ext_properties_t pci_ext_props{
+      ZE_STRUCTURE_TYPE_PCI_EXT_PROPERTIES, };
+  if (zeDevicePciGetPropertiesExt(device, &pci_ext_props) ==
+      ZE_RESULT_SUCCESS) {
+    *address = {pci_ext_props.address.domain, pci_ext_props.address.bus,
+                pci_ext_props.address.device, pci_ext_props.address.function};
+    return true;
+  }
+
+  zes_pci_properties_t pci_props{ZES_STRUCTURE_TYPE_PCI_PROPERTIES, };
+  if (zesDevicePciGetProperties(device, &pci_props) == ZE_RESULT_SUCCESS) {
+    *address = {pci_props.address.domain, pci_props.address.bus,
+                pci_props.address.device, pci_props.address.function};
+    return true;
+  }
+
+  return false;
+}
+
 inline cl_device_pci_bus_info_khr GetDevicePciInfo(cl_device_id device) {
   PTI_ASSERT(device != nullptr);
 
@@ -64,16 +99,17 @@ inline cl_device_id GetClDevice(uint32_t device_id) {
     return nullptr;
   }
 
-  zes_pci_properties_t pci_props{ZES_STRUCTURE_TYPE_PCI_PROPERTIES, };
-  ze_result_t status = zesDevicePciGetProperties(device, &pci_props);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  ZePciAddress address{};
+  if (!GetZeDevicePciAddress(device, &address)) {
+    return nullptr;
+  }
 
   for (auto device : utils::cl::GetDeviceList(CL_DEVICE_TYPE_GPU)) {
     cl_device_pci_bus_info_khr pci_info = GetDevicePciInfo(device);
-    if (pci_info.pci_domain == pci_props.address.domain &&
-        pci_info.pci_bus == pci_props.address.bus &&
-        pci_info.pci_device == pci_props.address.device &&
-        pci_info.pci_function == pci_props.address.function) {
+    if (pci_info.pci_domain == address.domain &&
+        pci_info.pci_bus == address.bus &&
+        pci_info.pci_device == address.device &&
+        pci_info.pci_function == address.function) {
       return device;
     }
   }
@@ -89,13 +125,14 @@ inline ze_device_handle_t GetZeDevice(cl_device_id device_id) {
   cl_device_pci_bus_info_khr pci_info = GetDevicePciInfo(device_id);
 
   for (auto device : utils::ze::GetDeviceList()) {
-    zes_pci_properties_t pci_props{ZES_STRUCTURE_TYPE_PCI_PROPERTIES, };
-    ze_result_t status = zesDevicePciGetProperties(device, &pci_props);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    if (pci_info.pci_domain == pci_props.address.domain &&
-        pci_info.pci_bus == pci_props.address.bus &&
-        pci_info.pci_device == pci_props.address.device &&
-        pci_info.pci_function == pci_props.address.function) {
+    ZePciAddress address{};
+    if (!GetZeDevicePciAddress(device, &address)) {
+      continue;
+    }
+    if (pci_info.pci_domain == address.domain &&
+        pci_info.pci_bus == address.bus &&
+        pci_info.pci_device == address.device &&
+        pci_info.pci_function == address.function) {
       return device;
     }
   }
@@ -122,15 +159,17 @@ inline void PrintDeviceList() {
     status = zeDeviceGetProperties(device_list[i], &device_properties);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-    zes_pci_properties_t pci_props{ZES_STRUCTURE_TYPE_PCI_PROPERTIES, };
-    status = zesDevicePciGetProperties(device_list[i], &pci_props);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    ZePciAddress address{};
+    if (!GetZeDevicePciAddress(device_list[i], &address)) {
+      std::cout << "[WARNING] Unable to get PCI address of device #" << i <<
+        std::endl;
+    }
 
     std::cout << "Device #" << i << ": [" << std::hex << std::setfill('0') <<
-      std::setw(4) << pci_props.address.domain << ":" <<
-      std::setw(2) << pci_props.address.bus << ":" <<
-      std::setw(2) << pci_props.address.device << "." <<
-      std::setw(1) << pci_props.address.function << std::dec << "] " <<
+      std::setw(4) << address.domain << ":" <<
+      std::setw(2) << address.bus << ":" <<
+      std::setw(2) << address.device << "." <<
+      std::setw(1) << address.function << std::dec << "] " <<
       device_properties.name << std::endl;
   }
 

@@ -213,7 +213,6 @@ extern "C" PTI_EXPORT
 void SetToolEnv() {
   utils::SetEnv("ZE_ENABLE_TRACING_LAYER", "1");
   utils::SetEnv("ZET_ENABLE_METRICS", "1");
-  utils::SetEnv("ZES_ENABLE_SYSMAN", "1");
 }
 
 static ProfOptions ReadArgs() {

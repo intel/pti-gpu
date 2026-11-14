@@ -1,5 +1,6 @@
 #include <iomanip>
 #include <iostream>
+#include <string>
 #include <vector>
 
 #ifdef __linux__
@@ -16,14 +17,65 @@
 
 #define BYTES_IN_MB (1024 * 1024)
 
-int main() {
-  utils::SetEnv("ZES_ENABLE_SYSMAN", "1");
+// Returns the GPU selected by PTI_DEVICE_ID (default 0) using Sysman handles
+// obtained after zesInit().
+static zes_device_handle_t GetSysmanGpuDevice() {
+  std::vector<zes_device_handle_t> gpu_list;
 
-  ze_result_t status = ZE_RESULT_SUCCESS;
-  status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
+  uint32_t driver_count = 0;
+  ze_result_t status = zesDriverGet(&driver_count, nullptr);
+  if (status != ZE_RESULT_SUCCESS || driver_count == 0) {
+    return nullptr;
+  }
+  std::vector<zes_driver_handle_t> driver_list(driver_count);
+  status = zesDriverGet(&driver_count, driver_list.data());
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-  ze_device_handle_t device = utils::ze::GetGpuDevice();
+  for (auto driver : driver_list) {
+    uint32_t device_count = 0;
+    status = zesDeviceGet(driver, &device_count, nullptr);
+    if (status != ZE_RESULT_SUCCESS || device_count == 0) {
+      continue;
+    }
+    std::vector<zes_device_handle_t> device_list(device_count);
+    status = zesDeviceGet(driver, &device_count, device_list.data());
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+    for (auto device : device_list) {
+      zes_device_properties_t props{ZES_STRUCTURE_TYPE_DEVICE_PROPERTIES, };
+      status = zesDeviceGetProperties(device, &props);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      if (props.core.type == ZE_DEVICE_TYPE_GPU) {
+        gpu_list.push_back(device);
+      }
+    }
+  }
+
+  if (gpu_list.empty()) {
+    return nullptr;
+  }
+
+  std::string value = utils::GetEnv("PTI_DEVICE_ID");
+  uint32_t device_id = value.empty() ? 0 : std::stoul(value);
+  PTI_ASSERT(device_id < gpu_list.size());
+  return gpu_list[device_id];
+}
+
+int main() {
+  zes_device_handle_t device = nullptr;
+
+  ze_result_t status = zesInit(0);
+  if (status == ZE_RESULT_SUCCESS) {
+    device = GetSysmanGpuDevice();
+  } else {
+    // Older loader or driver without zesInit(): use the legacy mode, where
+    // Level Zero core device handles are also valid Sysman handles.
+    utils::SetEnv("ZES_ENABLE_SYSMAN", "1");
+    status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    device = utils::ze::GetGpuDevice();
+  }
+
   if (device == nullptr) {
     std::cout << "[WARNING] GPU device was not found" << std::endl;
     return 0;
