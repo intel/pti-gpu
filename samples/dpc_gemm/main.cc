@@ -110,8 +110,6 @@ int main(int argc, char* argv[]) {
     dev = sycl::device(sycl::gpu_selector_v);
     if (argc > 1 && strcmp(argv[1], "cpu") == 0) {
       dev = sycl::device(sycl::cpu_selector_v);
-    } else if (argc > 1 && strcmp(argv[1], "host") == 0) {
-      dev = sycl::device(sycl::default_selector_v);
     }
   } catch (const sycl::exception& e) {
     std::cerr << "Error: Exception caught while executing SYCL " << e.what() << '\n';

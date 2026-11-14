@@ -30,7 +30,7 @@ samples = [["cl_gemm", "gpu", "cpu"],
            ["ze_metric_streamer", "gpu", "dpc"],
            ["omp_gemm", "gpu", "cpu"],
            ["omp_hot_regions", "gpu", "cpu"],
-           ["dpc_gemm", "gpu", "cpu", "host"],
+           ["dpc_gemm", "gpu", "cpu"],
            ["dpc_info", "-a", "-l"]]
 
 tools = [["instcount", "cl", "ze", "dpc"],
