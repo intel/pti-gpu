@@ -149,6 +149,11 @@ class ZeKernelCollector {
     ze_result_t status = ZE_RESULT_SUCCESS;
     status = zelTracerSetEnabled(tracer_, false);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+    // Applications that only use synchronous immediate command lists (e.g.
+    // the OpenMP offload runtime) never synchronize or destroy events, so
+    // collect the kernels that have completed but are still pending.
+    ProcessCalls();
   }
 
   const ZeKernelInfoMap& GetKernelInfoMap() const {
