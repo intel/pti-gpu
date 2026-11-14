@@ -278,7 +278,7 @@ static TraceOptions ReadArgs() {
 }
 
 void EnableProfiling() {
-  ze_result_t status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
+  ze_result_t status = utils::ze::InitGpuDrivers();
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   tracer = ZeTracer::Create(ReadArgs());
 }

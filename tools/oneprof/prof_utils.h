@@ -103,7 +103,7 @@ inline ze_device_handle_t GetZeDevice(cl_device_id device_id) {
   return nullptr;
 }
 inline void PrintDeviceList() {
-  ze_result_t status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
+  ze_result_t status = utils::ze::InitGpuDrivers();
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   std::vector<ze_device_handle_t> device_list = utils::ze::GetDeviceList();
@@ -152,7 +152,7 @@ inline std::string GetMetricUnits(const char* units) {
 }
 
 inline void PrintMetricList(uint32_t device_id) {
-  ze_result_t status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
+  ze_result_t status = utils::ze::InitGpuDrivers();
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   std::vector<ze_device_handle_t> device_list = utils::ze::GetDeviceList();

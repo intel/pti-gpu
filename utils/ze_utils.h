@@ -21,8 +21,39 @@
 #include "pti_assert.h"
 #include "utils.h"
 
+#if !defined(_WIN32) && defined(ZE_API_VERSION_CURRENT_M) && \
+    ZE_API_VERSION_CURRENT_M >= ZE_MAKE_VERSION(1, 10)
+// Weak, so that a binary built with new headers still loads with an older
+// Level Zero loader that does not export zeInitDrivers (it is null then).
+extern "C" ZE_APIEXPORT ze_result_t ZE_APICALL zeInitDrivers(
+    uint32_t* pCount, ze_driver_handle_t* phDrivers,
+    ze_init_driver_type_desc_t* desc) __attribute__((weak));
+#define PTI_ZE_HAS_INIT_DRIVERS 1
+#endif
+
 namespace utils {
 namespace ze {
+
+// Initializes the Level Zero GPU drivers. Uses zeInitDrivers() (L0 1.10+) when
+// the loader provides it and it finds a GPU driver; falls back to zeInit()
+// otherwise, so error codes such as ZE_RESULT_ERROR_DEPENDENCY_UNAVAILABLE are
+// still reported by zeInit(). Drivers are then listed with zeDriverGet().
+// On Windows only zeInit() is used (untested there).
+inline ze_result_t InitGpuDrivers() {
+#if defined(PTI_ZE_HAS_INIT_DRIVERS)
+  if (zeInitDrivers != nullptr) {
+    ze_init_driver_type_desc_t desc{
+        ZE_STRUCTURE_TYPE_INIT_DRIVER_TYPE_DESC, nullptr,
+        ZE_INIT_DRIVER_TYPE_FLAG_GPU};
+    uint32_t driver_count = 0;
+    ze_result_t status = zeInitDrivers(&driver_count, nullptr, &desc);
+    if (status == ZE_RESULT_SUCCESS && driver_count > 0) {
+      return status;
+    }
+  }
+#endif
+  return zeInit(ZE_INIT_FLAG_GPU_ONLY);
+}
 
 inline std::vector<ze_driver_handle_t> GetDriverList() {
   ze_result_t status = ZE_RESULT_SUCCESS;

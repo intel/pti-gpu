@@ -78,7 +78,7 @@ int main(int argc, char* argv[]) {
   utils::SetEnv("ZET_ENABLE_METRICS", "1");
 
   ze_result_t status = ZE_RESULT_SUCCESS;
-  status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
+  status = utils::ze::InitGpuDrivers();
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   ze_device_handle_t device = utils::ze::GetGpuDevice();

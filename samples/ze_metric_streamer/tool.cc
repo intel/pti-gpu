@@ -222,7 +222,7 @@ static void PrintResults() {
 
 void EnableProfiling() {
   ze_result_t status = ZE_RESULT_SUCCESS;
-  status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
+  status = utils::ze::InitGpuDrivers();
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   ze_driver_handle_t driver = utils::ze::GetGpuDriver();

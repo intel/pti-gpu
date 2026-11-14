@@ -299,7 +299,7 @@ static ProfOptions ReadArgs() {
 }
 
 void EnableProfiling() {
-  ze_result_t status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
+  ze_result_t status = utils::ze::InitGpuDrivers();
   if (status == ZE_RESULT_ERROR_DEPENDENCY_UNAVAILABLE) {
     std::cout <<
       "[WARNING] Unable to initialize Level Zero Metrics API" << std::endl;
@@ -320,7 +320,7 @@ void DisableProfiling() {
 void Finalize() {
   utils::SetEnv("ZET_ENABLE_METRICS", "1");
 
-  ze_result_t status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
+  ze_result_t status = utils::ze::InitGpuDrivers();
   if (status == ZE_RESULT_ERROR_DEPENDENCY_UNAVAILABLE) {
     std::cout <<
       "[WARNING] Unable to initialize Level Zero Metrics API" << std::endl;

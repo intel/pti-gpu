@@ -34,7 +34,7 @@ class UnifiedTracer {
     cl_device_id cl_gpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_GPU);
 
     ze_result_t status = ZE_RESULT_SUCCESS;
-    status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
+    status = utils::ze::InitGpuDrivers();
 
     UnifiedTracer* tracer = new UnifiedTracer(options);
     PTI_ASSERT(tracer != nullptr);
