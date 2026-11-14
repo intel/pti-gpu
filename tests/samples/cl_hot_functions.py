@@ -62,7 +62,7 @@ def run(path, option):
     app_folder = utils.get_sample_executable_path("omp_gemm")
     app_file = os.path.join(app_folder, "omp_gemm" + file_extention)
     option = "gpu"
-    e = utils.add_env(None, "LIBOMPTARGET_PLUGIN", "OPENCL")
+    environ = utils.add_env(None, "LIBOMPTARGET_PLUGIN", "OPENCL")
     command = [file_name_prefix + "cl_hot_functions" + file_extention,\
       app_file, option, "1024", "1"]
   else:
