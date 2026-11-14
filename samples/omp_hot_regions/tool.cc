@@ -177,6 +177,9 @@ static void Finalize(ompt_data_t* data) {
 
 // Internal Tool Interface ////////////////////////////////////////////////////
 
+// Must be exported: the library is built with -fvisibility=hidden, and the
+// OpenMP runtime looks this symbol up with dlsym().
+extern "C" PTI_EXPORT
 ompt_start_tool_result_t* ompt_start_tool(
     unsigned int omp_version, const char* runtime_version) {
   std::cerr << "[INFO] OMP Runtime Version: " << runtime_version << std::endl;
