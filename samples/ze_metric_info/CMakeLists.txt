@@ -17,6 +17,7 @@ endif()
 FindL0Library(ze_metric_info)
 FindL0Headers(ze_metric_info)
 
+GetMDHeaders(ze_metric_info)
 CheckForMDLibrary(ze_metric_info)
 CheckForMetricsLibrary()
 

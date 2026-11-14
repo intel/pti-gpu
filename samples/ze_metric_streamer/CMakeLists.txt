@@ -27,6 +27,7 @@ endif()
 FindL0Library(zet_metric_streamer)
 FindL0Headers(zet_metric_streamer)
 
+GetMDHeaders(zet_metric_streamer)
 CheckForMDLibrary(zet_metric_streamer)
 CheckForMetricsLibrary()
 
