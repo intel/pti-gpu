@@ -247,6 +247,9 @@ def main():
       if sys.argv[i] == "-c":
         clean(log_dir)
         return 0
+      elif sys.argv[i] == "--skip-oa":
+        # Skip every test that opens GPU performance (OA) metric streams.
+        os.environ[utils.SKIP_OA_ENV] = "1"
 
     log_path = LOG_FILE
     if log_dir:

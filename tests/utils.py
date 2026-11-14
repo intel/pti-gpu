@@ -21,8 +21,14 @@ def skip(reason):
 PERF_PARANOID_FILES = ["/proc/sys/dev/i915/perf_stream_paranoid",
                        "/proc/sys/dev/xe/observation_paranoid"]
 
+# Set by run.py --skip-oa, or by the user, to skip every test that uses GPU
+# performance (OA) metrics, e.g. on hosts where OA streams are unstable.
+SKIP_OA_ENV = "PTI_TEST_SKIP_OA"
+
 def check_perf_access():
   """Returns None if metric streams may be opened, otherwise the reason."""
+  if os.environ.get(SKIP_OA_ENV, "0") not in ("", "0"):
+    return "OA metrics tests disabled (--skip-oa / " + SKIP_OA_ENV + "=1)"
   if sys.platform == 'win32':
     return None
   if os.geteuid() == 0:
