@@ -5,6 +5,13 @@
 
 #include <sycl/sycl.hpp>
 
+// Some descriptors printed below are deprecated in SYCL 2020 and have no
+// drop-in replacement. Keep printing them, but silence the deprecation warning.
+#define PTI_SYCL_DEPRECATED_BEGIN \
+  _Pragma("clang diagnostic push") \
+  _Pragma("clang diagnostic ignored \"-Wdeprecated-declarations\"")
+#define PTI_SYCL_DEPRECATED_END _Pragma("clang diagnostic pop")
+
 #define TAB std::string("  ")
 
 #define TEXT_WIDTH   50
@@ -99,8 +106,10 @@ int main(int argc, char* argv[]) {
       std::cout << std::setw(TEXT_WIDTH) << std::left <<
         TAB + "Platform Vendor " << vendor << std::endl;
 
+      PTI_SYCL_DEPRECATED_BEGIN
       std::string profile =
         platform.get_info<sycl::info::platform::profile>();
+      PTI_SYCL_DEPRECATED_END
       std::cout << std::setw(TEXT_WIDTH) << std::left <<
         TAB + "Platform Profile " << profile << std::endl;
     }
@@ -250,11 +259,18 @@ int main(int argc, char* argv[]) {
         // TODO(matthew.schilling@intel.com): Deprecated, however, I do not
         // know a drop-in replacement.
         // https://registry.khronos.org/SYCL/specs/sycl-2020/html/sycl-2020.html#_device_information_descriptors
-        bool preferred_interop_user_sync =
-          device.get_info<sycl::info::device::preferred_interop_user_sync>();
+        // Only the OpenCL backend supports this query; others throw.
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
-          TAB + "Prefer user sync for interop " <<
-          (is_compiler_avilable ? "Yes" : "No") << std::endl;
+          TAB + "Prefer user sync for interop ";
+        if (device.get_backend() == sycl::backend::opencl) {
+          PTI_SYCL_DEPRECATED_BEGIN
+          bool preferred_interop_user_sync =
+            device.get_info<sycl::info::device::preferred_interop_user_sync>();
+          PTI_SYCL_DEPRECATED_END
+          std::cout << (preferred_interop_user_sync ? "Yes" : "No") << std::endl;
+        } else {
+          std::cout << "N/A" << std::endl;
+        }
 
         size_t profiling_timer_resolution =
           device.get_info<sycl::info::device::profiling_timer_resolution>();
@@ -265,8 +281,10 @@ int main(int argc, char* argv[]) {
         // TODO(matthew.schilling@intel.com): Deprecated, however, I do not
         // know a drop-in replacement.
         // https://registry.khronos.org/SYCL/specs/sycl-2020/html/sycl-2020.html#_device_information_descriptors
+        PTI_SYCL_DEPRECATED_BEGIN
         size_t printf_buffer_size =
           device.get_info<sycl::info::device::printf_buffer_size>();
+        PTI_SYCL_DEPRECATED_END
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
           TAB + "printf() buffer size" << printf_buffer_size << " (" <<
           ConvertBytesToString(printf_buffer_size) << ")" << std::endl;
@@ -284,8 +302,10 @@ int main(int argc, char* argv[]) {
         // suggested replacement is not 1-for-1. I added the implementation
         // using aspects below. Keeping this for now.
         // https://registry.khronos.org/SYCL/specs/sycl-2020/html/sycl-2020.html#_device_information_descriptors
+        PTI_SYCL_DEPRECATED_BEGIN
         std::vector<std::string> device_extensions =
           device.get_info<sycl::info::device::extensions>();
+        PTI_SYCL_DEPRECATED_END
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
           TAB + "Device Extensions ";
         for (const auto& device_extension : device_extensions) {
