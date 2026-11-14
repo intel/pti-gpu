@@ -7,6 +7,9 @@ import traceback
 
 import utils
 
+LOG_FILE = "stderr.log"
+DEFAULT_TIMEOUT = 600 # seconds per test (sample/tool + option), 0 = no limit
+
 samples = [["cl_gemm", "gpu", "cpu"],
            ["cl_gemm_inst", None],
            ["cl_gemm_itt", "gpu", "cpu"],
@@ -76,7 +79,7 @@ def remove_python_cache(path):
   if os.path.exists(path):
     shutil.rmtree(path)
 
-def clean():
+def clean(log_dir):
   for sample in samples:
     path = utils.get_sample_build_path(sample[0])
     if os.path.exists(path):
@@ -92,12 +95,17 @@ def clean():
   remove_python_cache(os.path.join(utils.get_script_path(), "samples"))
   remove_python_cache(os.path.join(utils.get_script_path(), "tools"))
 
-  for root, subdirs, files in os.walk(utils.get_root_path()):
-    for file in files:
-      if file.endswith(".log"):
-        os.remove(os.path.join(root, file))
+  # Remove only the stderr.log that run.py itself writes: in the current
+  # directory (the default), the repository root and the log directory, if set.
+  log_dirs = [os.getcwd(), utils.get_root_path()]
+  if log_dir:
+    log_dirs.append(log_dir)
+  for path in log_dirs:
+    path = os.path.join(path, LOG_FILE)
+    if os.path.isfile(path):
+      os.remove(path)
 
-def test(f, name, option, istool = False):
+def test(f, name, option, istool = False, timeout = DEFAULT_TIMEOUT):
   if istool:
     if (option and (option != "none")):
       sys.stdout.write("Running " + name + " (" + option + ")...")
@@ -114,11 +122,19 @@ def test(f, name, option, istool = False):
     module = importlib.import_module("tools." + name)
   else:
     module = importlib.import_module("samples." + name)
-  log = module.main(option)
+  status = "FAILED"
+  utils.set_deadline(timeout)
+  try:
+    log = module.main(option)
+  except utils.TestTimeout as e:
+    log = "Timeout after " + str(timeout) + " s while running: " + str(e) + "\n"
+    status = "FAILED (timeout)"
+  finally:
+    utils.set_deadline(None)
 
   if (log is not None):
     sys.stdout.write(log)
-    sys.stdout.write("FAILED\n")
+    sys.stdout.write(status + "\n")
     if (option is not None):
       f.write("======= " + name + " (" + option + ") =======\n")
     else:
@@ -137,12 +153,26 @@ def main():
       if sys.argv[i] == "-s":
         tmpl = sys.argv[i + 1]
 
+    # --log-dir <path> (or PTI_TEST_LOG_DIR): where stderr.log is written.
+    # Default: the current directory, as before.
+    log_dir = os.environ.get("PTI_TEST_LOG_DIR")
+    timeout = DEFAULT_TIMEOUT
+    for i in range(1, len(sys.argv) - 1):
+      if sys.argv[i] == "--log-dir":
+        log_dir = sys.argv[i + 1]
+      elif sys.argv[i] == "--timeout":
+        timeout = int(sys.argv[i + 1])
+
     for i in range(1, len(sys.argv)):
       if sys.argv[i] == "-c":
-        clean()
+        clean(log_dir)
         return 0
 
-    f = open("stderr.log", "wt")
+    log_path = LOG_FILE
+    if log_dir:
+      os.makedirs(log_dir, exist_ok = True)
+      log_path = os.path.join(log_dir, LOG_FILE)
+    f = open(log_path, "wt")
 
     tests_passed = 0
     tests_failed = 0
@@ -152,7 +182,7 @@ def main():
       if re.search(tmpl, name) == None:
         continue
       for i in range(1, len(sample)):
-        if test(f, name, sample[i]):
+        if test(f, name, sample[i], False, timeout):
           tests_passed += 1
         else:
           tests_failed += 1
@@ -162,7 +192,7 @@ def main():
       if re.search(tmpl, name) == None:
         continue
       for i in range(1, len(tool)):
-        if test(f, name, tool[i], True):
+        if test(f, name, tool[i], True, timeout):
           tests_passed += 1
         else:
           tests_failed += 1

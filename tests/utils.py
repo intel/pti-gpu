@@ -1,6 +1,18 @@
 import os
+import signal
 import sys
 import subprocess
+import time
+
+# Per-test deadline (time.monotonic() value) set by run.py; None means no limit.
+_deadline = None
+
+class TestTimeout(Exception):
+  pass
+
+def set_deadline(seconds):
+  global _deadline
+  _deadline = (time.monotonic() + seconds) if seconds and seconds > 0 else None
 
 def get_script_path():
   path, script = os.path.split(os.path.realpath(__file__))
@@ -55,10 +67,33 @@ def add_env(env, name, val):
   custom_env[name] = val
   return custom_env
 
+def _kill(p):
+  if sys.platform != 'win32':
+    try:
+      os.killpg(p.pid, signal.SIGKILL)
+      return
+    except OSError:
+      pass
+  p.kill()
+
 def run_process(command, path, environ = None):
   shell = True if sys.platform == 'win32' else False
+  timeout = None
+  if _deadline is not None:
+    timeout = _deadline - time.monotonic()
+    if timeout <= 0:
+      raise TestTimeout(" ".join(command))
+  # A new session lets a timeout kill the whole process tree (e.g. make, or a
+  # tool that launches the application), not only the direct child.
+  new_session = (sys.platform != 'win32')
   p = subprocess.Popen(command, cwd = path, shell = shell,\
-    env = environ, stdout = subprocess.PIPE, stderr = subprocess.PIPE, encoding = "latin-1", text = True)
-  stdout, stderr = p.communicate()
+    env = environ, stdout = subprocess.PIPE, stderr = subprocess.PIPE, encoding = "latin-1", text = True,\
+    start_new_session = new_session)
+  try:
+    stdout, stderr = p.communicate(timeout = timeout)
+  except subprocess.TimeoutExpired:
+    _kill(p)
+    p.communicate()
+    raise TestTimeout(" ".join(command))
 
   return stdout, stderr
