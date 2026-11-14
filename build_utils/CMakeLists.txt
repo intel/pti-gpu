@@ -550,13 +550,11 @@ macro(GetLevelZeroHeaders TARGET)
                       DEPENDS ${L0_INC_PATH}/level_zero/ze_api.h
                               ${L0_INC_PATH}/level_zero/zes_api.h
                               ${L0_INC_PATH}/level_zero/zet_api.h
-                              ${L0_INC_PATH}/level_zero/zer_api.h
                               ${L0_INC_PATH}/level_zero/layers/zel_tracing_api.h
                               ${L0_INC_PATH}/level_zero/layers/zel_tracing_register_cb.h)
     add_custom_command(OUTPUT ${L0_INC_PATH}/level_zero/ze_api.h
                               ${L0_INC_PATH}/level_zero/zes_api.h
                               ${L0_INC_PATH}/level_zero/zet_api.h
-                              ${L0_INC_PATH}/level_zero/zer_api.h
                               ${L0_INC_PATH}/level_zero/layers/zel_tracing_api.h
                               ${L0_INC_PATH}/level_zero/layers/zel_tracing_register_cb.h
                       COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_ze_headers.py" ${L0_INC_PATH} ${CMAKE_BINARY_DIR} ${LEVEL_ZERO_COMMIT_ID})
@@ -681,6 +679,11 @@ macro(FindL0HeadersPath TARGET L0_GEN_SCRIPT)
                     DEPENDS ${L0_GEN_INC_PATH}/tracing.gen)
   add_custom_command(OUTPUT ${L0_GEN_INC_PATH}/tracing.gen
                      COMMAND "${PYTHON_EXECUTABLE}" ${L0_GEN_SCRIPT} ${L0_GEN_INC_PATH} "${L0_INC_PATH}/level_zero")
+  if(TARGET level_zero_headers)
+    # The headers are downloaded at build time (FindL0Headers fallback);
+    # generate the callbacks only after they exist.
+    add_dependencies(ze_gen_headers level_zero_headers)
+  endif()
   target_include_directories(${TARGET}
     PUBLIC "${L0_GEN_INC_PATH}")
   add_dependencies(${TARGET}
