@@ -47,3 +47,4 @@ endif()
 # Installation
 
 install(TARGETS memaccess memaccess_tool DESTINATION bin)
+InstallGTPinRuntime(memaccess_tool memaccess)

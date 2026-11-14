@@ -523,6 +523,24 @@ macro(FindGTPinLibrary TARGET)
   target_link_libraries(${TARGET} gtpin ged)
 endmacro()
 
+# Installs the GTPin runtime libraries that TARGET needs into a private
+# lib/<TOOL_NAME> directory (one copy per tool, so separate tool packages do not
+# conflict) and points the installed TARGET at it through RPATH. The GTPin
+# license allows redistribution of the unmodified package, provided its license
+# and third-party notices come with it; they are installed to
+# share/doc/<TOOL_NAME>/gtpin. Linux only; Windows installs are unchanged.
+macro(InstallGTPinRuntime TARGET TOOL_NAME)
+  GetGTPinPackage()
+  if(UNIX)
+    set_target_properties(${TARGET} PROPERTIES
+      INSTALL_RPATH "$ORIGIN/../lib/${TOOL_NAME}")
+    file(GLOB GTPIN_RUNTIME_LIBS "${GTPIN_PATH}/Lib/intel64/*.so*")
+    install(FILES ${GTPIN_RUNTIME_LIBS} DESTINATION lib/${TOOL_NAME})
+    install(DIRECTORY "${GTPIN_PATH}/Licensing/"
+            DESTINATION share/doc/${TOOL_NAME}/gtpin)
+  endif()
+endmacro()
+
 macro(FindGTPinHeaders TARGET)
   GetGTPinPackage()
   target_include_directories(${TARGET}

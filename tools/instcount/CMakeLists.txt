@@ -47,3 +47,4 @@ endif()
 # Installation
 
 install(TARGETS instcount instcount_tool DESTINATION bin)
+InstallGTPinRuntime(instcount_tool instcount)
