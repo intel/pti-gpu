@@ -434,22 +434,59 @@ macro(GetGTPinPackage)
         message(FATAL_ERROR "Graphics Technology Pin (GT Pin) is not supported for the platform")
       endif()
     endif()
+    # Download the archive ourselves instead of letting FetchContent do it:
+    # ExternalProject retries a timed-out download 5 times, and its inactivity
+    # timeout does not cover a stalled TCP connect (e.g. a proxy
+    # misconfiguration), so an unreachable host used to hang configure forever.
+    set(GTPIN_DOWNLOAD_PAGE
+      "https://www.intel.com/content/www/us/en/download/730596/867025/gtpin.html")
+    if(NOT DEFINED GTPIN_DOWNLOAD_TIMEOUT)
+      set(GTPIN_DOWNLOAD_TIMEOUT 900)
+    endif()
+    if(NOT DEFINED GTPIN_DOWNLOAD_INACTIVITY_TIMEOUT)
+      set(GTPIN_DOWNLOAD_INACTIVITY_TIMEOUT 60)
+    endif()
+    if(EXISTS "${GTPIN_LINK}")
+      set(GTPIN_ARCHIVE "${GTPIN_LINK}")
+    else()
+      get_filename_component(GTPIN_ARCHIVE_NAME "${GTPIN_LINK}" NAME)
+      set(GTPIN_ARCHIVE "${CMAKE_BINARY_DIR}/_deps/${GTPIN_ARCHIVE_NAME}")
+    endif()
+    if(NOT EXISTS "${GTPIN_ARCHIVE}")
+      message(STATUS "Downloading GTPin package: ${GTPIN_LINK} "
+        "(timeout ${GTPIN_DOWNLOAD_TIMEOUT} s, inactivity timeout ${GTPIN_DOWNLOAD_INACTIVITY_TIMEOUT} s)")
+      string(RANDOM LENGTH 8 GTPIN_PART_SUFFIX)
+      set(GTPIN_ARCHIVE_PART "${GTPIN_ARCHIVE}.${GTPIN_PART_SUFFIX}.part")
+      file(DOWNLOAD "${GTPIN_LINK}" "${GTPIN_ARCHIVE_PART}"
+        TIMEOUT ${GTPIN_DOWNLOAD_TIMEOUT}
+        INACTIVITY_TIMEOUT ${GTPIN_DOWNLOAD_INACTIVITY_TIMEOUT}
+        STATUS GTPIN_DOWNLOAD_STATUS)
+      list(GET GTPIN_DOWNLOAD_STATUS 0 GTPIN_DOWNLOAD_CODE)
+      if(NOT GTPIN_DOWNLOAD_CODE EQUAL 0)
+        file(REMOVE "${GTPIN_ARCHIVE_PART}")
+        message(FATAL_ERROR
+          "GTPin package download failed: ${GTPIN_LINK} (${GTPIN_DOWNLOAD_STATUS}). "
+          "Check your proxy settings, or download the package manually from "
+          "${GTPIN_DOWNLOAD_PAGE}, unpack it and pass -DGTPIN_PATH=<unpacked dir> "
+          "(or -DGTPIN_LINK=<archive file or url>).")
+      endif()
+      file(RENAME "${GTPIN_ARCHIVE_PART}" "${GTPIN_ARCHIVE}")
+    endif()
     include(FetchContent)
     if(${CMAKE_VERSION} VERSION_LESS "3.24.0")
       FetchContent_Declare(
         gtpin_package
-        URL ${GTPIN_LINK}
-SOURCE_DIR ${GTPIN_SOURCE_DIR}
+        URL ${GTPIN_ARCHIVE}
+        SOURCE_DIR ${GTPIN_SOURCE_DIR}
       )
     else()
       FetchContent_Declare(
         gtpin_package
-        URL ${GTPIN_LINK}
+        URL ${GTPIN_ARCHIVE}
         DOWNLOAD_EXTRACT_TIMESTAMP YES
-SOURCE_DIR ${GTPIN_SOURCE_DIR}
+        SOURCE_DIR ${GTPIN_SOURCE_DIR}
       )
     endif()
-    message(STATUS "Download GTPin package link: ${GTPIN_LINK}")
     FetchContent_MakeAvailable(gtpin_package)
     if(UNIX)
       set(GTPIN_PATH ${gtpin_package_SOURCE_DIR})
