@@ -1,7 +1,7 @@
 set(PTI_CMAKE_MACRO_DIR ${CMAKE_CURRENT_LIST_DIR} CACHE INTERNAL "")
 
 macro(SetRequiredCMakeVersion)
-  set(REQUIRED_CMAKE_VERSION 3.12)
+  set(REQUIRED_CMAKE_VERSION 3.22)
 endmacro()
 
 macro(RequirePythonInterp)
@@ -224,8 +224,9 @@ macro(FindIGALibrary TARGET)
         string(REPLACE ":" ";" SEARCH_LIB_PATH $ENV{LD_LIBRARY_PATH})
       endif()
     endif()
+    # Accept the versioned runtime soname when no dev symlink is installed.
     find_library(IGA_LIB_PATH
-      NAMES iga64
+      NAMES iga64 libiga64.so.2 libiga64.so.1
       PATHS ${SEARCH_LIB_PATH})
     if(NOT IGA_LIB_PATH)
       message(FATAL_ERROR
@@ -358,7 +359,7 @@ macro(CheckForMDLibrary TARGET)
       endif()
     endif()
     find_library(MD_LIB_PATH
-      NAMES igdmd md
+      NAMES igdmd md libigdmd.so.1
       PATHS ${SEARCH_LIB_PATH})
     if(NOT MD_LIB_PATH)
       message(WARNING
@@ -389,7 +390,7 @@ macro(CheckForMetricsLibrary)
       endif()
     endif()
     find_library(ML_LIB_PATH
-      NAMES igdml64
+      NAMES igdml64 igdml libigdml.so.1
       PATHS ${SEARCH_LIB_PATH})
   endif()
 

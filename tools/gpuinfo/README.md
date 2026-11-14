@@ -73,7 +73,7 @@ Expected output should be the following:
 - Windows (*under development*)
 
 ## Prerequisites
-- [CMake](https://cmake.org/) (version 3.12 and above)
+- [CMake](https://cmake.org/) (version 3.22 and above)
 - [Git](https://git-scm.com/) (version 1.8 and above)
 - [Python](https://www.python.org/) (version 2.7 and above)
 - [Intel(R) Metrics Discovery Application Programming Interface](https://github.com/intel/metrics-discovery)

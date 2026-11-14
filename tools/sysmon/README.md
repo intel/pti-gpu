@@ -75,7 +75,7 @@ Min Core Frequency(MHz),                300
 - Linux
 
 ## Prerequisites
-- [CMake](https://cmake.org/) (version 3.12 and above)
+- [CMake](https://cmake.org/) (version 3.22 and above)
 - [oneAPI Level Zero loader](https://github.com/oneapi-src/level-zero) and its development headers
   (`level_zero/ze_api.h`, `level_zero/zes_api.h`; e.g. the `libze-dev` package). Headers or a loader in
   another location can be passed with `-DCMAKE_INCLUDE_PATH=<dir>` and `-DCMAKE_LIBRARY_PATH=<dir>`.
