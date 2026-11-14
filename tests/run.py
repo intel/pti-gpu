@@ -1,13 +1,22 @@
 import importlib
+import json
 import os
 import re
 import shutil
 import sys
+import time
 import traceback
+from xml.sax.saxutils import escape, quoteattr
 
 import utils
 
 LOG_FILE = "stderr.log"
+JSON_REPORT = "results.json"
+JUNIT_REPORT = "junit.xml"
+
+PASSED = "PASSED"
+FAILED = "FAILED"
+SKIPPED = "SKIPPED"
 DEFAULT_TIMEOUT = 600 # seconds per test (sample/tool + option), 0 = no limit
 
 samples = [["cl_gemm", "gpu", "cpu"],
@@ -95,56 +104,127 @@ def clean(log_dir):
   remove_python_cache(os.path.join(utils.get_script_path(), "samples"))
   remove_python_cache(os.path.join(utils.get_script_path(), "tools"))
 
-  # Remove only the stderr.log that run.py itself writes: in the current
+  # Remove only the files that run.py itself writes: in the current
   # directory (the default), the repository root and the log directory, if set.
   log_dirs = [os.getcwd(), utils.get_root_path()]
   if log_dir:
     log_dirs.append(log_dir)
   for path in log_dirs:
-    path = os.path.join(path, LOG_FILE)
-    if os.path.isfile(path):
-      os.remove(path)
+    for name in [LOG_FILE, JSON_REPORT, JUNIT_REPORT]:
+      file_path = os.path.join(path, name)
+      if os.path.isfile(file_path):
+        os.remove(file_path)
 
-def test(f, name, option, istool = False, timeout = DEFAULT_TIMEOUT):
+def get_test_name(name, option):
+  if option is not None and option != "none":
+    return name + " (" + option + ")"
+  return name
+
+# Runs one sample/tool option. Returns a result dictionary whose "status" is
+# PASSED, FAILED or SKIPPED, and "reason" holds the failure log or skip reason.
+def run_test(f, name, option, istool = False, timeout = DEFAULT_TIMEOUT):
   if istool:
-    if (option and (option != "none")):
-      sys.stdout.write("Running " + name + " (" + option + ")...")
-    else:
-      sys.stdout.write("Running " + name + "...")
+    sys.stdout.write("Running " + get_test_name(name, option) + "...")
   else:
-    if option:
-      sys.stdout.write("Running sample " + name + " (" + option + ")...")
-    else:
-      sys.stdout.write("Running sample " + name + "...")
+    sys.stdout.write("Running sample " + get_test_name(name, option) + "...")
   sys.stdout.flush()
 
   if istool:
     module = importlib.import_module("tools." + name)
   else:
     module = importlib.import_module("samples." + name)
-  status = "FAILED"
+  status = FAILED
+  label = FAILED
+  timed_out = False
+  start = time.monotonic()
   utils.set_deadline(timeout)
   try:
     log = module.main(option)
+    if log is None:
+      status = label = PASSED
   except utils.TestTimeout as e:
     log = "Timeout after " + str(timeout) + " s while running: " + str(e) + "\n"
-    status = "FAILED (timeout)"
+    label = "FAILED (timeout)"
+    timed_out = True
+  except utils.TestSkipped as e:
+    log = str(e)
+    status = SKIPPED
+    label = "SKIPPED (" + log + ")"
   finally:
     utils.set_deadline(None)
+  elapsed = time.monotonic() - start
 
-  if (log is not None):
+  if status == FAILED:
     sys.stdout.write(log)
-    sys.stdout.write(status + "\n")
     if (option is not None):
       f.write("======= " + name + " (" + option + ") =======\n")
     else:
       f.write("======= " + name + " =======\n")
     f.write(log)
     f.write("\n")
-    return False
-  else:
-    sys.stdout.write("PASSED\n")
-    return True
+  sys.stdout.write(label + "\n")
+
+  return {"name": name, "option": option,
+          "kind": "tool" if istool else "sample",
+          "status": status, "timeout": timed_out,
+          "time": round(elapsed, 3),
+          "reason": log if status != PASSED else None}
+
+# Kept for callers that only need pass/fail: True if the test passed or was
+# skipped, False if it failed.
+def test(f, name, option, istool = False, timeout = DEFAULT_TIMEOUT):
+  return run_test(f, name, option, istool, timeout)["status"] != FAILED
+
+def write_reports(results, log_dir):
+  path = log_dir if log_dir else "."
+  with open(os.path.join(path, JSON_REPORT), "wt") as f:
+    json.dump({"passed": sum(r["status"] == PASSED for r in results),
+               "failed": sum(r["status"] == FAILED for r in results),
+               "skipped": sum(r["status"] == SKIPPED for r in results),
+               "results": results}, f, indent = 2)
+    f.write("\n")
+
+  with open(os.path.join(path, JUNIT_REPORT), "wt") as f:
+    f.write('<?xml version="1.0" encoding="UTF-8"?>\n')
+    f.write('<testsuite name="pti-gpu" tests="%d" failures="%d" skipped="%d" '
+            'time="%.3f">\n' % (len(results),
+                                sum(r["status"] == FAILED for r in results),
+                                sum(r["status"] == SKIPPED for r in results),
+                                sum(r["time"] for r in results)))
+    for r in results:
+      f.write('  <testcase classname=%s name=%s time="%.3f"' %
+              (quoteattr(r["kind"] + "." + r["name"]),
+               quoteattr(get_test_name(r["name"], r["option"])), r["time"]))
+      if r["status"] == PASSED:
+        f.write('/>\n')
+        continue
+      f.write('>\n')
+      if r["status"] == SKIPPED:
+        f.write('    <skipped message=%s/>\n' % quoteattr(r["reason"]))
+      else:
+        message = "timeout" if r["timeout"] else "failed"
+        f.write('    <failure message="%s">%s</failure>\n' %
+                (message, escape(r["reason"])))
+      f.write('  </testcase>\n')
+    f.write('</testsuite>\n')
+
+def print_summary(results):
+  passed = sum(r["status"] == PASSED for r in results)
+  failed = [r for r in results if r["status"] == FAILED]
+  skipped = [r for r in results if r["status"] == SKIPPED]
+
+  # Keep this line unchanged: CI and scripts look for it.
+  print("PASSED: " + str(passed) + " / FAILED: " + str(len(failed)))
+  print("SKIPPED: " + str(len(skipped)))
+  if failed:
+    print("Failed tests:")
+    for r in failed:
+      print("  " + get_test_name(r["name"], r["option"]) +
+            (" (timeout)" if r["timeout"] else ""))
+  if skipped:
+    print("Skipped tests:")
+    for r in skipped:
+      print("  " + get_test_name(r["name"], r["option"]) + ": " + r["reason"])
 
 def main():
   try:
@@ -174,33 +254,30 @@ def main():
       log_path = os.path.join(log_dir, LOG_FILE)
     f = open(log_path, "wt")
 
-    tests_passed = 0
-    tests_failed = 0
+    results = []
 
     for sample in samples:
       name = sample[0]
       if re.search(tmpl, name) == None:
         continue
       for i in range(1, len(sample)):
-        if test(f, name, sample[i], False, timeout):
-          tests_passed += 1
-        else:
-          tests_failed += 1
+        results.append(run_test(f, name, sample[i], False, timeout))
+        f.flush()
 
     for tool in tools:
       name = tool[0]
       if re.search(tmpl, name) == None:
         continue
       for i in range(1, len(tool)):
-        if test(f, name, tool[i], True, timeout):
-          tests_passed += 1
-        else:
-          tests_failed += 1
+        results.append(run_test(f, name, tool[i], True, timeout))
+        f.flush()
 
     f.close()
 
-    print("PASSED: " + str(tests_passed) + " / FAILED: " + str(tests_failed))
+    write_reports(results, log_dir)
+    print_summary(results)
 
+    tests_failed = sum(r["status"] == FAILED for r in results)
     return 0 if tests_failed == 0 else  1
 
   except:

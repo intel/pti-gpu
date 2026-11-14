@@ -85,6 +85,8 @@ def run(path, option):
   return None
 
 def main(option):
+  utils.require_mdapi()
+  utils.require_perf_access()
   path = utils.get_tool_build_path("gpuinfo")
   log = config(path)
   if log:

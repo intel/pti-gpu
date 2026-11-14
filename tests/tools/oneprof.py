@@ -51,6 +51,9 @@ def run(path, option):
   return None
 
 def main(option):
+  utils.require_mdapi()
+  if option != "-i": # -i collects kernel intervals only, no metric stream
+    utils.require_perf_access()
   path = utils.get_tool_build_path("oneprof")
   if option == "cl":
     log = cl_gemm.main("gpu")

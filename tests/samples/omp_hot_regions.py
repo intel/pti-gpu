@@ -76,6 +76,7 @@ def run(path, option):
   return None
 
 def main(option):
+  utils.require_icpx()
   path = utils.get_sample_build_path("omp_hot_regions")
   log = omp_gemm.main(option)
   if log:

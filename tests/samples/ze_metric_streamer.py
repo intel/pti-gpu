@@ -65,6 +65,8 @@ def run(path, option):
   return None
 
 def main(option):
+  utils.require_mdapi()
+  utils.require_perf_access()
   path = utils.get_sample_build_path("ze_metric_streamer")
   if option == "dpc":
     log = dpc_gemm.main("gpu")

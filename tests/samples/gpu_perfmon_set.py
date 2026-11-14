@@ -30,6 +30,7 @@ def run(path):
   return None
 
 def main(option):
+  utils.require_perf_access()
   path = utils.get_sample_build_path("gpu_perfmon_set")
   log = config(path)
   if log:

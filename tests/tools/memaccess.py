@@ -12,6 +12,7 @@ def config(path):
   cmake = ["cmake",\
     "-DCMAKE_BUILD_TYPE=" + utils.get_build_flag(), ".."]
   stdout, stderr = utils.run_process(cmake, path)
+  utils.check_gtpin_config(stderr)
   if stderr and stderr.find("CMake Error") != -1:
     return stderr
   return None

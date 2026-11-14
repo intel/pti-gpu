@@ -72,6 +72,8 @@ def run(path):
   return None
 
 def main(option):
+  utils.require_mdapi()
+  utils.require_perf_access()
   path = utils.get_sample_build_path("cl_gpu_query")
   log = cl_gemm.main("gpu")
   if log:

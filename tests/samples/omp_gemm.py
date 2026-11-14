@@ -48,6 +48,7 @@ def run(path, option):
   return None
 
 def main(option):
+  utils.require_icpx()
   path = utils.get_sample_build_path("omp_gemm")
   log = config(path)
   if log:

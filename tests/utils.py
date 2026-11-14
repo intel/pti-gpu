@@ -10,6 +10,64 @@ _deadline = None
 class TestTimeout(Exception):
   pass
 
+class TestSkipped(Exception):
+  """Raised by a test (or a sample it depends on) that cannot run here."""
+  pass
+
+def skip(reason):
+  raise TestSkipped(reason)
+
+# Files that control access to GPU performance (OA) metric streams.
+PERF_PARANOID_FILES = ["/proc/sys/dev/i915/perf_stream_paranoid",
+                       "/proc/sys/dev/xe/observation_paranoid"]
+
+def check_perf_access():
+  """Returns None if metric streams may be opened, otherwise the reason."""
+  if sys.platform == 'win32':
+    return None
+  if os.geteuid() == 0:
+    return None
+  for path in PERF_PARANOID_FILES:
+    if os.path.exists(path):
+      with open(path) as f:
+        value = f.read().strip()
+      if value != "0":
+        return (os.path.basename(path) + "=" + value + ", metrics need 0 " +
+                "or root (echo 0 | sudo tee " + path + ")")
+  return None
+
+def require_perf_access():
+  reason = check_perf_access()
+  if reason:
+    skip(reason)
+
+def require_mdapi():
+  if sys.platform == 'win32':
+    return
+  import ctypes
+  for name in ["libigdmd.so", "libigdmd.so.1"]:
+    try:
+      ctypes.CDLL(name)
+      return
+    except OSError:
+      pass
+  skip("Intel(R) Metrics Discovery API library (libigdmd.so) is not found")
+
+def require_icpx():
+  if sys.platform == 'win32':
+    return
+  import shutil
+  if shutil.which("icpx") is None:
+    skip("icpx (Intel(R) oneAPI DPC++/C++ Compiler) is not found, " +
+         "source <oneapi>/setvars.sh")
+
+def check_gtpin_config(stderr):
+  """Skips if the CMake output shows that GTPin is unavailable."""
+  if stderr and (stderr.find("GTPin package download failed") != -1 or
+                 stderr.find("Some parts of GTPin package not found") != -1):
+    skip("GTPin is not available (download failed or GTPIN_PATH is " +
+         "incomplete), see tools/instcount/README.md")
+
 def set_deadline(seconds):
   global _deadline
   _deadline = (time.monotonic() + seconds) if seconds and seconds > 0 else None

@@ -67,6 +67,7 @@ def run(path, option):
   return None
 
 def main(option):
+  utils.require_icpx()
   path = utils.get_sample_build_path("dpc_info")
   log = config(path)
   if log:
