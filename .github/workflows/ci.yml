@@ -1,9 +1,8 @@
 ---
 
-# This is an experimental workflow exercising unification of the PTI
-# and Unitrace build.
-#
-# Avoid running on every PR until the tests are ported over.
+# Build-only check of the aggregate top-level CMake project on a GitHub-hosted
+# runner (no GPU, no oneAPI). Components that need oneAPI (icpx), MDAPI,
+# GTPin or IGA are skipped.
 
 name: ci
 
@@ -13,182 +12,42 @@ concurrency:
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 5 * * *' # Daily 5:00 AM UTC
   push:
     branches: [ "master" ]
-    paths:
-      - .github/workflows/ci.yml
-      - VERSION
-      - '**/CMakeLists.txt'
-      - '**/*.cmake'
   pull_request:
     branches: [ "master" ]
-    paths:
-      - .github/workflows/ci.yml
-      - VERSION
-      - '**/CMakeLists.txt'
-      - '**/*.cmake'
 
 permissions:
   contents: read
 
 jobs:
   build-lin:
-    if: vars.PTI_RUN_TESTS == 1
-    name: Build PTI ${{ matrix.os_id }} ${{ matrix.tags }}
-    runs-on: ${{ fromJSON(matrix.tags) }}
-    timeout-minutes: 20
+    name: Build tools and samples (ubuntu-24.04)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     defaults:
       run:
         shell: bash
-    strategy:
-      matrix:
-        include:
-          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_N }}
-            tags: '["self-hosted", "Linux", "pti", "PVC"]'
-            os_id: "ubuntu-24.04.server.2026.1"
-          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_CLIENT_ONEAPI_N }}
-            tags: '["self-hosted", "Linux", "pti", "BMG"]'
-            os_id: "ubuntu-24.04.client.2026.1"
-    container:
-      image: ${{ matrix.container }}
-      options: --device=/dev/dri --cap-add CAP_PERFMON --shm-size=24G --volume=/dev/dri/by-path:/dev/dri/by-path
     steps:
-      - name: Clean
-        run: |
-          shopt -s dotglob
-          rm -rf ./*
-
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: GitHub Proxy Usage
-        uses: ./.github/actions/github-proxy-usage
-        with:
-          proxy: ${{ vars.PTI_GIT_PROXY }}
-          runner-pattern: ${{ vars.PTI_GIT_PROXY_RUNNER_PATTERN }}
-
-      - name: Configure Environment
+      - name: Install dependencies
         run: |
-          echo "CMAKE_BUILD_PARALLEL_LEVEL=$(($(nproc)/2))" >> "$GITHUB_ENV"
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build libze-dev opencl-headers \
+            ocl-icd-opencl-dev libdrm-dev python3
+
+      - name: Configure
+        run: |
+          # instcount and memaccess need GTPin. MDAPI is only needed at run
+          # time (its headers are downloaded). icpx and IGA samples are
+          # skipped automatically when the compiler or library is not found.
+          cmake -S . -B build -GNinja -DCMAKE_BUILD_TYPE=Release \
+            "-DPTI_GPU_SKIP=instcount;memaccess"
 
       - name: Build
-        run: |
-          source /opt/intel/oneapi/setvars.sh --include-intel-llvm
-          cmake -S . -B build \
-            -DCMAKE_CXX_COMPILER=icpx \
-            -DCMAKE_C_COMPILER=icx \
-            -GNinja -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_TESTING=ON
-          cmake --build build
+        run: cmake --build build
 
-      - name: Test
-        run: |
-          source /opt/intel/oneapi/setvars.sh --include-intel-llvm
-          ctest --test-dir build --no-tests=error --output-on-failure \
-                -LE "performance|quarantine" \
-                -E "test_unitrace"
-
-      - name: Package
-        run: |
-          source /opt/intel/oneapi/setvars.sh --include-intel-llvm
-          cpack -G TGZ --config build/CPackConfig.cmake
-
-      - name: Upload
-        uses: actions/upload-artifact@v4
-        with:
-          name: pti-gpu-${{ matrix.os_id }}
-          path: |
-            pti*.tar.gz*
-
-  build-win:
-    if: vars.PTI_RUN_TESTS == 1
-    name: Build PTI for Windows
-    runs-on: [self-hosted, Windows, pti, ARC]
-    timeout-minutes: 20
-    env:
-      LEVEL_ZERO_LOADER_VERSION: 1.32.0
-    defaults:
-      run:
-        shell: cmd
-    steps:
-      - name: Clean
-        shell: bash
-        run: |
-          shopt -s dotglob
-          rm -rf ./*
-
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Configure Environment
-        run: |
-          set /A JOBS=%NUMBER_OF_PROCESSORS%/2
-          >>%GITHUB_ENV% echo CMAKE_BUILD_PARALLEL_LEVEL=%JOBS%
-
-      # Can't dynamically acquire yet - needs to be an agreement between
-      # `tools/unitrace` and `sdk`
-      - name: Get Level Zero Loader Version
-        id: loader-ver
-        run: |
-          @echo off
-          >>%GITHUB_OUTPUT% echo ze_loader_ver=%LEVEL_ZERO_LOADER_VERSION%
-
-      - uses: actions/cache@v4
-        id: cache
-        with:
-          path: sdk/level-zero-sdk
-          key: ${{ runner.os }}-ci-Ze-Loader-${{ steps.loader-ver.outputs.ze_loader_ver }}
-
-      - name: Download Dependencies
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: |
-          @echo off
-          call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
-          call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
-          rmdir /S /Q sdk\level-zero-sdk
-          del /s level-zero-win-sdk-%LEVEL_ZERO_LOADER_VERSION%.zip
-          echo https://github.com/oneapi-src/level-zero/releases/download/v%LEVEL_ZERO_LOADER_VERSION%/level-zero-win-sdk-%LEVEL_ZERO_LOADER_VERSION%.zip
-          curl.exe -L -O https://github.com/oneapi-src/level-zero/releases/download/v%LEVEL_ZERO_LOADER_VERSION%/level-zero-win-sdk-%LEVEL_ZERO_LOADER_VERSION%.zip
-          7z x level-zero-win-sdk-%LEVEL_ZERO_LOADER_VERSION%.zip -osdk\level-zero-sdk
-          >>%GITHUB_STEP_SUMMARY% echo **Successfully Downloaded Level Zero Loader Version:** %LEVEL_ZERO_LOADER_VERSION%
-
-      - name: Build
-        run: |
-          @echo off
-          call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
-          call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
-          cmake -S . -B build ^
-            -DCMAKE_CXX_COMPILER=icx ^
-            -DCMAKE_C_COMPILER=icx ^
-            -GNinja -DCMAKE_BUILD_TYPE=Release ^
-            -DBUILD_TESTING=ON ^
-            -DLevelZero_ROOT=${{ github.workspace }}/sdk/level-zero-sdk ^
-            -DFETCHCONTENT_BASE_DIR=${{ runner.temp }}/_deps ^
-            -DCMAKE_OBJECT_PATH_MAX=300
-          cmake --build build
-
-      - name: Test
-        run: |
-          @echo off
-          call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
-          call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
-          REM TODO(PTI-88): OverheadRecordsCountsAllOnesViewRecords fails on Windows. Investigation needed. Bug filed.
-          ctest --test-dir build --no-tests=error --output-on-failure ^
-            -LE "performance|quarantine" ^
-            -E "MainFixtureTest.OverheadRecordsCountsAllOnesViewRecords|test_unitrace"
-
-      - name: Package
-        run: |
-          @echo off
-          call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
-          call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
-          cpack -G ZIP --config build/CPackConfig.cmake
-
-      - name: Upload
-        uses: actions/upload-artifact@v4
-        with:
-          name: pti-gpu-windows
-          path: |
-            pti*.zip*
+      - name: Install
+        run: cmake --install build --prefix "${{ runner.temp }}/pti-install"
