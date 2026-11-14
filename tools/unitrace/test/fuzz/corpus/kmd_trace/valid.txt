@@ -1,2 +1,0 @@
-1234,kmd_func,1000000,500
-5678,another_func,2000000,1000,extra_data

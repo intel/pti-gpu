@@ -1,9 +1,0 @@
-build/
-build_fixed/
-results/
-crash-*
-oom-*
-timeout-*
-# SDL505 evidence and findings register: uploaded to SDL, not committed
-evidence/
-findings.json

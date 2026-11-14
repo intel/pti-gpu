@@ -1,6 +1,0 @@
-=== Device #0 Meurics ===
-
-Kernel,Pid,KernelId
-"test_kernel",05019,1
-Source,Offset,Inson,Dependency,Active[Events],ControlStall[vsen],EtSbidSts]
-"test.cl:10",0x00000,"(W) and (1|M0) &0:ud","NA",5,2,0

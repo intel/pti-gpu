@@ -28,7 +28,7 @@ add_library(gtpin_tool_utils STATIC
 FindGTPinToolUtilsHeaders(gtpin_tool_utils)
 set_property(TARGET gtpin_tool_utils PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(gtpin_tool_utils
-  PRIVATE "${PTI_GTPIN_TOOL_BASE_DIR}/../../sdk/src/utils")
+  PRIVATE "${PTI_GTPIN_TOOL_BASE_DIR}/../../utils")
 if(CMAKE_INCLUDE_PATH)
   target_include_directories(gtpin_tool_utils
     PUBLIC "${CMAKE_INCLUDE_PATH}")

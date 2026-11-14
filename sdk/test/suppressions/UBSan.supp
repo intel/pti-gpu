@@ -1,9 +1,0 @@
-# File to suppress results from UndefinedBehaviorSanitizer
-
-# Usage:
-#  * UBSAN_OPTIONS=suppressions=<path_to_this_dir>/UBSan.supp ./your-program
-
-# ISO sample has some undefined overflow behavior. However, we did not write
-# this code.
-pointer-overflow:iso3dfd
-pointer-overflow:metrics_iso3dfd

@@ -12,5 +12,3 @@ CMakeUserPresets.json
 error_diff.txt
 *.swp
 
-# fuzz harness build (tools/unitrace/test/fuzz/README.md)
-build-fuzz/

@@ -1,5 +1,0 @@
-=== Device #0 Metrics ===
-
-Kernel,Pid,KernelId
-"test_kernel",12345,1
-Source,Offset,Instruction,Dependency,Active[Events],ControlStall[Events],SbidStall[Ev000080,"(W) and (1|M0) r0:ud","NA",5,2 (1|M0) r0:ud","NA",5,2,0

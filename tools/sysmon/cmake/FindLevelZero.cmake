@@ -1,6 +1,6 @@
-# Copy of sdk/cmake/Modules/FindLevelZero.cmake (with the version-regex fix from
-# PR #1286), kept here so that sysmon builds without the PTI SDK sources.
-# Keep the two copies in sync.
+# Originally copied from the upstream PTI SDK's FindLevelZero.cmake (with the
+# version-regex fix from PR #1286). The PTI SDK is not part of this fork, so
+# this is now the only copy.
 # Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
 # file Copyright.txt or https://cmake.org/licensing for details.
 
