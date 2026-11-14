@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <iterator>
 #include <stdexcept>
 #include <string_view>
 #include <tuple>
@@ -19,10 +20,11 @@
 #include <utility>
 
 #include "lz_api_tracing_api_loader.h"
+#include "pti/pti_driver_levelzero_api_ids.h"
 #include "unikernel.h"
 #include "utils.h"
-#include "ze_driver_init.h"
 #include "ze_event_managers.h"
+#include "ze_extensions.h"
 #include "ze_gpu_command.h"
 #include "ze_local_collection_helpers.h"
 #include "ze_utils.h"
@@ -38,48 +40,50 @@ namespace {
     (visitor)->ZeCommand<fn##_id>(&fn, __VA_ARGS__); \
   } while (0)
 
-// If the symbol is not found, record internal_error_ and skip re-appending this command; we
-// cannot re-append it to the target command list without the symbol. This makes the visit no longer
-// valid.
-#define ZE_VISITOR_COMMAND(visitor, fn, ...)                 \
-  do {                                                       \
-    auto* symbol = pti::PtiLzTracerLoader::Instance().fn##_; \
-    if (!symbol) {                                           \
-      visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;    \
-      return;                                                \
-    }                                                        \
-    (visitor)->ZeCommand<fn##_id>(symbol, __VA_ARGS__);      \
-  } while (0)
+struct VisitorEntry {
+  std::string_view name;
+  void* callback = nullptr;
+  ze_api_version_t introduced_in =
+      ZE_API_VERSION_1_14;  // lowest driver-reported or spec version supporting it
+};
 
-#define APPEND_COMMAND(append_name)                                 \
-  std::make_pair(                                                   \
-      std::string_view{TOSTRING(zeCommandListAppend##append_name)}, \
-      reinterpret_cast<void*>(&ZeCommandVisitor::VisitCommandListAppend##append_name)),  // NOLINT
+#define APPEND_COMMAND(append_name, major, minor)                                               \
+  VisitorEntry{std::string_view{TOSTRING(zeCommandListAppend##append_name)},                    \
+               reinterpret_cast<void*>(&ZeCommandVisitor::VisitCommandListAppend##append_name), \
+               static_cast<ze_api_version_t>(ZE_MAKE_VERSION(major, minor))},  // NOLINT
 
 /* clang-format off */
-auto& GetVisitorTable() {
-  static std::array visitor_table = {
+const auto& GetVisitorTable() {
+  static const auto visitor_table = []() {
+    std::array table = {
 #include "ze_visitor_commands.inc"
-  };  // NOLINT
+    };  // NOLINT
+    // later APIs first
+    std::stable_sort(table.begin(), table.end(), [](const auto& lhs, const auto& rhs) {
+      return lhs.introduced_in > rhs.introduced_in;
+    });
+    return table;
+  }();
   return visitor_table;
 }
 /* clang-format on */
 #undef APPEND_COMMAND
 
-// Static table of visitors. My thinking is that this should be generated at compile time and treat
-// it like a configuration. Eventually, we can support new configurations with different static
-// tables of visitors. This cannot be compile-time generated yet due to reinterpret_casts (fn ptr ->
-// void*).
-auto* MakeVisitors() {
+// Create a single table of visitors sorted by API version then use the API version to determine
+// which visitors to return. I.e., return a partition of the table based on driver version.
+const ze_concrete_visitor_ext_desc_t* MakeVisitors(ze_api_version_t driver_version) {
   using VisitorTableType = std::decay_t<decltype(GetVisitorTable())>;
   static auto visitors = []() {
     std::array<ze_concrete_visitor_ext_desc_t, std::tuple_size_v<VisitorTableType>> visitors_temp =
         {};
     std::transform(GetVisitorTable().begin(), GetVisitorTable().end(), visitors_temp.begin(),
-                   [](const auto& str_func) {
-                     return ze_concrete_visitor_ext_desc_t{kZexStructureTypeConcreteVisitorExtDesc,
-                                                           nullptr, str_func.first.data(),
-                                                           str_func.second};
+                   [](const auto& entry) {
+                     return ze_concrete_visitor_ext_desc_t{
+                         kZexStructureTypeConcreteVisitorExtDesc,
+                         nullptr,
+                         entry.name.data(),
+                         entry.callback,
+                     };
                    });
     return visitors_temp;
   }();
@@ -92,7 +96,14 @@ auto* MakeVisitors() {
     return true;
   }();
 
-  return visitors.data();
+  const auto& table = GetVisitorTable();
+  const auto first_supported = std::partition_point(
+      table.begin(), table.end(),
+      [driver_version](const auto& entry) { return entry.introduced_in > driver_version; });
+  if (first_supported == table.end()) {
+    return nullptr;
+  }
+  return visitors.data() + std::distance(table.begin(), first_supported);  // NOLINT
 }
 
 template <KernelCommandType CommandType,
@@ -166,19 +177,23 @@ template <KernelCommandType CommandType,
   command->result_ = ZE_RESULT_SUCCESS;
   command->append_time = ::utils::GetTime();
   GetSyclCollectorData<CommandType>(command.get());
-  if constexpr (CommandType == KernelCommandType::kKernel) {
-    command->callback_id_ = zeCommandListAppendLaunchKernel_id;
-  } else if constexpr (CommandType == KernelCommandType::kMemory) {
-    command->callback_id_ = zeCommandListAppendMemoryCopy_id;
-  } else if constexpr (CommandType == KernelCommandType::kCommand) {
-    command->callback_id_ = zeCommandListAppendBarrier_id;
-  }
   command->command_list = user_command_list;
   command->device = command_list_info.device;
   command->context = command_list_info.context;
   command->device_timer_frequency_ = device_desc.device_timer_frequency;
   command->device_timer_mask_ = device_desc.device_timer_mask;
   return command;
+}
+
+void FillKernelProps(ZeKernelCommand& command, ze_kernel_handle_t kernel,
+                     const ze_group_count_t* group_count) {
+  command.props.name = utils::ze::GetKernelName(kernel, true);
+  command.props.simd_width = utils::ze::GetKernelMaxSubgroupSize(kernel);
+  if (group_count != nullptr) {
+    command.props.group_count[0] = group_count->groupCountX;
+    command.props.group_count[1] = group_count->groupCountY;
+    command.props.group_count[2] = group_count->groupCountZ;
+  }
 }
 
 template <pti_api_id_driver_levelzero OverheadId, typename T, typename Fn>
@@ -218,14 +233,65 @@ std::optional<T> GetCommandListProperty(Fn func, ze_command_list_handle_t comman
   }
   return info;
 }
-
 }  // namespace
+
+template <pti_api_id_driver_levelzero OverheadId, KernelCommandType CommandType, typename Fn,
+          typename... ArgPayload, typename FillCommandProperties>
+void ZeCommandVisitor::CollectAndAppendCommand(
+    Fn command_function, ze_command_list_handle_t command_list, std::tuple<ArgPayload...> args,
+    ze_event_handle_t signal_event, uint32_t num_wait_events, ze_event_handle_t* wait_events,
+    FillCommandProperties fill_command_properties) {
+  static_assert(CommandType != KernelCommandType::kInvalid, "Invalid command type");
+
+  if (!command_function) {
+    internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
+    return;
+  }
+  auto event = event_pool_manager_->AcquireEvent(current_command_list_info_.context);
+
+  auto* target_command_list = visit_desc_.hReappendTargetCommandList
+                                  ? visit_desc_.hReappendTargetCommandList
+                                  : command_list;
+
+  std::apply(
+      [&](auto&... unpacked_args) {
+        static_assert(std::is_invocable_v<Fn, decltype(target_command_list),
+                                          decltype(unpacked_args)..., decltype(event.Get()),
+                                          decltype(num_wait_events), decltype(wait_events)>);
+        ZeCommand<OverheadId>(command_function, target_command_list, unpacked_args..., event.Get(),
+                              num_wait_events, wait_events);
+      },
+      args);
+
+  AppendSignalEvent(target_command_list, signal_event, event.Get());
+
+  std::optional<ZeCommandVisitor::TimestampInfo> timestamp_query;
+
+  if constexpr (CommandType == KernelCommandType::kKernel) {
+    timestamp_query = AppendQueryTimestamp(target_command_list, event.Get());
+    if (!timestamp_query) {
+      return;
+    }
+  }
+
+  commands_.emplace_back(
+      MakeCommand<CommandType>(command_list, current_command_list_info_, current_device_desc_));
+  commands_.back()->event_self = signal_event ? signal_event : event.Get();
+  commands_.back()->event_swap = std::move(event);
+  if constexpr (CommandType == KernelCommandType::kKernel) {
+    commands_.back()->timestamp_query_event = std::move(timestamp_query->first);
+    commands_.back()->timestamp = std::move(timestamp_query->second);
+  }
+  commands_.back()->callback_id_ = OverheadId;
+  fill_command_properties(*commands_.back());
+}
 
 ZeCommandVisitor::ZeCommandVisitor(ZeExts::Visit visitor_extension,
                                    ZeEventPoolManager* event_pool_manager)
     : visitor_extension_(visitor_extension),
       event_pool_manager_(event_pool_manager),
-      visit_desc_({kZexStructureTypeCommandVisitExtDesc, MakeVisitors(), this, nullptr, nullptr,
+      visit_desc_({kZexStructureTypeCommandVisitExtDesc,
+                   MakeVisitors(visitor_extension_.supported_version), this, nullptr, nullptr,
                    ZE_COMMAND_VISIT_EXT_DEFAULT_OP_REAPPEND, nullptr}),
       internal_error_(ZE_RESULT_SUCCESS) {
   if (!event_pool_manager_) {
@@ -355,36 +421,11 @@ ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKerne
     ze_event_handle_t* phWaitEvents, void* userData) {
   auto* visitor = static_cast<ZeCommandVisitor*>(userData);
   return ExceptionHandler(visitor, __func__, [&] {
-    auto event =
-        visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
-
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
-                                    ? visitor->visit_desc_.hReappendTargetCommandList
-                                    : hCommandList;
-
-    ZE_COMMAND(visitor, zeCommandListAppendLaunchKernel, target_command_list, hKernel,
-               pLaunchFuncArgs, event.Get(), numWaitEvents, phWaitEvents);
-    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
-
-    auto timestamp_query = visitor->AppendQueryTimestamp(target_command_list, event.Get());
-    if (!timestamp_query) {
-      return;
-    }
-
-    visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kKernel>(
-        hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
-    visitor->commands_.back()->event_self = hSignalEvent ? hSignalEvent : event.Get();
-    visitor->commands_.back()->event_swap = std::move(event);
-    visitor->commands_.back()->timestamp_query_event = std::move(timestamp_query->first);
-    visitor->commands_.back()->timestamp = std::move(timestamp_query->second);
-
-    visitor->commands_.back()->props.name = utils::ze::GetKernelName(hKernel, true);
-    visitor->commands_.back()->props.simd_width = utils::ze::GetKernelMaxSubgroupSize(hKernel);
-    if (pLaunchFuncArgs != nullptr) {
-      visitor->commands_.back()->props.group_count[0] = pLaunchFuncArgs->groupCountX;
-      visitor->commands_.back()->props.group_count[1] = pLaunchFuncArgs->groupCountY;
-      visitor->commands_.back()->props.group_count[2] = pLaunchFuncArgs->groupCountZ;
-    }
+    visitor
+        ->CollectAndAppendCommand<zeCommandListAppendLaunchKernel_id, KernelCommandType::kKernel>(
+            pti::PtiLzTracerLoader::Instance().zeCommandListAppendLaunchKernel_, hCommandList,
+            std::make_tuple(hKernel, pLaunchFuncArgs), hSignalEvent, numWaitEvents, phWaitEvents,
+            [&](ZeKernelCommand& command) { FillKernelProps(command, hKernel, pLaunchFuncArgs); });
   });
 }
 
@@ -395,31 +436,12 @@ ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKerne
     ze_event_handle_t* phWaitEvents, void* userData) {
   auto* visitor = static_cast<ZeCommandVisitor*>(userData);
   return ExceptionHandler(visitor, __func__, [&] {
-    auto event =
-        visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
-
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
-                                    ? visitor->visit_desc_.hReappendTargetCommandList
-                                    : hCommandList;
-
-    ZE_VISITOR_COMMAND(visitor, zeCommandListAppendLaunchKernelWithArguments, target_command_list,
-                       hKernel, groupCounts, groupSizes, pArguments, pNext, event.Get(),
-                       numWaitEvents, phWaitEvents);
-    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
-
-    auto timestamp_query = visitor->AppendQueryTimestamp(target_command_list, event.Get());
-    if (!timestamp_query) {
-      return;
-    }
-
-    visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kKernel>(
-        hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
-    visitor->commands_.back()->event_self = hSignalEvent ? hSignalEvent : event.Get();
-    visitor->commands_.back()->event_swap = std::move(event);
-    visitor->commands_.back()->timestamp_query_event = std::move(timestamp_query->first);
-    visitor->commands_.back()->timestamp = std::move(timestamp_query->second);
-    visitor->commands_.back()->props.name = utils::ze::GetKernelName(hKernel, true);
-    visitor->commands_.back()->props.simd_width = utils::ze::GetKernelMaxSubgroupSize(hKernel);
+    visitor->CollectAndAppendCommand<zeCommandListAppendLaunchKernelWithArguments_id,
+                                     KernelCommandType::kKernel>(
+        pti::PtiLzTracerLoader::Instance().zeCommandListAppendLaunchKernelWithArguments_,
+        hCommandList, std::make_tuple(hKernel, groupCounts, groupSizes, pArguments, pNext),
+        hSignalEvent, numWaitEvents, phWaitEvents,
+        [&](ZeKernelCommand& command) { FillKernelProps(command, hKernel, &groupCounts); });
   });
 }
 
@@ -429,35 +451,12 @@ ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKerne
     uint32_t numWaitEvents, ze_event_handle_t* phWaitEvents, void* userData) {
   auto* visitor = static_cast<ZeCommandVisitor*>(userData);
   return ExceptionHandler(visitor, __func__, [&] {
-    auto event =
-        visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
-
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
-                                    ? visitor->visit_desc_.hReappendTargetCommandList
-                                    : hCommandList;
-
-    ZE_VISITOR_COMMAND(visitor, zeCommandListAppendLaunchKernelWithParameters, target_command_list,
-                       hKernel, pGroupCounts, pNext, event.Get(), numWaitEvents, phWaitEvents);
-    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
-
-    auto timestamp_query = visitor->AppendQueryTimestamp(target_command_list, event.Get());
-    if (!timestamp_query) {
-      return;
-    }
-
-    visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kKernel>(
-        hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
-    visitor->commands_.back()->event_self = hSignalEvent ? hSignalEvent : event.Get();
-    visitor->commands_.back()->event_swap = std::move(event);
-    visitor->commands_.back()->timestamp_query_event = std::move(timestamp_query->first);
-    visitor->commands_.back()->timestamp = std::move(timestamp_query->second);
-    visitor->commands_.back()->props.name = utils::ze::GetKernelName(hKernel, true);
-    visitor->commands_.back()->props.simd_width = utils::ze::GetKernelMaxSubgroupSize(hKernel);
-    if (pGroupCounts != nullptr) {
-      visitor->commands_.back()->props.group_count[0] = pGroupCounts->groupCountX;
-      visitor->commands_.back()->props.group_count[1] = pGroupCounts->groupCountY;
-      visitor->commands_.back()->props.group_count[2] = pGroupCounts->groupCountZ;
-    }
+    visitor->CollectAndAppendCommand<zeCommandListAppendLaunchKernelWithParameters_id,
+                                     KernelCommandType::kKernel>(
+        pti::PtiLzTracerLoader::Instance().zeCommandListAppendLaunchKernelWithParameters_,
+        hCommandList, std::make_tuple(hKernel, pGroupCounts, pNext), hSignalEvent, numWaitEvents,
+        phWaitEvents,
+        [&](ZeKernelCommand& command) { FillKernelProps(command, hKernel, pGroupCounts); });
   });
 }
 
@@ -467,35 +466,12 @@ ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchCoope
     ze_event_handle_t* phWaitEvents, void* userData) {
   auto* visitor = static_cast<ZeCommandVisitor*>(userData);
   return ExceptionHandler(visitor, __func__, [&] {
-    auto event =
-        visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
-
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
-                                    ? visitor->visit_desc_.hReappendTargetCommandList
-                                    : hCommandList;
-
-    ZE_COMMAND(visitor, zeCommandListAppendLaunchCooperativeKernel, target_command_list, hKernel,
-               pLaunchFuncArgs, event.Get(), numWaitEvents, phWaitEvents);
-    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
-
-    auto timestamp_query = visitor->AppendQueryTimestamp(target_command_list, event.Get());
-    if (!timestamp_query) {
-      return;
-    }
-
-    visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kKernel>(
-        hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
-    visitor->commands_.back()->event_self = hSignalEvent ? hSignalEvent : event.Get();
-    visitor->commands_.back()->event_swap = std::move(event);
-    visitor->commands_.back()->timestamp_query_event = std::move(timestamp_query->first);
-    visitor->commands_.back()->timestamp = std::move(timestamp_query->second);
-    visitor->commands_.back()->props.name = utils::ze::GetKernelName(hKernel, true);
-    visitor->commands_.back()->props.simd_width = utils::ze::GetKernelMaxSubgroupSize(hKernel);
-    if (pLaunchFuncArgs != nullptr) {
-      visitor->commands_.back()->props.group_count[0] = pLaunchFuncArgs->groupCountX;
-      visitor->commands_.back()->props.group_count[1] = pLaunchFuncArgs->groupCountY;
-      visitor->commands_.back()->props.group_count[2] = pLaunchFuncArgs->groupCountZ;
-    }
+    visitor->CollectAndAppendCommand<zeCommandListAppendLaunchCooperativeKernel_id,
+                                     KernelCommandType::kKernel>(
+        pti::PtiLzTracerLoader::Instance().zeCommandListAppendLaunchCooperativeKernel_,
+        hCommandList, std::make_tuple(hKernel, pLaunchFuncArgs), hSignalEvent, numWaitEvents,
+        phWaitEvents,
+        [&](ZeKernelCommand& command) { FillKernelProps(command, hKernel, pLaunchFuncArgs); });
   });
 }
 
@@ -505,30 +481,11 @@ ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKerne
     uint32_t numWaitEvents, ze_event_handle_t* phWaitEvents, void* userData) {
   auto* visitor = static_cast<ZeCommandVisitor*>(userData);
   return ExceptionHandler(visitor, __func__, [&] {
-    auto event =
-        visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
-
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
-                                    ? visitor->visit_desc_.hReappendTargetCommandList
-                                    : hCommandList;
-
-    ZE_COMMAND(visitor, zeCommandListAppendLaunchKernelIndirect, target_command_list, hKernel,
-               pLaunchArgumentsBuffer, event.Get(), numWaitEvents, phWaitEvents);
-    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
-
-    auto timestamp_query = visitor->AppendQueryTimestamp(target_command_list, event.Get());
-    if (!timestamp_query) {
-      return;
-    }
-
-    visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kKernel>(
-        hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
-    visitor->commands_.back()->event_self = hSignalEvent ? hSignalEvent : event.Get();
-    visitor->commands_.back()->event_swap = std::move(event);
-    visitor->commands_.back()->timestamp_query_event = std::move(timestamp_query->first);
-    visitor->commands_.back()->timestamp = std::move(timestamp_query->second);
-    visitor->commands_.back()->props.name = utils::ze::GetKernelName(hKernel, true);
-    visitor->commands_.back()->props.simd_width = utils::ze::GetKernelMaxSubgroupSize(hKernel);
+    visitor->CollectAndAppendCommand<zeCommandListAppendLaunchKernelIndirect_id,
+                                     KernelCommandType::kKernel>(
+        pti::PtiLzTracerLoader::Instance().zeCommandListAppendLaunchKernelIndirect_, hCommandList,
+        std::make_tuple(hKernel, pLaunchArgumentsBuffer), hSignalEvent, numWaitEvents, phWaitEvents,
+        [&](ZeKernelCommand& command) { FillKernelProps(command, hKernel, nullptr); });
   });
 }
 
@@ -538,25 +495,14 @@ ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryCopy(
     void* userData) {
   auto* visitor = static_cast<ZeCommandVisitor*>(userData);
   return ExceptionHandler(visitor, __func__, [&] {
-    auto event =
-        visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
-
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
-                                    ? visitor->visit_desc_.hReappendTargetCommandList
-                                    : hCommandList;
-
-    ZE_COMMAND(visitor, zeCommandListAppendMemoryCopy, target_command_list, dstptr, srcptr, size,
-               event.Get(), numWaitEvents, phWaitEvents);
-    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
-
-    visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kMemory>(
-        hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
-    visitor->commands_.back()->event_self = hSignalEvent ? hSignalEvent : event.Get();
-    visitor->commands_.back()->event_swap = std::move(event);
-    const auto context = visitor->current_command_list_info_.context;
-    visitor->commands_.back()->props =
-        GetTransferProps("zeCommandListAppendMemoryCopy", size, (srcptr ? context : nullptr),
-                         srcptr, (dstptr ? context : nullptr), dstptr);
+    visitor->CollectAndAppendCommand<zeCommandListAppendMemoryCopy_id, KernelCommandType::kMemory>(
+        pti::PtiLzTracerLoader::Instance().zeCommandListAppendMemoryCopy_, hCommandList,
+        std::make_tuple(dstptr, srcptr, size), hSignalEvent, numWaitEvents, phWaitEvents,
+        [&](ZeKernelCommand& command) {
+          command.props = GetTransferProps("zeCommandListAppendMemoryCopy", size,
+                                           (srcptr ? command.context : nullptr), srcptr,
+                                           (dstptr ? command.context : nullptr), dstptr);
+        });
   });
 }
 
@@ -566,26 +512,50 @@ ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryFill(
     ze_event_handle_t* phWaitEvents, void* userData) {
   auto* visitor = static_cast<ZeCommandVisitor*>(userData);
   return ExceptionHandler(visitor, __func__, [&] {
-    auto event =
-        visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
+    visitor->CollectAndAppendCommand<zeCommandListAppendMemoryFill_id, KernelCommandType::kMemory>(
+        pti::PtiLzTracerLoader::Instance().zeCommandListAppendMemoryFill_, hCommandList,
+        std::make_tuple(ptr, pattern, pattern_size, size), hSignalEvent, numWaitEvents,
+        phWaitEvents, [&](ZeKernelCommand& command) {
+          command.props = GetTransferProps("zeCommandListAppendMemoryFill", size,
+                                           (pattern ? command.context : nullptr), pattern,
+                                           (ptr ? command.context : nullptr), ptr, pattern_size);
+        });
+  });
+}
 
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
-                                    ? visitor->visit_desc_.hReappendTargetCommandList
-                                    : hCommandList;
+ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryCopyWithParameters(
+    ze_command_list_handle_t hCommandList, void* dstptr, const void* srcptr, size_t size,
+    const void* pNext, ze_event_handle_t hSignalEvent, uint32_t numWaitEvents,
+    ze_event_handle_t* phWaitEvents, void* userData) {
+  auto* visitor = static_cast<ZeCommandVisitor*>(userData);
+  return ExceptionHandler(visitor, __func__, [&] {
+    visitor->CollectAndAppendCommand<zeCommandListAppendMemoryCopyWithParameters_id,
+                                     KernelCommandType::kMemory>(
+        pti::PtiLzTracerLoader::Instance().zeCommandListAppendMemoryCopyWithParameters_,
+        hCommandList, std::make_tuple(dstptr, srcptr, size, pNext), hSignalEvent, numWaitEvents,
+        phWaitEvents, [&](ZeKernelCommand& command) {
+          command.props = GetTransferProps("zeCommandListAppendMemoryCopyWithParameters", size,
+                                           (srcptr ? command.context : nullptr), srcptr,
+                                           (dstptr ? command.context : nullptr), dstptr);
+        });
+  });
+}
 
-    ZE_COMMAND(visitor, zeCommandListAppendMemoryFill, target_command_list, ptr, pattern,
-               pattern_size, size, event.Get(), numWaitEvents, phWaitEvents);
-    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
-
-    visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kMemory>(
-        hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
-    visitor->commands_.back()->event_self = hSignalEvent ? hSignalEvent : event.Get();
-    visitor->commands_.back()->event_swap = std::move(event);
-    const auto context = visitor->current_command_list_info_.context;
-    visitor->commands_.back()->props =
-        GetTransferProps("zeCommandListAppendMemoryFill", size, (pattern ? context : nullptr),
-                         pattern, (ptr ? context : nullptr), ptr, pattern_size);
-    visitor->commands_.back()->callback_id_ = zeCommandListAppendMemoryFill_id;
+ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryFillWithParameters(
+    ze_command_list_handle_t hCommandList, void* ptr, const void* pattern, size_t pattern_size,
+    size_t size, const void* pNext, ze_event_handle_t hSignalEvent, uint32_t numWaitEvents,
+    ze_event_handle_t* phWaitEvents, void* userData) {
+  auto* visitor = static_cast<ZeCommandVisitor*>(userData);
+  return ExceptionHandler(visitor, __func__, [&] {
+    visitor->CollectAndAppendCommand<zeCommandListAppendMemoryFillWithParameters_id,
+                                     KernelCommandType::kMemory>(
+        pti::PtiLzTracerLoader::Instance().zeCommandListAppendMemoryFillWithParameters_,
+        hCommandList, std::make_tuple(ptr, pattern, pattern_size, size, pNext), hSignalEvent,
+        numWaitEvents, phWaitEvents, [&](ZeKernelCommand& command) {
+          command.props = GetTransferProps("zeCommandListAppendMemoryFillWithParameters", size,
+                                           (pattern ? command.context : nullptr), pattern,
+                                           (ptr ? command.context : nullptr), ptr, pattern_size);
+        });
   });
 }
 
@@ -597,33 +567,23 @@ ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryCopyR
     void* userData) {
   auto* visitor = static_cast<ZeCommandVisitor*>(userData);
   return ExceptionHandler(visitor, __func__, [&] {
-    auto event =
-        visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
-
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
-                                    ? visitor->visit_desc_.hReappendTargetCommandList
-                                    : hCommandList;
-
-    ZE_COMMAND(visitor, zeCommandListAppendMemoryCopyRegion, target_command_list, dstptr, dstRegion,
-               dstPitch, dstSlicePitch, srcptr, srcRegion, srcPitch, srcSlicePitch, event.Get(),
-               numWaitEvents, phWaitEvents);
-    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
-
-    visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kMemory>(
-        hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
-    visitor->commands_.back()->event_self = hSignalEvent ? hSignalEvent : event.Get();
-    visitor->commands_.back()->event_swap = std::move(event);
-    size_t bytes_transferred = 0;
-    if (srcRegion != nullptr) {
-      bytes_transferred = srcRegion->width * srcRegion->height * srcPitch;
-      if (srcRegion->depth != 0) {
-        bytes_transferred *= srcRegion->depth;
-      }
-    }
-    const auto context = visitor->current_command_list_info_.context;
-    visitor->commands_.back()->props = GetTransferProps(
-        "zeCommandListAppendMemoryCopyRegion", bytes_transferred, (srcptr ? context : nullptr),
-        srcptr, (dstptr ? context : nullptr), dstptr);
+    visitor->CollectAndAppendCommand<zeCommandListAppendMemoryCopyRegion_id,
+                                     KernelCommandType::kMemory>(
+        pti::PtiLzTracerLoader::Instance().zeCommandListAppendMemoryCopyRegion_, hCommandList,
+        std::make_tuple(dstptr, dstRegion, dstPitch, dstSlicePitch, srcptr, srcRegion, srcPitch,
+                        srcSlicePitch),
+        hSignalEvent, numWaitEvents, phWaitEvents, [&](ZeKernelCommand& command) {
+          size_t bytes_transferred = 0;
+          if (srcRegion != nullptr) {
+            bytes_transferred = srcRegion->width * srcRegion->height * srcPitch;
+            if (srcRegion->depth != 0) {
+              bytes_transferred *= srcRegion->depth;
+            }
+          }
+          command.props = GetTransferProps("zeCommandListAppendMemoryCopyRegion", bytes_transferred,
+                                           (srcptr ? command.context : nullptr), srcptr,
+                                           (dstptr ? command.context : nullptr), dstptr);
+        });
   });
 }
 
@@ -633,24 +593,14 @@ ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryCopyF
     ze_event_handle_t* phWaitEvents, void* userData) {
   auto* visitor = static_cast<ZeCommandVisitor*>(userData);
   return ExceptionHandler(visitor, __func__, [&] {
-    auto event =
-        visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
-
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
-                                    ? visitor->visit_desc_.hReappendTargetCommandList
-                                    : hCommandList;
-
-    ZE_COMMAND(visitor, zeCommandListAppendMemoryCopyFromContext, target_command_list, dstptr,
-               hContextSrc, srcptr, size, event.Get(), numWaitEvents, phWaitEvents);
-    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
-
-    visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kMemory>(
-        hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
-    visitor->commands_.back()->event_self = hSignalEvent ? hSignalEvent : event.Get();
-    visitor->commands_.back()->event_swap = std::move(event);
-    const auto context = visitor->current_command_list_info_.context;
-    visitor->commands_.back()->props = GetTransferProps("zeCommandListAppendMemoryCopyFromContext",
-                                                        size, hContextSrc, srcptr, context, dstptr);
+    visitor->CollectAndAppendCommand<zeCommandListAppendMemoryCopyFromContext_id,
+                                     KernelCommandType::kMemory>(
+        pti::PtiLzTracerLoader::Instance().zeCommandListAppendMemoryCopyFromContext_, hCommandList,
+        std::make_tuple(dstptr, hContextSrc, srcptr, size), hSignalEvent, numWaitEvents,
+        phWaitEvents, [&](ZeKernelCommand& command) {
+          command.props = GetTransferProps("zeCommandListAppendMemoryCopyFromContext", size,
+                                           hContextSrc, srcptr, command.context, dstptr);
+        });
   });
 }
 
@@ -660,27 +610,13 @@ ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopy(
     void* userData) {
   auto* visitor = static_cast<ZeCommandVisitor*>(userData);
   return ExceptionHandler(visitor, __func__, [&] {
-    auto event =
-        visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
-
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
-                                    ? visitor->visit_desc_.hReappendTargetCommandList
-                                    : hCommandList;
-
-    ZE_COMMAND(visitor, zeCommandListAppendImageCopy, target_command_list, hDstImage, hSrcImage,
-               event.Get(), numWaitEvents, phWaitEvents);
-    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
-
-    visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kMemory>(
-        hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
-    visitor->commands_.back()->event_self = hSignalEvent ? hSignalEvent : event.Get();
-    visitor->commands_.back()->event_swap = std::move(event);
-    // Image size lives in the collector's image_size_map_, which the visitor cannot reach,
-    // so bytes_transferred stays 0 (see ze_command_visitor_todo.md). GetTransferProps still
-    // derives the route/device info from any host pointers (none here for image-to-image).
-    const auto context = visitor->current_command_list_info_.context;
-    visitor->commands_.back()->props =
-        GetTransferProps("zeCommandListAppendImageCopy", 0, context, nullptr, context, nullptr);
+    visitor->CollectAndAppendCommand<zeCommandListAppendImageCopy_id, KernelCommandType::kMemory>(
+        pti::PtiLzTracerLoader::Instance().zeCommandListAppendImageCopy_, hCommandList,
+        std::make_tuple(hDstImage, hSrcImage), hSignalEvent, numWaitEvents, phWaitEvents,
+        [&](ZeKernelCommand& command) {
+          command.props = GetTransferProps("zeCommandListAppendImageCopy", 0, command.context,
+                                           nullptr, command.context, nullptr);
+        });
   });
 }
 
@@ -691,25 +627,14 @@ ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyRe
     void* userData) {
   auto* visitor = static_cast<ZeCommandVisitor*>(userData);
   return ExceptionHandler(visitor, __func__, [&] {
-    auto event =
-        visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
-
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
-                                    ? visitor->visit_desc_.hReappendTargetCommandList
-                                    : hCommandList;
-
-    ZE_COMMAND(visitor, zeCommandListAppendImageCopyRegion, target_command_list, hDstImage,
-               hSrcImage, pDstRegion, pSrcRegion, event.Get(), numWaitEvents, phWaitEvents);
-    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
-
-    visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kMemory>(
-        hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
-    visitor->commands_.back()->event_self = hSignalEvent ? hSignalEvent : event.Get();
-    visitor->commands_.back()->event_swap = std::move(event);
-    // bytes_transferred requires the collector's image_size_map_ (unavailable here); leave 0.
-    const auto context = visitor->current_command_list_info_.context;
-    visitor->commands_.back()->props = GetTransferProps("zeCommandListAppendImageCopyRegion", 0,
-                                                        context, nullptr, context, nullptr);
+    visitor->CollectAndAppendCommand<zeCommandListAppendImageCopyRegion_id,
+                                     KernelCommandType::kMemory>(
+        pti::PtiLzTracerLoader::Instance().zeCommandListAppendImageCopyRegion_, hCommandList,
+        std::make_tuple(hDstImage, hSrcImage, pDstRegion, pSrcRegion), hSignalEvent, numWaitEvents,
+        phWaitEvents, [&](ZeKernelCommand& command) {
+          command.props = GetTransferProps("zeCommandListAppendImageCopyRegion", 0, command.context,
+                                           nullptr, command.context, nullptr);
+        });
   });
 }
 
@@ -719,26 +644,14 @@ ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyTo
     ze_event_handle_t* phWaitEvents, void* userData) {
   auto* visitor = static_cast<ZeCommandVisitor*>(userData);
   return ExceptionHandler(visitor, __func__, [&] {
-    auto event =
-        visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
-
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
-                                    ? visitor->visit_desc_.hReappendTargetCommandList
-                                    : hCommandList;
-
-    ZE_COMMAND(visitor, zeCommandListAppendImageCopyToMemory, target_command_list, dstptr,
-               hSrcImage, pSrcRegion, event.Get(), numWaitEvents, phWaitEvents);
-    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
-
-    visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kMemory>(
-        hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
-    visitor->commands_.back()->event_self = hSignalEvent ? hSignalEvent : event.Get();
-    visitor->commands_.back()->event_swap = std::move(event);
-    // Source image size lives in the collector's image_size_map_ (unavailable here); leave
-    // bytes_transferred 0. The route/dst device are still derived from the host dst pointer.
-    const auto context = visitor->current_command_list_info_.context;
-    visitor->commands_.back()->props = GetTransferProps("zeCommandListAppendImageCopyToMemory", 0,
-                                                        context, nullptr, context, dstptr);
+    visitor->CollectAndAppendCommand<zeCommandListAppendImageCopyToMemory_id,
+                                     KernelCommandType::kMemory>(
+        pti::PtiLzTracerLoader::Instance().zeCommandListAppendImageCopyToMemory_, hCommandList,
+        std::make_tuple(dstptr, hSrcImage, pSrcRegion), hSignalEvent, numWaitEvents, phWaitEvents,
+        [&](ZeKernelCommand& command) {
+          command.props = GetTransferProps("zeCommandListAppendImageCopyToMemory", 0,
+                                           command.context, nullptr, command.context, dstptr);
+        });
   });
 }
 
@@ -748,32 +661,22 @@ ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyFr
     ze_event_handle_t* phWaitEvents, void* userData) {
   auto* visitor = static_cast<ZeCommandVisitor*>(userData);
   return ExceptionHandler(visitor, __func__, [&] {
-    auto event =
-        visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
-
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
-                                    ? visitor->visit_desc_.hReappendTargetCommandList
-                                    : hCommandList;
-
-    ZE_COMMAND(visitor, zeCommandListAppendImageCopyFromMemory, target_command_list, hDstImage,
-               srcptr, pDstRegion, event.Get(), numWaitEvents, phWaitEvents);
-    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
-
-    visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kMemory>(
-        hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
-    visitor->commands_.back()->event_self = hSignalEvent ? hSignalEvent : event.Get();
-    visitor->commands_.back()->event_swap = std::move(event);
-    size_t bytes_transferred = 0;
-    if (pDstRegion != nullptr) {
-      bytes_transferred = pDstRegion->width * pDstRegion->height;
-      if (pDstRegion->depth != 0) {
-        bytes_transferred *= pDstRegion->depth;
-      }
-    }
-    const auto context = visitor->current_command_list_info_.context;
-    visitor->commands_.back()->props =
-        GetTransferProps("zeCommandListAppendImageCopyFromMemory", bytes_transferred,
-                         (srcptr ? context : nullptr), srcptr, context, nullptr);
+    visitor->CollectAndAppendCommand<zeCommandListAppendImageCopyFromMemory_id,
+                                     KernelCommandType::kMemory>(
+        pti::PtiLzTracerLoader::Instance().zeCommandListAppendImageCopyFromMemory_, hCommandList,
+        std::make_tuple(hDstImage, srcptr, pDstRegion), hSignalEvent, numWaitEvents, phWaitEvents,
+        [&](ZeKernelCommand& command) {
+          size_t bytes_transferred = 0;
+          if (pDstRegion != nullptr) {
+            bytes_transferred = pDstRegion->width * pDstRegion->height;
+            if (pDstRegion->depth != 0) {
+              bytes_transferred *= pDstRegion->depth;
+            }
+          }
+          command.props = GetTransferProps("zeCommandListAppendImageCopyFromMemory",
+                                           bytes_transferred, (srcptr ? command.context : nullptr),
+                                           srcptr, command.context, nullptr);
+        });
   });
 }
 
@@ -784,28 +687,14 @@ ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyTo
     void* userData) {
   auto* visitor = static_cast<ZeCommandVisitor*>(userData);
   return ExceptionHandler(visitor, __func__, [&] {
-    auto event =
-        visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
-
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
-                                    ? visitor->visit_desc_.hReappendTargetCommandList
-                                    : hCommandList;
-
-    ZE_VISITOR_COMMAND(visitor, zeCommandListAppendImageCopyToMemoryExt, target_command_list,
-                       dstptr, hSrcImage, pSrcRegion, destRowPitch, destSlicePitch, event.Get(),
-                       numWaitEvents, phWaitEvents);
-    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
-
-    visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kMemory>(
-        hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
-    visitor->commands_.back()->event_self = hSignalEvent ? hSignalEvent : event.Get();
-    visitor->commands_.back()->event_swap = std::move(event);
-    // Mirrors zeCommandListAppendImageCopyToMemory: source image size lives in the collector's
-    // image_size_map_ (unavailable here), so bytes_transferred stays 0; route/dst device are
-    // still derived from the host dst pointer.
-    const auto context = visitor->current_command_list_info_.context;
-    visitor->commands_.back()->props = GetTransferProps("zeCommandListAppendImageCopyToMemoryExt",
-                                                        0, context, nullptr, context, dstptr);
+    visitor->CollectAndAppendCommand<zeCommandListAppendImageCopyToMemoryExt_id,
+                                     KernelCommandType::kMemory>(
+        pti::PtiLzTracerLoader::Instance().zeCommandListAppendImageCopyToMemoryExt_, hCommandList,
+        std::make_tuple(dstptr, hSrcImage, pSrcRegion, destRowPitch, destSlicePitch), hSignalEvent,
+        numWaitEvents, phWaitEvents, [&](ZeKernelCommand& command) {
+          command.props = GetTransferProps("zeCommandListAppendImageCopyToMemoryExt", 0,
+                                           command.context, nullptr, command.context, dstptr);
+        });
   });
 }
 
@@ -816,34 +705,24 @@ ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyFr
     void* userData) {
   auto* visitor = static_cast<ZeCommandVisitor*>(userData);
   return ExceptionHandler(visitor, __func__, [&] {
-    auto event =
-        visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
-
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
-                                    ? visitor->visit_desc_.hReappendTargetCommandList
-                                    : hCommandList;
-
-    ZE_VISITOR_COMMAND(visitor, zeCommandListAppendImageCopyFromMemoryExt, target_command_list,
-                       hDstImage, srcptr, pDstRegion, srcRowPitch, srcSlicePitch, event.Get(),
-                       numWaitEvents, phWaitEvents);
-    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
-
-    visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kMemory>(
-        hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
-    visitor->commands_.back()->event_self = hSignalEvent ? hSignalEvent : event.Get();
-    visitor->commands_.back()->event_swap = std::move(event);
-    // Mirrors zeCommandListAppendImageCopyFromMemory: bytes from the destination region geometry.
-    size_t bytes_transferred = 0;
-    if (pDstRegion != nullptr) {
-      bytes_transferred = pDstRegion->width * pDstRegion->height;
-      if (pDstRegion->depth != 0) {
-        bytes_transferred *= pDstRegion->depth;
-      }
-    }
-    const auto context = visitor->current_command_list_info_.context;
-    visitor->commands_.back()->props =
-        GetTransferProps("zeCommandListAppendImageCopyFromMemoryExt", bytes_transferred,
-                         (srcptr ? context : nullptr), srcptr, context, nullptr);
+    visitor->CollectAndAppendCommand<zeCommandListAppendImageCopyFromMemoryExt_id,
+                                     KernelCommandType::kMemory>(
+        pti::PtiLzTracerLoader::Instance().zeCommandListAppendImageCopyFromMemoryExt_, hCommandList,
+        std::make_tuple(hDstImage, srcptr, pDstRegion, srcRowPitch, srcSlicePitch), hSignalEvent,
+        numWaitEvents, phWaitEvents, [&](ZeKernelCommand& command) {
+          // Mirrors zeCommandListAppendImageCopyFromMemory: bytes from the destination region
+          // geometry.
+          size_t bytes_transferred = 0;
+          if (pDstRegion != nullptr) {
+            bytes_transferred = pDstRegion->width * pDstRegion->height;
+            if (pDstRegion->depth != 0) {
+              bytes_transferred *= pDstRegion->depth;
+            }
+          }
+          command.props = GetTransferProps("zeCommandListAppendImageCopyFromMemoryExt",
+                                           bytes_transferred, (srcptr ? command.context : nullptr),
+                                           srcptr, command.context, nullptr);
+        });
   });
 }
 
@@ -864,24 +743,13 @@ ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendBarrier(
     ze_event_handle_t* phWaitEvents, void* userData) {
   auto* visitor = static_cast<ZeCommandVisitor*>(userData);
   return ExceptionHandler(visitor, __func__, [&] {
-    auto event =
-        visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
-
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
-                                    ? visitor->visit_desc_.hReappendTargetCommandList
-                                    : hCommandList;
-
-    ZE_COMMAND(visitor, zeCommandListAppendBarrier, target_command_list, event.Get(), numWaitEvents,
-               phWaitEvents);
-    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
-
-    visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kCommand>(
-        hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
-    visitor->commands_.back()->event_self = hSignalEvent ? hSignalEvent : event.Get();
-    visitor->commands_.back()->event_swap = std::move(event);
-    visitor->commands_.back()->props.name = "zeCommandListAppendBarrier";
-    visitor->commands_.back()->num_wait_events = numWaitEvents;
-    visitor->commands_.back()->callback_id_ = zeCommandListAppendBarrier_id;
+    visitor->CollectAndAppendCommand<zeCommandListAppendBarrier_id, KernelCommandType::kCommand>(
+        pti::PtiLzTracerLoader::Instance().zeCommandListAppendBarrier_, hCommandList,
+        std::make_tuple(), hSignalEvent, numWaitEvents, phWaitEvents,
+        [&](ZeKernelCommand& command) {
+          command.props.name = "zeCommandListAppendBarrier";
+          command.num_wait_events = numWaitEvents;
+        });
   });
 }
 
@@ -891,26 +759,15 @@ ze_result_t ZE_VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryRange
     ze_event_handle_t* phWaitEvents, void* userData) {
   auto* visitor = static_cast<ZeCommandVisitor*>(userData);
   return ExceptionHandler(visitor, __func__, [&] {
-    auto event =
-        visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
-
-    auto* target_command_list = visitor->visit_desc_.hReappendTargetCommandList
-                                    ? visitor->visit_desc_.hReappendTargetCommandList
-                                    : hCommandList;
-
-    ZE_COMMAND(visitor, zeCommandListAppendMemoryRangesBarrier, target_command_list, numRanges,
-               pRangeSizes, pRanges, event.Get(), numWaitEvents, phWaitEvents);
-    visitor->AppendSignalEvent(target_command_list, hSignalEvent, event.Get());
-
-    visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kCommand>(
-        hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
-    visitor->commands_.back()->event_self = hSignalEvent ? hSignalEvent : event.Get();
-    visitor->commands_.back()->event_swap = std::move(event);
-    visitor->commands_.back()->props.name = "zeCommandListAppendMemoryRangesBarrier";
-    visitor->commands_.back()->num_wait_events = numWaitEvents;
-    visitor->commands_.back()->callback_id_ = zeCommandListAppendMemoryRangesBarrier_id;
+    visitor->CollectAndAppendCommand<zeCommandListAppendMemoryRangesBarrier_id,
+                                     KernelCommandType::kCommand>(
+        pti::PtiLzTracerLoader::Instance().zeCommandListAppendMemoryRangesBarrier_, hCommandList,
+        std::make_tuple(numRanges, pRangeSizes, pRanges), hSignalEvent, numWaitEvents, phWaitEvents,
+        [&](ZeKernelCommand& command) {
+          command.props.name = "zeCommandListAppendMemoryRangesBarrier";
+          command.num_wait_events = numWaitEvents;
+        });
   });
 }
 
-#undef ZE_VISITOR_COMMAND
 #undef ZE_COMMAND

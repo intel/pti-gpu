@@ -543,16 +543,21 @@ inline uint64_t GetMetricTimestampMask(ze_device_handle_t device) {
   }
 }
 
+inline std::optional<ze_api_version_t> GetDriverApiVersion(ze_driver_handle_t driver) {
+  ze_api_version_t version = ZE_API_VERSION_FORCE_UINT32;
+  overhead::ScopedOverheadCollector overhead_collector(zeDriverGetApiVersion_id);
+  auto status = zeDriverGetApiVersion(driver, &version);
+  if (status != ZE_RESULT_SUCCESS) {
+    return std::nullopt;
+  }
+  return version;
+}
+
 inline ze_api_version_t GetDriverVersion(ze_driver_handle_t driver) {
   PTI_ASSERT(driver != nullptr);
-
-  ze_api_version_t version = ZE_API_VERSION_FORCE_UINT32;
-  overhead::Init();
-  ze_result_t status = zeDriverGetApiVersion(driver, &version);
-  overhead_fini(zeDriverGetApiVersion_id);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-  return version;
+  auto version = GetDriverApiVersion(driver);
+  PTI_ASSERT(version.has_value());
+  return version.value();
 }
 
 inline bool GetDeviceTimerFrequency_TimestampMask_UUID(ze_device_handle_t device,

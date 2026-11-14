@@ -9,7 +9,6 @@
 
 #include <level_zero/ze_api.h>
 #include <level_zero/ze_intel_gpu.h>
-#include <spdlog/spdlog.h>
 
 #ifndef ZE_COMMAND_VISIT_EXT_NAME
 #error "PTI requires Level Zero headers >= 1.35.0 (ZE_extension_command_visit)"
@@ -38,6 +37,8 @@ struct ZeExts {
 
     decltype(&zeCommandListVisitExt) ze_command_list_visit = nullptr;
     decltype(&zeGraphVisitExt) ze_graph_visit = nullptr;
+    // Defaults to the earliest API version with a driver that included the extension.
+    ze_api_version_t supported_version = ZE_API_VERSION_1_14;
 
     [[nodiscard]] static std::optional<Visit> Load(ze_driver_handle_t driver) {
       if (!IsSupported<Visit>(driver)) {
@@ -45,6 +46,8 @@ struct ZeExts {
       }
 
       Visit visit{};
+      visit.supported_version =
+          utils::ze::GetDriverApiVersion(driver).value_or(visit.supported_version);
 
       if (LoadFunction(driver, "zeCommandListVisitExt", visit.ze_command_list_visit) &&
           LoadFunction(driver, "zeGraphVisitExt", visit.ze_graph_visit)) {

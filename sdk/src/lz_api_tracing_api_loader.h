@@ -59,7 +59,7 @@ class PtiLzTracerLoader {
   // Forward to implementation in core library
 #include "tracing_api_dlsym_public.gen"  // Auto-generated callbacks
 
-#define APPEND_COMMAND(X) \
+#define APPEND_COMMAND(X, major, minor) \
   decltype(&zeCommandListAppend##X) zeCommandListAppend##X##_ = nullptr;  // NOLINT
 #include "levelzero/ze_visitor_commands.inc"
 #undef APPEND_COMMAND
@@ -91,7 +91,7 @@ class PtiLzTracerLoader {
     LEVEL_ZERO_LOADER_GET_SYMBOL(zeCommandListGetFlags);
     LEVEL_ZERO_LOADER_GET_SYMBOL(zeCommandListImmediateGetFlags);
 #undef LEVEL_ZERO_LOADER_GET_SYMBOL
-#define APPEND_COMMAND(X)                                                                    \
+#define APPEND_COMMAND(X, major, minor)                                                      \
   zeCommandListAppend##X##_ = api_dlsyms_lib_->GetSymbol<decltype(&zeCommandListAppend##X)>( \
       "zeCommandListAppend" #X);  // NOLINT
 #include "levelzero/ze_visitor_commands.inc"

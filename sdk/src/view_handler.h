@@ -95,6 +95,8 @@ inline static constexpr std::array kPtiClassLzGpuOpsCoreApis{
     pti_api_id_driver_levelzero::zeCommandListAppendMemoryRangesBarrier_id,
     pti_api_id_driver_levelzero::zeCommandListAppendMemoryCopy_id,
     pti_api_id_driver_levelzero::zeCommandListAppendMemoryFill_id,
+    pti_api_id_driver_levelzero::zeCommandListAppendMemoryCopyWithParameters_id,
+    pti_api_id_driver_levelzero::zeCommandListAppendMemoryFillWithParameters_id,
     pti_api_id_driver_levelzero::zeCommandListAppendMemoryCopyRegion_id,
     pti_api_id_driver_levelzero::zeCommandListAppendMemoryCopyFromContext_id,
     pti_api_id_driver_levelzero::zeCommandListAppendImageCopy_id,
@@ -110,6 +112,8 @@ inline static constexpr std::array kPtiClassLzGpuOpsCoreApis{
     pti_api_id_driver_levelzero::zeCommandListAppendLaunchKernelIndirect_id,
     pti_api_id_driver_levelzero::zeCommandListAppendLaunchMultipleKernelsIndirect_id,
     pti_api_id_driver_levelzero::zeCommandListImmediateAppendCommandListsExp_id,
+    pti_api_id_driver_levelzero::zeCommandListImmediateAppendCommandListsWithParameters_id,
+    pti_api_id_driver_levelzero::zeCommandListAppendGraphExt_id,
     pti_api_id_driver_levelzero::zeCommandQueueExecuteCommandLists_id,
 };
 
@@ -1114,7 +1118,7 @@ inline void MemCopyEvent(const ZeKernelCommandExecutionRecord& rec) {
   DoCommonMemCopy(record, rec);
   SetMemCpyIds(record, rec);
   record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY;
-  record._device_handle = static_cast<pti_device_handle_t>(rec.device_);
+  record._device_handle = static_cast<pti_device_handle_t>(rec.exec_device_);
   Instance().InsertRecord(record, record._thread_id);
 }
 
@@ -1145,10 +1149,11 @@ inline void MemFillEvent(const ZeKernelCommandExecutionRecord& rec) {
   GetDeviceId(record._pci_address, rec.pci_prop_);
   SetMemFillType(record, rec);
 
-  // for MemoryFill op the reported device is the destination device, where fill happens
+  // for MemoryFill op the reported UUID is the destination device, where fill happens
   std::copy_n(rec.dst_device_uuid, PTI_MAX_DEVICE_UUID_SIZE, record._device_uuid);
 
-  record._device_handle = static_cast<pti_device_handle_t>(rec.device_);
+  // the reported handle is the device that executed the fill
+  record._device_handle = static_cast<pti_device_handle_t>(rec.exec_device_);
   record._engine_ordinal = rec.engine_ordinal_;
   record._engine_index = rec.engine_index_;
   Instance().InsertRecord(record, record._thread_id);
@@ -1357,7 +1362,9 @@ inline void ZeKernelRecordHandler(void* /*data*/, const ZeKernelCommandExecution
 
 inline void ZeMemRecordHandler(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
   SPDLOG_TRACE("In {}, callback_id: {}, name: {}", __func__, rec.callback_id_, rec.name_);
-  if (rec.callback_id_ == pti_api_id_driver_levelzero::zeCommandListAppendMemoryFill_id) {
+  if (rec.callback_id_ == pti_api_id_driver_levelzero::zeCommandListAppendMemoryFill_id ||
+      rec.callback_id_ ==
+          pti_api_id_driver_levelzero::zeCommandListAppendMemoryFillWithParameters_id) {
     if (GetApiViewState(pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL)) {
       MemFillEvent(rec);
     }

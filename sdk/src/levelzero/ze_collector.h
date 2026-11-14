@@ -84,6 +84,7 @@ struct ZeInstanceData {
   uint64_t end_time_host;
   uint64_t kid;  // passing kid from enter callback to exit callback
   uint32_t callback_id_;
+  uint32_t corr_id;
 };
 
 inline thread_local ZeInstanceData ze_instance_data;
@@ -1849,14 +1850,12 @@ class ZeCollector {
   void AddImage(ze_image_handle_t image, size_t size) {
     // PTI_ASSERT(image != nullptr);
     const std::lock_guard<std::mutex> lock(lock_);
-    PTI_ASSERT(image_size_map_.count(image) == 0);
     image_size_map_[image] = size;
   }
 
   void RemoveImage(ze_image_handle_t image) {
     // PTI_ASSERT(image != nullptr);
     const std::lock_guard<std::mutex> lock(lock_);
-    PTI_ASSERT(image_size_map_.count(image) == 1);
     image_size_map_.erase(image);
   }
 
@@ -2258,6 +2257,7 @@ class ZeCollector {
     ze_device_handle_t device = collector->GetCommandListDevice(command_list);
 
     ZeKernelCommand* command = nullptr;
+    ze_instance_data.corr_id = 0;
 
     try {
       command = new ZeKernelCommand;
@@ -2302,6 +2302,7 @@ class ZeCollector {
 #endif
       }
     }
+    ze_instance_data.corr_id = command->corr_id_;
     SPDLOG_TRACE("\tcontext: {}, device: {}", static_cast<const void*>(context),
                  static_cast<const void*>(device));
 
@@ -2357,6 +2358,17 @@ class ZeCollector {
 
     ze_instance_data.timestamp_host = host_timestamp;
     ze_instance_data.timestamp_device = device_timestamp;
+  }
+
+  static void CleanUpFailedAppend(ZeCollector* collector, ze_event_handle_t signal_event,
+                                  ze_result_t result, void** instance_data) {
+    auto* command = static_cast<ZeKernelCommand*>(*instance_data);
+    if (command != nullptr) {
+      collector->DoCallbackOnGPUOperationAppended(command, PTI_CB_PHASE_API_EXIT, result);
+    }
+    collector->event_cache_.ReleaseEvent(signal_event);
+    delete command;
+    *instance_data = nullptr;
   }
 
   void PostAppendKernelCommandCommon(ZeKernelCommand* command, ze_event_handle_t& signal_event,
@@ -2616,6 +2628,9 @@ class ZeCollector {
     command->props = GetTransferProps(command_name, bytes_transferred, src_context, src,
                                       (dst_context ? dst_context : context), dst);
 
+    // Subscriber callback
+    DoCallbackOnGPUOperationAppended(command, PTI_CB_PHASE_API_EXIT, ZE_RESULT_SUCCESS);
+
     PostAppendKernelCommandCommon(command, signal_event, command_list_info, kids);
   }
 
@@ -2625,6 +2640,9 @@ class ZeCollector {
                                     ze_command_list_handle_t command_list, void** instance_data,
                                     std::vector<uint64_t>* kids) {
     SPDLOG_TRACE("In {}", __FUNCTION__);
+    if (ZeCollectionState::kAbnormal == collection_state_) {
+      return;
+    }
     PTI_ASSERT(command_list != nullptr);
 
     ZeCommandListInfo& command_list_info = GetCommandListInfo(command_list);
@@ -2636,10 +2654,10 @@ class ZeCollector {
     ZeKernelCommand* command = static_cast<ZeKernelCommand*>(*instance_data);
     command->props = GetTransferProps(command_name, bytes_transferred, context, src, context, dst);
 
-    // TODO implement image copy support in Local collection model
-    if (collection_mode_ != ZeCollectionMode::kLocal) {
-      PostAppendKernelCommandCommon(command, signal_event, command_list_info, kids);
-    }
+    // Subscriber callback
+    DoCallbackOnGPUOperationAppended(command, PTI_CB_PHASE_API_EXIT, ZE_RESULT_SUCCESS);
+
+    PostAppendKernelCommandCommon(command, signal_event, command_list_info, kids);
   }
 
   void PostAppendCommand(std::string command_name, ze_event_handle_t& signal_event,
@@ -2800,15 +2818,18 @@ class ZeCollector {
     SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
     auto* collector = static_cast<ZeCollector*>(global_data);
     auto* command = static_cast<ZeKernelCommand*>(*instance_data);
-    if (result == ZE_RESULT_SUCCESS) {
-      command->callback_id_ = zeCommandListAppendMemoryCopy_id;
-      collector->PostAppendMemoryCommand(collector, "zeCommandListAppendMemoryCopy",
-                                         *(params->psize), *(params->psrcptr), *(params->pdstptr),
-                                         *(params->phSignalEvent), *(params->phCommandList), result,
-                                         instance_data, kids);
-    } else {
-      collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
+    if (result != ZE_RESULT_SUCCESS) {
+      CleanUpFailedAppend(collector, *(params->phSignalEvent), result, instance_data);
+      return;
     }
+    if (command == nullptr) {
+      return;
+    }
+    command->callback_id_ = zeCommandListAppendMemoryCopy_id;
+    collector->PostAppendMemoryCommand(collector, "zeCommandListAppendMemoryCopy", *(params->psize),
+                                       *(params->psrcptr), *(params->pdstptr),
+                                       *(params->phSignalEvent), *(params->phCommandList), result,
+                                       instance_data, kids);
   }
 
   static void OnEnterCommandListAppendMemoryFill(
@@ -2826,15 +2847,76 @@ class ZeCollector {
     SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
     auto* collector = static_cast<ZeCollector*>(global_data);
     auto* command = static_cast<ZeKernelCommand*>(*instance_data);
-    if (result == ZE_RESULT_SUCCESS) {
-      command->callback_id_ = zeCommandListAppendMemoryFill_id;
-      collector->PostAppendMemoryCommand(collector, "zeCommandListAppendMemoryFill",
-                                         *(params->psize), *(params->ppattern), *(params->pptr),
-                                         *(params->phSignalEvent), *(params->phCommandList), result,
-                                         instance_data, kids, *(params->ppattern_size));
-    } else {
-      collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
+    if (result != ZE_RESULT_SUCCESS) {
+      CleanUpFailedAppend(collector, *(params->phSignalEvent), result, instance_data);
+      return;
     }
+    if (command == nullptr) {
+      return;
+    }
+    command->callback_id_ = zeCommandListAppendMemoryFill_id;
+    collector->PostAppendMemoryCommand(collector, "zeCommandListAppendMemoryFill", *(params->psize),
+                                       *(params->ppattern), *(params->pptr),
+                                       *(params->phSignalEvent), *(params->phCommandList), result,
+                                       instance_data, kids, *(params->ppattern_size));
+  }
+
+  static void OnEnterCommandListAppendMemoryCopyWithParameters(
+      ze_command_list_append_memory_copy_with_parameters_params_t* params, void* global_data,
+      void** instance_data) {
+    SPDLOG_TRACE("In {} --->", __FUNCTION__);
+    auto* collector = static_cast<ZeCollector*>(global_data);
+    PrepareToAppendKernelCommand(collector, *(params->phCommandList), KernelCommandType::kMemory,
+                                 *(params->phSignalEvent), instance_data);
+  }
+
+  static void OnExitCommandListAppendMemoryCopyWithParameters(
+      ze_command_list_append_memory_copy_with_parameters_params_t* params, ze_result_t result,
+      void* global_data, void** instance_data, std::vector<uint64_t>* kids) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
+    auto* collector = static_cast<ZeCollector*>(global_data);
+    auto* command = static_cast<ZeKernelCommand*>(*instance_data);
+    if (result != ZE_RESULT_SUCCESS) {
+      CleanUpFailedAppend(collector, *(params->phSignalEvent), result, instance_data);
+      return;
+    }
+    if (command == nullptr) {
+      return;
+    }
+    command->callback_id_ = zeCommandListAppendMemoryCopyWithParameters_id;
+    collector->PostAppendMemoryCommand(collector, "zeCommandListAppendMemoryCopyWithParameters",
+                                       *(params->psize), *(params->psrcptr), *(params->pdstptr),
+                                       *(params->phSignalEvent), *(params->phCommandList), result,
+                                       instance_data, kids);
+  }
+
+  static void OnEnterCommandListAppendMemoryFillWithParameters(
+      ze_command_list_append_memory_fill_with_parameters_params_t* params, void* global_data,
+      void** instance_data) {
+    SPDLOG_TRACE("In {} --->", __FUNCTION__);
+    auto* collector = static_cast<ZeCollector*>(global_data);
+    PrepareToAppendKernelCommand(collector, *(params->phCommandList), KernelCommandType::kMemory,
+                                 *(params->phSignalEvent), instance_data);
+  }
+
+  static void OnExitCommandListAppendMemoryFillWithParameters(
+      ze_command_list_append_memory_fill_with_parameters_params_t* params, ze_result_t result,
+      void* global_data, void** instance_data, std::vector<uint64_t>* kids) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
+    auto* collector = static_cast<ZeCollector*>(global_data);
+    auto* command = static_cast<ZeKernelCommand*>(*instance_data);
+    if (result != ZE_RESULT_SUCCESS) {
+      CleanUpFailedAppend(collector, *(params->phSignalEvent), result, instance_data);
+      return;
+    }
+    if (command == nullptr) {
+      return;
+    }
+    command->callback_id_ = zeCommandListAppendMemoryFillWithParameters_id;
+    collector->PostAppendMemoryCommand(collector, "zeCommandListAppendMemoryFillWithParameters",
+                                       *(params->psize), *(params->ppattern), *(params->pptr),
+                                       *(params->phSignalEvent), *(params->phCommandList), result,
+                                       instance_data, kids, *(params->ppattern_size));
   }
 
   static void OnEnterCommandListAppendBarrier(ze_command_list_append_barrier_params_t* params,
@@ -2942,24 +3024,27 @@ class ZeCollector {
     SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
     auto* collector = static_cast<ZeCollector*>(global_data);
     auto* command = static_cast<ZeKernelCommand*>(*instance_data);
-    if (result == ZE_RESULT_SUCCESS) {
-      size_t bytes_transferred = 0;
-      const ze_copy_region_t* region = *(params->psrcRegion);
-
-      if (region != nullptr) {
-        bytes_transferred = region->width * region->height * (*(params->psrcPitch));
-        if (region->depth != 0) {
-          bytes_transferred *= region->depth;
-        }
-      }
-      command->callback_id_ = zeCommandListAppendMemoryCopyRegion_id;
-      collector->PostAppendMemoryCommand(collector, "zeCommandListAppendMemoryCopyRegion",
-                                         bytes_transferred, *(params->psrcptr), *(params->pdstptr),
-                                         *(params->phSignalEvent), *(params->phCommandList), result,
-                                         instance_data, kids);
-    } else {
-      collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
+    if (result != ZE_RESULT_SUCCESS) {
+      CleanUpFailedAppend(collector, *(params->phSignalEvent), result, instance_data);
+      return;
     }
+    if (command == nullptr) {
+      return;
+    }
+    size_t bytes_transferred = 0;
+    const ze_copy_region_t* region = *(params->psrcRegion);
+
+    if (region != nullptr) {
+      bytes_transferred = region->width * region->height * (*(params->psrcPitch));
+      if (region->depth != 0) {
+        bytes_transferred *= region->depth;
+      }
+    }
+    command->callback_id_ = zeCommandListAppendMemoryCopyRegion_id;
+    collector->PostAppendMemoryCommand(collector, "zeCommandListAppendMemoryCopyRegion",
+                                       bytes_transferred, *(params->psrcptr), *(params->pdstptr),
+                                       *(params->phSignalEvent), *(params->phCommandList), result,
+                                       instance_data, kids);
   }
 
   static void OnEnterCommandListAppendMemoryCopyFromContext(
@@ -2977,17 +3062,20 @@ class ZeCollector {
     SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
     auto* collector = static_cast<ZeCollector*>(global_data);
     auto* command = static_cast<ZeKernelCommand*>(*instance_data);
-    if (result == ZE_RESULT_SUCCESS) {
-      ze_context_handle_t src_context = *(params->phContextSrc);
-      // ze_context_handle_t dst_context = nullptr;
-      command->callback_id_ = zeCommandListAppendMemoryCopyFromContext_id;
-      collector->AppendMemoryCommandContext("zeCommandListAppendMemoryCopyFromContext",
-                                            *(params->psize), src_context, *(params->psrcptr),
-                                            nullptr, *(params->pdstptr), *(params->phSignalEvent),
-                                            *(params->phCommandList), instance_data, kids);
-    } else {
-      collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
+    if (result != ZE_RESULT_SUCCESS) {
+      CleanUpFailedAppend(collector, *(params->phSignalEvent), result, instance_data);
+      return;
     }
+    if (command == nullptr) {
+      return;
+    }
+    ze_context_handle_t src_context = *(params->phContextSrc);
+    // ze_context_handle_t dst_context = nullptr;
+    command->callback_id_ = zeCommandListAppendMemoryCopyFromContext_id;
+    collector->AppendMemoryCommandContext("zeCommandListAppendMemoryCopyFromContext",
+                                          *(params->psize), src_context, *(params->psrcptr),
+                                          nullptr, *(params->pdstptr), *(params->phSignalEvent),
+                                          *(params->phCommandList), instance_data, kids);
   }
 
   static void OnEnterCommandListAppendImageCopy(ze_command_list_append_image_copy_params_t* params,
@@ -3003,13 +3091,16 @@ class ZeCollector {
                                                void** instance_data, std::vector<uint64_t>* kids) {
     SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
     auto* collector = static_cast<ZeCollector*>(global_data);
-    if (result == ZE_RESULT_SUCCESS) {
-      collector->AppendImageMemoryCopyCommand("zeCommandListAppendImageCopy", *(params->phSrcImage),
-                                              nullptr, nullptr, *(params->phSignalEvent),
-                                              *(params->phCommandList), instance_data, kids);
-    } else {
-      collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
+    if (result != ZE_RESULT_SUCCESS) {
+      CleanUpFailedAppend(collector, *(params->phSignalEvent), result, instance_data);
+      return;
     }
+    if (*instance_data == nullptr) {
+      return;
+    }
+    collector->AppendImageMemoryCopyCommand("zeCommandListAppendImageCopy", *(params->phSrcImage),
+                                            nullptr, nullptr, *(params->phSignalEvent),
+                                            *(params->phCommandList), instance_data, kids);
   }
 
   static void OnEnterCommandListAppendImageCopyRegion(
@@ -3026,13 +3117,16 @@ class ZeCollector {
       void* global_data, void** instance_data, std::vector<uint64_t>* kids) {
     SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
     auto* collector = static_cast<ZeCollector*>(global_data);
-    if (result == ZE_RESULT_SUCCESS) {
-      collector->AppendImageMemoryCopyCommand(
-          "zeCommandListAppendImageCopyRegion", *(params->phSrcImage), nullptr, nullptr,
-          *(params->phSignalEvent), *(params->phCommandList), instance_data, kids);
-    } else {
-      collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
+    if (result != ZE_RESULT_SUCCESS) {
+      CleanUpFailedAppend(collector, *(params->phSignalEvent), result, instance_data);
+      return;
     }
+    if (*instance_data == nullptr) {
+      return;
+    }
+    collector->AppendImageMemoryCopyCommand(
+        "zeCommandListAppendImageCopyRegion", *(params->phSrcImage), nullptr, nullptr,
+        *(params->phSignalEvent), *(params->phCommandList), instance_data, kids);
   }
 
   static void OnEnterCommandListAppendImageCopyToMemory(
@@ -3049,13 +3143,18 @@ class ZeCollector {
       void* global_data, void** instance_data, std::vector<uint64_t>* kids) {
     SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
     auto* collector = static_cast<ZeCollector*>(global_data);
-    if (result == ZE_RESULT_SUCCESS) {
-      collector->AppendImageMemoryCopyCommand(
-          "zeCommandListAppendImageCopyRegion", *(params->phSrcImage), nullptr, *(params->pdstptr),
-          *(params->phSignalEvent), *(params->phCommandList), instance_data, kids);
-    } else {
-      collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
+    auto* command = static_cast<ZeKernelCommand*>(*instance_data);
+    if (result != ZE_RESULT_SUCCESS) {
+      CleanUpFailedAppend(collector, *(params->phSignalEvent), result, instance_data);
+      return;
     }
+    if (command == nullptr) {
+      return;
+    }
+    command->callback_id_ = zeCommandListAppendImageCopyToMemory_id;
+    collector->AppendImageMemoryCopyCommand(
+        "zeCommandListAppendImageCopyToMemory", *(params->phSrcImage), nullptr, *(params->pdstptr),
+        *(params->phSignalEvent), *(params->phCommandList), instance_data, kids);
   }
 
   static void OnEnterCommandListAppendImageCopyFromMemory(
@@ -3072,27 +3171,29 @@ class ZeCollector {
       void* global_data, void** instance_data, std::vector<uint64_t>* kids) {
     SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
     auto* collector = static_cast<ZeCollector*>(global_data);
-    if (result == ZE_RESULT_SUCCESS) {
-      size_t bytes_transferred = 0;
-      const ze_image_region_t* region = *(params->ppDstRegion);
-
-      if (region != nullptr) {
-        bytes_transferred = region->width * region->height;
-        if (region->depth != 0) {
-          bytes_transferred *= region->depth;
-        }
-      }
-
-      // TODO implement image copy support in Local collection model
-      if (collector->collection_mode_ != ZeCollectionMode::kLocal) {
-        collector->PostAppendMemoryCommand(collector, "zeCommandListAppendImageCopyFromMemory",
-                                           bytes_transferred, *(params->psrcptr), nullptr,
-                                           *(params->phSignalEvent), *(params->phCommandList),
-                                           result, instance_data, kids);
-      }
-    } else {
-      collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
+    auto* command = static_cast<ZeKernelCommand*>(*instance_data);
+    if (result != ZE_RESULT_SUCCESS) {
+      CleanUpFailedAppend(collector, *(params->phSignalEvent), result, instance_data);
+      return;
     }
+    if (command == nullptr) {
+      return;
+    }
+
+    size_t bytes_transferred = 0;
+    const ze_image_region_t* region = *(params->ppDstRegion);
+
+    if (region != nullptr) {
+      bytes_transferred = region->width * region->height;
+      if (region->depth != 0) {
+        bytes_transferred *= region->depth;
+      }
+    }
+
+    command->callback_id_ = zeCommandListAppendImageCopyFromMemory_id;
+    collector->PostAppendMemoryCommand(
+        collector, "zeCommandListAppendImageCopyFromMemory", bytes_transferred, *(params->psrcptr),
+        nullptr, *(params->phSignalEvent), *(params->phCommandList), result, instance_data, kids);
   }
 
   static void OnExitCommandListCreate(ze_command_list_create_params_t* params, ze_result_t result,
@@ -3522,6 +3623,33 @@ class ZeCollector {
       ze_command_list_immediate_append_command_lists_exp_params_t* params, void* global_data,
       void** instance_data) {
     SPDLOG_TRACE("In {}", __FUNCTION__);
+    PrepareToImmediateAppendCommandLists(params, global_data, instance_data);
+  }
+
+  static void OnExitCommandListImmediateAppendCommandListsExp(
+      ze_command_list_immediate_append_command_lists_exp_params_t* params, ze_result_t result,
+      void* global_data, void** instance_data) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
+    PostImmediateAppendCommandLists(params, result, global_data, instance_data);
+  }
+
+  static void OnEnterCommandListImmediateAppendCommandListsWithParameters(
+      ze_command_list_immediate_append_command_lists_with_parameters_params_t* params,
+      void* global_data, void** instance_data) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
+    PrepareToImmediateAppendCommandLists(params, global_data, instance_data);
+  }
+
+  static void OnExitCommandListImmediateAppendCommandListsWithParameters(
+      ze_command_list_immediate_append_command_lists_with_parameters_params_t* params,
+      ze_result_t result, void* global_data, void** instance_data) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
+    PostImmediateAppendCommandLists(params, result, global_data, instance_data);
+  }
+
+  template <typename Params>
+  static void PrepareToImmediateAppendCommandLists(Params* params, void* global_data,
+                                                   void** instance_data) {
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
 
     auto command_list_count = *params->pnumCommandLists;
@@ -3544,33 +3672,21 @@ class ZeCollector {
                                                   params->pphCommandLists);
   }
 
-  static void OnExitCommandListImmediateAppendCommandListsExp(
-      ze_command_list_immediate_append_command_lists_exp_params_t* params, ze_result_t result,
-      void* global_data, void** instance_data) {
-    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
-
+  template <typename Params>
+  static void PostImmediateAppendCommandLists(Params* params, ze_result_t result, void* global_data,
+                                              void** instance_data) {
     ze_command_list_handle_t* swapped_lists = nullptr;
     if (*instance_data != nullptr) {
       swapped_lists = *params->pphCommandLists;
       *params->pphCommandLists = static_cast<ze_command_list_handle_t*>(*instance_data);
+      *instance_data = nullptr;
     }
 
     if (result == ZE_RESULT_SUCCESS) {
       auto* collector = static_cast<ZeCollector*>(global_data);
       uint32_t command_list_count = *params->pnumCommandLists;
-      if (command_list_count == 0) {
-        delete[] swapped_lists;
-        return;
-      }
-
-      ze_command_list_handle_t* command_lists = *params->pphCommandLists;
-      if (command_lists == nullptr) {
-        delete[] swapped_lists;
-        return;
-      }
-
-      if (command_lists != nullptr) {
-        collector->PostSubmitKernelCommands(command_lists, command_list_count, nullptr);
+      if (command_list_count != 0 && *params->pphCommandLists != nullptr) {
+        collector->PostSubmitKernelCommands(*params->pphCommandLists, command_list_count, nullptr);
       }
     }
     delete[] swapped_lists;

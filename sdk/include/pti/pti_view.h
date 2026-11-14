@@ -166,7 +166,9 @@ PTI_STATIC_ASSERT(sizeof(pti_api_group_id) == sizeof(uint32_t), "pti_api_group_i
   PTI_API_CLASS_RESERVED = 0,
   PTI_API_CLASS_GPU_OPERATION_CORE = 1,                    //!< any memory or kernel APIs submitting some work to GPU:
                                                            //!< SYCL runtime mem/kernel APIs, and Level Zero append APIs,
-                                                           //!< zeCommandListImmediateAppendCommandListsExp and
+                                                           //!< zeCommandListImmediateAppendCommandListsExp,
+                                                           //!< zeCommandListImmediateAppendCommandListsWithParameters,
+                                                           //!< zeCommandListAppendGraphExt and
                                                            //!< zeCommandQueueExecuteCommandLists
   PTI_API_CLASS_HOST_OPERATION_SYNCHRONIZATION = 2,        //!< Host synchronization APIs (no barriers)
                                                            //!< -- only LZ synch apis covered for now.

@@ -8,15 +8,12 @@
 #include "lz_api_tracing_api_loader.h"
 #include "utils.h"
 #include "utils/gtest_helpers.h"
+#include "utils/ze_config_info.h"
 #include "ze_command_visitor.h"
 #include "ze_driver_init.h"
 #include "ze_event_managers.h"
 #include "ze_gpu_command.h"
 #include "ze_utils.h"
-
-namespace {
-constexpr uint32_t kDriverVersionWithBrokenVisitorExtension = 17012470;
-}  // namespace
 
 class ZeCommandVisitorTestSuite : public testing::Test {
  protected:
@@ -46,6 +43,14 @@ class ZeCommandVisitorTestSuite : public testing::Test {
     }
     if (!visit_extension_.ze_command_list_visit) {
       GTEST_SKIP() << "Command list visit extension not supported, skipping test.";
+    }
+    if (driver_props_ &&
+        driver_props_->driverVersion <=
+            pti::test::utils::level_zero::kDriverVersionWithBrokenVisitorExtension) {
+      GTEST_SKIP() << "Driver version "
+                   << pti::test::utils::level_zero::kDriverVersionWithBrokenVisitorExtension
+                   << " or lower has a broken (or non existent) command list visitor extension, "
+                      "skipping test.";
     }
     auto drivers = std::vector<ze_driver_handle_t>{driver_};
     device_ = utils::ze::GetGpuDevice(drivers, kPtiDeviceId);
@@ -221,7 +226,7 @@ TEST_F(ZeCommandVisitorTestSuite, VisitOpenCommandListWithASingleCommand) {
   auto [commands, result] = visitor.Visit(device_desc, command_list_info, command_list.get(),
                                           command_list_instrumented.get());
   EXPECT_EQ(result, ZE_RESULT_SUCCESS);
-  EXPECT_EQ(commands.size(), 1);
+  ASSERT_EQ(commands.size(), 1);
   EXPECT_EQ(commands[0].get()->props.type, KernelCommandType::kCommand);
 }
 
@@ -241,20 +246,11 @@ TEST_F(ZeCommandVisitorTestSuite, VisitClosedCommandListWithASingleCommand) {
   auto [commands, result] = visitor.Visit(device_desc, command_list_info, command_list.get(),
                                           command_list_instrumented.get());
   EXPECT_EQ(result, ZE_RESULT_SUCCESS);
-  EXPECT_EQ(commands.size(), 1);
+  ASSERT_EQ(commands.size(), 1);
   EXPECT_EQ(commands[0].get()->props.type, KernelCommandType::kCommand);
 }
 
 TEST_F(ZeCommandVisitorTestSuite, VisitSkipsCommandWhenLoaderSymbolMissing) {
-  if (driver_props_) {
-    // zeCommandListAppendLaunchKernelWithArguments callback inside the driver has the wrong
-    // signature. This is fixed in later driver versions.
-    if (driver_props_->driverVersion <= kDriverVersionWithBrokenVisitorExtension) {
-      GTEST_SKIP() << "Driver version " << kDriverVersionWithBrokenVisitorExtension
-                   << " or lower has a broken (or non existent) command list visitor extension, "
-                      "skipping test.";
-    }
-  }
   auto& loader = pti::PtiLzTracerLoader::Instance();
   auto saved = loader.zeCommandListAppendLaunchKernelWithArguments_;
   ASSERT_NE(saved, nullptr) << "Loader barrier symbol should be resolved before corruption";
@@ -309,14 +305,6 @@ TEST_F(ZeCommandVisitorTestSuite, VisitSkipsCommandWhenLoaderSymbolMissing) {
 // This test is actually a regression test for a known issue in the driver where the command list
 // visitor extension does not handle CommandListReset.
 TEST_F(ZeCommandVisitorTestSuite, VisitClosedCommandListWithASingleCommandThenResetAndTryAgain) {
-  if (driver_props_) {
-    // This is fixed in later driver versions.
-    if (driver_props_->driverVersion <= kDriverVersionWithBrokenVisitorExtension) {
-      GTEST_SKIP() << "Driver version " << kDriverVersionWithBrokenVisitorExtension
-                   << " or lower has a broken (or non existent) command list visitor extension, "
-                      "skipping test.";
-    }
-  }
   auto command_list = CreateCommandList();
   auto command_list_instrumented = CreateCommandList();
   ZeCommandVisitor visitor(visit_extension_, &event_pool_manager_);
@@ -332,7 +320,7 @@ TEST_F(ZeCommandVisitorTestSuite, VisitClosedCommandListWithASingleCommandThenRe
   auto [commands, result] = visitor.Visit(device_desc, command_list_info, command_list.get(),
                                           command_list_instrumented.get());
   EXPECT_EQ(result, ZE_RESULT_SUCCESS);
-  EXPECT_EQ(commands.size(), 1);
+  ASSERT_EQ(commands.size(), 1);
   EXPECT_EQ(commands[0].get()->props.type, KernelCommandType::kCommand);
   ResetCommandList(command_list);
   append_result = zeCommandListAppendBarrier(command_list.get(), nullptr, 0, nullptr);
@@ -342,6 +330,6 @@ TEST_F(ZeCommandVisitorTestSuite, VisitClosedCommandListWithASingleCommandThenRe
   auto [commands2, result2] = visitor.Visit(device_desc, command_list_info, command_list.get(),
                                             command_list_instrumented.get());
   EXPECT_EQ(result2, ZE_RESULT_SUCCESS);
-  EXPECT_EQ(commands2.size(), 1);
+  ASSERT_EQ(commands2.size(), 1);
   EXPECT_EQ(commands2[0].get()->props.type, KernelCommandType::kCommand);
 }

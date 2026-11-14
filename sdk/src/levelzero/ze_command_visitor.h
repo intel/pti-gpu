@@ -13,6 +13,7 @@
 #include <exception>
 #include <memory>
 #include <optional>
+#include <tuple>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -82,6 +83,16 @@ class ZeCommandVisitor {
   static ze_result_t ZE_VISITOR_CCONV VisitCommandListAppendMemoryFill(
       ze_command_list_handle_t hCommandList, void* ptr, const void* pattern, size_t pattern_size,
       size_t size, ze_event_handle_t hSignalEvent, uint32_t numWaitEvents,
+      ze_event_handle_t* phWaitEvents, void* userData);
+
+  static ze_result_t ZE_VISITOR_CCONV VisitCommandListAppendMemoryCopyWithParameters(
+      ze_command_list_handle_t hCommandList, void* dstptr, const void* srcptr, size_t size,
+      const void* pNext, ze_event_handle_t hSignalEvent, uint32_t numWaitEvents,
+      ze_event_handle_t* phWaitEvents, void* userData);
+
+  static ze_result_t ZE_VISITOR_CCONV VisitCommandListAppendMemoryFillWithParameters(
+      ze_command_list_handle_t hCommandList, void* ptr, const void* pattern, size_t pattern_size,
+      size_t size, const void* pNext, ze_event_handle_t hSignalEvent, uint32_t numWaitEvents,
       ze_event_handle_t* phWaitEvents, void* userData);
 
   static ze_result_t ZE_VISITOR_CCONV VisitCommandListAppendMemoryCopyRegion(
@@ -180,6 +191,13 @@ class ZeCommandVisitor {
 
   void AppendSignalEvent(ze_command_list_handle_t command_list, ze_event_handle_t event_to_signal,
                          ze_event_handle_t wait_event);
+
+  template <pti_api_id_driver_levelzero OverheadId, KernelCommandType CommandType, typename Fn,
+            typename... ArgPayload, typename FillCommandProperties>
+  void CollectAndAppendCommand(Fn command_function, ze_command_list_handle_t command_list,
+                               std::tuple<ArgPayload...> args, ze_event_handle_t signal_event,
+                               uint32_t num_wait_events, ze_event_handle_t* wait_events,
+                               FillCommandProperties fill_command_properties);
 
   ZeExts::Visit visitor_extension_;
   ZeEventPoolManager* event_pool_manager_;

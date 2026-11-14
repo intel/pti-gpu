@@ -30,6 +30,8 @@ inline constexpr zel_version_t kProperLoaderVersionForZesInit = {1, 16, 0};
 inline constexpr uint32_t kBmgIpVersion = 0x05004000;
 inline constexpr std::string_view kCommandVisitExtName = "ZE_extension_command_visit";
 inline constexpr std::string_view kNativeGraphExt = "ZE_extension_record_replay_graph";
+// compute-runtime 26.22.38646 and older have a broken command list visitor extension.
+inline constexpr uint32_t kDriverVersionWithBrokenVisitorExtension = 17012470;
 
 [[nodiscard]] inline bool FlatCommandListRecordingEnabled() {
   static constexpr std::string_view kPositiveValue = "1";
@@ -40,7 +42,9 @@ inline constexpr std::string_view kNativeGraphExt = "ZE_extension_record_replay_
 [[nodiscard]] inline bool CommandListVisitSupported() {
   const auto drivers = ::utils::ze::GetDriverList();
   return std::any_of(std::cbegin(drivers), std::cend(drivers), [](auto* const driver) {
-    return ::utils::ze::IsDriverExtensionSupported(driver, kCommandVisitExtName);
+    const auto props = ::utils::ze::GetDriverProperties(driver);
+    const bool broken = props && props->driverVersion <= kDriverVersionWithBrokenVisitorExtension;
+    return !broken && ::utils::ze::IsDriverExtensionSupported(driver, kCommandVisitExtName);
   });
 }
 
