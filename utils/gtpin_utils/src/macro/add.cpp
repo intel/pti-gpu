@@ -268,8 +268,11 @@ GtGenProcedure Macro::Add(const IGtKernelInstrument& instrumentor, const GtDstRe
   PTI_ASSERT(dst.DataType().Size() >= src0.DataType().Size() &&
              "Destination size should be no less than source size");
   uint64_t mask = Macro::GetMaskBySizeBytes(dst.DataType().Size());
-  PTI_ASSERT(static_cast<int64_t>(srcI1.Value()) >= -static_cast<int64_t>(mask) &&
-             static_cast<int64_t>(srcI1.Value()) <= static_cast<int64_t>(mask) &&
+  // For an 8-byte destination the mask is all ones, which is -1 as int64_t,
+  // so the range check would reject every value; any 64-bit immediate fits.
+  PTI_ASSERT((dst.DataType().Size() >= sizeof(uint64_t) ||
+              (static_cast<int64_t>(srcI1.Value()) >= -static_cast<int64_t>(mask) &&
+               static_cast<int64_t>(srcI1.Value()) <= static_cast<int64_t>(mask))) &&
              "Immediate value is too large for the destination size");
 
   IGtInsFactory& insF = instrumentor.Coder().InstructionFactory();
