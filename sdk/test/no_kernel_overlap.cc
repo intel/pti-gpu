@@ -127,14 +127,12 @@ float TestCore(bool do_immediate) {
   return time_sec;
 }
 
-enum class CollectionMode { kModeFull = 0, kModeHybrid = 1, kModeLocal = 2 };
+enum class CollectionMode { kModeFull = 0, kModeLocal = 2 };  // PTI_COLLECTION_MODE values
 
 auto format_as(CollectionMode collection_mode) {
   switch (collection_mode) {
     case CollectionMode::kModeFull:
       return "Full";
-    case CollectionMode::kModeHybrid:
-      return "Hybrid";
     case CollectionMode::kModeLocal:
       return "Local";
     default:
@@ -405,8 +403,6 @@ INSTANTIATE_TEST_SUITE_P(
     NoKernelOverlapAndGapInSubmittingTests, NoKernelOverlapParametrizedTestFixture,
     ::testing::Values(std::make_tuple(true, CollectionMode::kModeFull),
                       std::make_tuple(false, CollectionMode::kModeFull),
-                      std::make_tuple(true, CollectionMode::kModeHybrid),
-                      std::make_tuple(false, CollectionMode::kModeHybrid),
                       std::make_tuple(true, CollectionMode::kModeLocal),
                       std::make_tuple(false, CollectionMode::kModeLocal)),
 

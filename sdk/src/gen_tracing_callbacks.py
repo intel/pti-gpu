@@ -719,11 +719,9 @@ def get_kernel_tracing_callback(func):
 
 
 # Generate the OnEnter stub and issue forwarding call if cb exists in ze_collector.h
-def gen_enter_callback(f, func, synchronize_func_list_on_enter, hybrid_mode_func_list):
+def gen_enter_callback(f, func, synchronize_func_list_on_enter):
     f.write("  [[maybe_unused]] ZeCollector* collector =\n")
     f.write("    static_cast<ZeCollector*>(global_data);\n")
-    if func not in hybrid_mode_func_list:
-        f.write("  if (collector->options_.hybrid_mode) return;\n")
 
     f.write("  ze_instance_data.callback_id_ = " + func + "_id;\n")
     if func in synchronize_func_list_on_enter:
@@ -766,7 +764,6 @@ def gen_exit_callback(
     submission_func_list,
     synchronize_func_list_on_enter,
     synchronize_func_list_on_exit,
-    hybrid_mode_func_list,
     km_rt_func_list,
     ze_gen_func_list,
     existing_apiid_dict,
@@ -778,8 +775,6 @@ def gen_exit_callback(
 
     f.write("  [[maybe_unused]] ZeCollector* collector =\n")
     f.write("    static_cast<ZeCollector*>(global_data);\n")
-    if func not in hybrid_mode_func_list:
-        f.write("  if (collector->options_.hybrid_mode) return;\n")
 
     f.write("  [[maybe_unused]] uint64_t end_time_host = 0;\n")
     f.write("  end_time_host = utils::GetTime();\n")
@@ -941,7 +936,6 @@ def gen_callbacks(
     submission_func_list,
     synchronize_func_list_on_enter,
     synchronize_func_list_on_exit,
-    hybrid_mode_func_list,
     km_rt_func_list,
     ze_gen_func_list,
     existing_apiid_dict,
@@ -957,9 +951,7 @@ def gen_callbacks(
 
         f.write("    [[maybe_unused]]void* global_data,\n")
         f.write("    [[maybe_unused]]void** instance_user_data) {\n")
-        gen_enter_callback(
-            f, func, synchronize_func_list_on_enter, hybrid_mode_func_list
-        )
+        gen_enter_callback(f, func, synchronize_func_list_on_enter)
         f.write("}\n")
         f.write("\n")
         if func in l0_apis_with_diff_return_status:
@@ -978,7 +970,6 @@ def gen_callbacks(
             submission_func_list,
             synchronize_func_list_on_enter,
             synchronize_func_list_on_exit,
-            hybrid_mode_func_list,
             km_rt_func_list,
             ze_gen_func_list,
             existing_apiid_dict,
@@ -1204,8 +1195,6 @@ def main():
         "zeCommandListAppendImageCopyFromMemory",
     ]
 
-    hybrid_mode_func_list = ["zeEventPoolCreate"]
-
     submission_func_list = [
         "zeCommandQueueExecuteCommandLists",
         "zeCommandListAppendLaunchKernel",
@@ -1331,7 +1320,6 @@ def main():
         submission_func_list,
         synchronize_func_list_on_enter,
         synchronize_func_list_on_exit,
-        hybrid_mode_func_list,
         km_rt_func_list,
         ze_gen_func_list,
         existing_apiid_dict,

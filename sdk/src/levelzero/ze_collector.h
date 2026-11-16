@@ -144,9 +144,8 @@ class ZeCollector {
       return nullptr;
     }
 
-    collector->collection_mode_ =
-        SelectZeCollectionMode(collector->driver_introspection_capable_,
-                               collector->options_.disabled_mode, collector->options_.hybrid_mode);
+    collector->collection_mode_ = SelectZeCollectionMode(collector->driver_introspection_capable_,
+                                                         collector->options_.disabled_mode);
     SPDLOG_DEBUG("\tCollection_mode: {}", (uint32_t)collector->collection_mode_);
 
     collector->options_.api_tracing = true;
@@ -180,7 +179,8 @@ class ZeCollector {
       tracer_ = nullptr;
     }
   }
-  enum class ZeCollectionMode { kFull = 0, kHybrid = 1, kLocal = 2 };
+  // Values match PTI_COLLECTION_MODE; 1 was the removed Hybrid mode.
+  enum class ZeCollectionMode { kFull = 0, kLocal = 2 };
   enum class ZeCollectionState { kNormal = 0, kAbnormal = 1 };
 
   /**
@@ -291,67 +291,48 @@ class ZeCollector {
     return ZE_RESULT_SUCCESS;
   }
 
-  static ZeCollectionMode SelectZeCollectionMode(bool introspection_capable, bool& disabled_mode,
-                                                 bool& hybrid_mode) {
-    ZeCollector::ZeCollectionMode mode = ZeCollectionMode::kFull;
-    disabled_mode = false;
-    hybrid_mode = false;
+  static ZeCollectionMode SelectZeCollectionMode(bool introspection_capable, bool& disabled_mode) {
+    // Default: Local collection when the driver supports introspection, Full otherwise.
+    const ZeCollectionMode default_mode =
+        introspection_capable ? ZeCollectionMode::kLocal : ZeCollectionMode::kFull;
+    ZeCollector::ZeCollectionMode mode = default_mode;
     SPDLOG_TRACE("In {}", __FUNCTION__);
 
     SPDLOG_INFO("\tIntrospectable?: {}", introspection_capable);
     SPDLOG_INFO("\tChecking if the mode enforced by PTI_COLLECTION_MODE environment variable");
     try {
       std::string env_string = utils::GetEnv("PTI_COLLECTION_MODE");
-      int32_t env_value = -1;
       if (!env_string.empty()) {
-        env_value = std::stoi(env_string);
+        const int32_t env_value = std::stoi(env_string);
         SPDLOG_INFO("\tDetected var: {}", env_value);
         switch (env_value) {
           case 0:  // FullAPI collection mode
             SPDLOG_INFO("\tForced Full collection");
-            disabled_mode = false;
-            hybrid_mode = false;
             mode = ZeCollectionMode::kFull;
             break;
-          case 1:  // Asking for Hybrid collection mode
-            if (introspection_capable) {
-              SPDLOG_INFO(
-                  "\tLevel-Zero Introspection API available: Forced fallback to hybrid mode.");
-              disabled_mode = false;
-              hybrid_mode = true;
-              mode = ZeCollectionMode::kHybrid;
-              break;
-            } else {
-              SPDLOG_WARN("\tLevel-Zero Introspection API not available: Cannot do Hybrid mode.");
-            }
+          case 1:  // Former Hybrid collection mode
+            SPDLOG_WARN(
+                "\tPTI_COLLECTION_MODE=1 (Hybrid) is no longer supported: using the default mode.");
             break;
           case 2:  // Asking for Local collection mode
             if (introspection_capable) {
               SPDLOG_INFO("\tForced fallback to Local mode.");
-              disabled_mode = true;
-              hybrid_mode = false;
               mode = ZeCollectionMode::kLocal;
             } else {
               SPDLOG_WARN("\tLevel-Zero Introspection API not available: Cannot do Local mode.");
             }
             break;
-        }
-      } else {
-        if (introspection_capable) {
-          mode = ZeCollectionMode::kLocal;
-          disabled_mode = true;
-          hybrid_mode = false;
+          default:  // Unknown value: Full collection, as before
+            mode = ZeCollectionMode::kFull;
+            break;
         }
       }
     } catch (std::invalid_argument const& /*ex*/) {
-      hybrid_mode = false;
-      disabled_mode = false;
       mode = ZeCollectionMode::kFull;
     } catch (std::out_of_range const& /*ex*/) {
-      hybrid_mode = false;
-      disabled_mode = false;
       mode = ZeCollectionMode::kFull;
     }
+    disabled_mode = (mode == ZeCollectionMode::kLocal);
     return mode;
   }
 
@@ -362,7 +343,7 @@ class ZeCollector {
   // We get here on StartTracing/enable of L0 related view kinds.
   // The caller needs to ensure duplicated enable of view_kinds do not happen on a per thread basis.
   void EnableTracing() {
-    // switches to full/hybrid api mode - only if we are not already in full/hybrid api mode.  Else
+    // switches to full api mode - only if we are not already in full api mode.  Else
     // records another view_kind active in region.
     startstop_mode_changer.ToStartTracing();
   }
@@ -371,7 +352,7 @@ class ZeCollector {
   // The caller needs to ensure duplicated disables of view_kinds do not happen on a per thread
   // basis.
   void DisableTracing() {
-    // disables full/hybrid api mode - only if all previously active view_kinds are disabled
+    // disables full api mode - only if all previously active view_kinds are disabled
     // across all threads. Else records another view_kind deactivated in region.
     startstop_mode_changer.ToStopTracing();
   }
@@ -2426,7 +2407,7 @@ class ZeCollector {
 
     // In most cases event_swap present for Local collection,
     // but with UR V2 in presence of counter-based events
-    // - for Full and Hybrid modes the same event_swap mechanism is used
+    // - for Full mode the same event_swap mechanism is used
     if (command->event_swap.Get() != nullptr) {
       bool append_result = false;
       bool in_order = false;
@@ -4036,7 +4017,7 @@ class ZeCollector {
 
 #include <tracing.gen>  // Auto-generated callbacks
 
-  // mode=0 implies full apis; mode=1 implies hybrid apis only (eventpool); mode=2 is Local
+  // mode=0 implies full apis; mode=2 is Local
   ZeCollectionMode collection_mode_ = ZeCollectionMode::kFull;
 
   // Owns swap events. To ensure proper destruction order, event_pool_manager_ should be declared
@@ -4071,7 +4052,7 @@ class ZeCollector {
   std::map<ze_command_queue_handle_t, ZeCommandQueue> command_queues_;
   std::map<ze_fence_handle_t, ze_command_queue_handle_t> fence_queue_map_;
 
-  // Keeps track of EventPools in Full & Hybrid collection modes,
+  // Keeps track of EventPools in Full collection mode,
   // queries event pools in Local mode -
   // all is to find out if GPU operation event is regular or counter-based, and
   // if regular - may be already has timestamp property
@@ -4112,8 +4093,6 @@ class ZeCollector {
       }
       parent_collector_->cb_enabled_.acallback = true;
       parent_collector_->cb_enabled_.fcallback = true;
-      if (ZeCollectionMode::kHybrid == parent_collector_->collection_mode_)
-        parent_collector_->options_.hybrid_mode = false;
       ref_count++;
       return ref_count;
     }
@@ -4145,10 +4124,8 @@ class ZeCollector {
         }
       }
       parent_collector_->cb_enabled_.fcallback = false;
-      if (ZeCollectionMode::kHybrid == parent_collector_->collection_mode_)
-        parent_collector_->options_.hybrid_mode = true;
       if (ZeCollectionMode::kFull != parent_collector_->collection_mode_) {
-        // On Hybrid and Local modes, there's a chance that the graph will be destroyed and the
+        // In Local mode, there's a chance that the graph will be destroyed and the
         // handle re-used while tracing is off. This alleviates this issue by
         // clearing the stored commands to prevents to prevent stale command
         // list and graph handles from being used.

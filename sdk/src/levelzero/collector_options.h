@@ -33,7 +33,6 @@ struct CollectorOptions {
   bool disabled_mode = true;
   // collector shifts to this mode only when introspection apis available and only when user forces
   // to be so.
-  bool hybrid_mode = false;
 
   bool kernel_tracing = false;
   bool api_tracing = false;

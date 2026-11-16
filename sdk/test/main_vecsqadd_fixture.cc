@@ -361,7 +361,7 @@ void RunVecsqadd(TestType a_test_type) {
   ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
 }
 
-enum CollectionMode { kModeFull = 0, kModeHybrid = 1, kModeLocal = 2 };
+enum CollectionMode { kModeFull = 0, kModeLocal = 2 };  // PTI_COLLECTION_MODE values
 
 }  // namespace
 
@@ -519,5 +519,4 @@ TEST_P(VecsqaddFixtureTest, TimestampWrapAroundOnOverflow) {
 }
 
 INSTANTIATE_TEST_SUITE_P(VecSqAddSuite, VecsqaddFixtureTest,
-                         ::testing::Values(CollectionMode::kModeFull, CollectionMode::kModeLocal,
-                                           CollectionMode::kModeHybrid));
+                         ::testing::Values(CollectionMode::kModeFull, CollectionMode::kModeLocal));
