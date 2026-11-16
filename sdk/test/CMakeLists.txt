@@ -1285,6 +1285,30 @@ if(PTI_BUILD_SAMPLES AND HAVE_SYCL)
     run-metrics-perf PROPERTIES ENVIRONMENT "ZET_ENABLE_METRICS=1" LABELS
     "functional;samples;metrics;hw-metrics-multi-thread")
 
+  # --list-metrics, run in the metrics mode the system supports:
+  # - System loader has zetDeviceEnableMetricsExp/zetDeviceDisableMetricsExp: ZET_ENABLE_METRICS
+  #   is unset (explicitly, so it is not inherited), so the sample enables metrics at runtime and
+  #   disables them on its way out. This path crashed at exit when the disable ran from a global
+  #   destructor (PTI-581).
+  # - Otherwise (e.g. the PVC runners): ZET_ENABLE_METRICS=1 from PTI_METRIC_TEST_PROPS, as for
+  #   the other metric tests; there is nothing to disable at exit then.
+  if(HAVE_ZET_DEVICE_METRIC_API)
+    add_test(NAME run-metrics-perf-list-metrics
+             COMMAND ${CMAKE_COMMAND} -E env --unset=ZET_ENABLE_METRICS
+                     $<TARGET_FILE:metrics_perf> --list-metrics)
+    # HAVE_ZET_DEVICE_METRIC_API only says the loader exports the APIs. A driver without runtime
+    # enabling (e.g. older compute-runtime) still rejects them: PTI logs this message and the
+    # sample exits before reaching the exit path under test, so report Skipped rather than Failed.
+    set_tests_properties(run-metrics-perf-list-metrics PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "is not supported by the Level Zero driver")
+  else()
+    add_test(NAME run-metrics-perf-list-metrics COMMAND metrics_perf --list-metrics)
+    set_tests_properties(run-metrics-perf-list-metrics PROPERTIES ${PTI_METRIC_TEST_PROPS})
+  endif()
+  set_tests_properties(
+    run-metrics-perf-list-metrics PROPERTIES LABELS
+    "functional;samples;metrics;hw-metrics-multi-thread")
+
   # It is enabled only for functional test as there is an issue observed with Intel OpenMP with Address Sanitizer.
   set_tests_properties(run-omp_vec_add PROPERTIES LABELS "functional;samples")
 

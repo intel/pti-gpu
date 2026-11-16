@@ -433,6 +433,9 @@ void PrintAllMetrics() {
 
 // Releases the ptiMetricsEnable() reference taken by InitializeTest(). main() has several exit
 // paths, so the matching ptiMetricsDisable() is done from a destructor rather than by hand.
+// The guard must be a local variable of main(), not a global: a global is destroyed during
+// exit(), after the GPU driver has been torn down, and ptiMetricsDisable() then crashes in the
+// driver.
 class MetricsEnableGuard {
  public:
   MetricsEnableGuard() = default;
@@ -450,9 +453,7 @@ class MetricsEnableGuard {
   bool enabled_ = false;
 };
 
-MetricsEnableGuard g_metrics_enable_guard;
-
-bool InitializeTest() {
+bool InitializeTest(MetricsEnableGuard& metrics_enable_guard) {
   bool metrics_enabled = (samples_utils::GetEnv("ZET_ENABLE_METRICS") == "1");
   if (!metrics_enabled) {
     pti_result status = ptiMetricsEnable(nullptr);
@@ -461,7 +462,7 @@ bool InitializeTest() {
                 << std::endl;
       return false;
     }
-    g_metrics_enable_guard.MarkEnabled();
+    metrics_enable_guard.MarkEnabled();
   }
 
   if (!DiscoverDevicesThreadSafe(g_devices)) {
@@ -538,7 +539,9 @@ int main(int argc, char* argv[]) {
     std::cout << std::endl;
   }
 
-  if (!InitializeTest()) {
+  // Destroyed when main() returns, while the GPU driver is still loaded (see MetricsEnableGuard).
+  MetricsEnableGuard metrics_enable_guard;
+  if (!InitializeTest(metrics_enable_guard)) {
     return EXIT_FAILURE;
   }
 
