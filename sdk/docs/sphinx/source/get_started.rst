@@ -8,4 +8,5 @@ Get Started
    build_and_install
    linking
    quickstart
+   quickstart_pytorch
    samples

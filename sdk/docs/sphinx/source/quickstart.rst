@@ -2,9 +2,6 @@
 Quick Start with ptiView API
 ============================
 
-.. warning::
-   **DRAFT DOCUMENTATION** - This documentation is currently in draft status and subject to change.
-
 This guide will help you get started with PTI SDK. By the end, you'll be able to trace GPU kernels and understand the basic API workflow.
 
 Prerequisites

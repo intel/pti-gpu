@@ -5,4 +5,5 @@
    about
    get_started
    api_reference
+   addendum
 

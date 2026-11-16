@@ -2,9 +2,6 @@
 Building and Installing
 ============================
 
-.. warning::
-   **DRAFT DOCUMENTATION** - This documentation is currently in draft status and subject to change.
-
 Using Pre-built Binaries
 =======================================
 

@@ -1,9 +1,6 @@
 PTI Metrics API Reference
 ##########################
 
-.. warning::
-   **DRAFT DOCUMENTATION** - This documentation is currently in draft status and subject to change.
-
 This section provides API documentation for the PTI Metrics API (device-level metrics sampling).
 
 .. note::

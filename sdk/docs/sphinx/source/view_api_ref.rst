@@ -1,9 +1,6 @@
 PTI View API Reference
 ######################
 
-.. warning::
-   **DRAFT DOCUMENTATION** - This documentation is currently in draft status and subject to change.
-
 This section provides API documentation for the PTI View API (tracing and profiling).
 
 .. note::

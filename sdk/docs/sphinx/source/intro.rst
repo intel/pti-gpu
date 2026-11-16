@@ -2,9 +2,6 @@
 Introduction
 #####################
 
-.. warning::
-   **DRAFT DOCUMENTATION** - This documentation is currently in draft status and subject to change.
-
 PTI SDK is a software package for developing profiling tools for applications built on oneAPI and running on Intel GPUs.
 
 The SDK provides the ``pti_view`` library with a set of APIs defined in header files, ``pti`` module, samples and tests.

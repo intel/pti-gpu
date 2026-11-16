@@ -2,9 +2,6 @@
 What's New
 ==============
 
-.. warning::
-   **DRAFT DOCUMENTATION** - This documentation is currently in draft status and subject to change.
-
 Version 1.3.0
 ---------------
 

@@ -1,9 +1,6 @@
 PTI Documentation
 ==================
 
-.. warning::
-   **DRAFT DOCUMENTATION** - This documentation is currently in draft status and subject to change.
-
 **Source Repository:** https://github.com/intel/pti-gpu/tree/master/sdk
 
 Overview

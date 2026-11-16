@@ -1,13 +1,10 @@
 PTI Metrics Scope API Reference
 ################################
 
-.. warning::
-   **DRAFT DOCUMENTATION** - This documentation is currently in draft status and subject to change.
-
 This section provides API documentation for the PTI Metrics Scope API (per-kernel hardware metrics collection).
 
 .. note::
-   This page documents the **Metrics Scope API** for per-kernel hardware metrics collection. For device-level metrics sampling, see :doc:`metrics`.
+   This page documents the **Metrics Scope API** for per-kernel hardware metrics collection. For metrics collection over time, see :doc:`metrics`. To collect per-kernel metrics from a PyTorch script, see :doc:`quickstart_pytorch`. For the metric names on Intel(R) Arc(TM) B-Series Graphics, see :doc:`hw_metrics`.
 
 Overview
 ========

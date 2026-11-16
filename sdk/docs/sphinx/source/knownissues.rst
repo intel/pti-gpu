@@ -2,9 +2,6 @@
 Known Issues
 ==============
 
-.. warning::
-   **DRAFT DOCUMENTATION** - This documentation is currently in draft status and subject to change.
-
 1. Metrics collection requires metrics to be enabled on the device, either by calling ``ptiMetricsEnable`` (``ptiMetricsScopeEnable`` and ``ptiPcSamplingEnable`` do this internally) or by setting the ``ZET_ENABLE_METRICS=1`` environment variable. Drivers that do not support enabling metrics at runtime make ``ptiMetricsEnable`` return ``PTI_ERROR_METRICS_RUNTIME_ENABLE_UNSUPPORTED``; on those drivers the environment variable is still required.
 
 2. Communication tracing (``PTI_VIEW_COMMUNICATION``) automatically registers ``libpti_view.so`` through ``INTEL_LIBITTNOTIFY64`` when the variable is unset. If it already identifies the loaded ``libpti_view.so``, PTI communication tracing remains available. If it identifies another collector, PTI leaves it unchanged, and ``ptiViewEnable(PTI_VIEW_COMMUNICATION)`` returns ``PTI_ERROR_COLLECTOR_UNAVAILABLE`` with a warning identifying the configured collector and PTI collector paths. The same error is returned if the configured collector path does not exist or collector configuration fails. Because ``libpti_view.so`` self-registers whenever it is loaded, applications that link it unconditionally cause ITT to be loaded even when communication tracing is disabled, and child processes inherit the variable. To opt out, set ``INTEL_LIBITTNOTIFY64`` to another collector before the process starts. oneCCL tracing remains controlled through the normal PTI view enable/disable mechanisms, and PTI limits additional overhead by disabling non-oneCCL ITT domains during collector initialization.

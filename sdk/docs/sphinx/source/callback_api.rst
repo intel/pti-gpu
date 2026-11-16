@@ -2,9 +2,6 @@ PTI Callback API Reference (Experimental)
 ##########################################
 
 .. warning::
-   **DRAFT DOCUMENTATION** - This documentation is currently in draft status and subject to change.
-
-.. warning::
    The Callback API is **EXPERIMENTAL** and subject to change. APIs and data structures may change in future releases without notice. Use with caution in production environments.
 
 This section provides API documentation for the PTI Callback API (synchronous GPU operation notifications).

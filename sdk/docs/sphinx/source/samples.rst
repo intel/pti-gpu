@@ -2,9 +2,6 @@
 Code Samples
 ============
 
-.. warning::
-   **DRAFT DOCUMENTATION** - This documentation is currently in draft status and subject to change.
-
 Sample applications demonstrate how to use PTI SDK tracing and profiling capabilities. All samples are located in the ``samples/`` directory of the repository.
 
 **Repository Location:**
