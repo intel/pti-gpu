@@ -419,6 +419,7 @@ const unsigned min_size = 32;
 const unsigned default_size = 1024;
 const unsigned default_thread_count = 2;
 const unsigned default_repetition_per_thread = 4;
+const unsigned default_warmup_per_thread = 1;
 
 void Usage(const char* name) {
   std::cout << " Calculating floating point matrix multiply on gpu, submitting the work from many "
@@ -431,6 +432,9 @@ void Usage(const char* name) {
   std::cout << "--repeat [-r]   integer        "
             << "Repetition number per thread, default: " << default_repetition_per_thread
             << std::endl;
+  std::cout << "--warmup [-w]   integer        "
+            << "Untimed warm-up iterations per thread before the measurement, default: "
+            << default_warmup_per_thread << std::endl;
   std::cout << "--verbose [-v]                 "
             << "Enable verbose mode to report the app progress, default: off" << std::endl;
 #if !defined(NO_PTI)
@@ -445,22 +449,48 @@ int main(int argc, char* argv[]) {
   int exit_code = EXIT_SUCCESS;
   unsigned thread_count = default_thread_count;
   unsigned repeat_count = default_repetition_per_thread;
+  unsigned warmup_count = default_warmup_per_thread;
   unsigned size = default_size;
 
   try {
+    // Options that take a value must not be the last argument: argv[argc] is null.
+    auto value_missing = [argc, argv](int option_index) {
+      if (option_index + 1 < argc) {
+        return false;
+      }
+      std::cerr << "Missing value for option " << argv[option_index] << '\n';
+      Usage(argv[0]);
+      return true;
+    };
+
     for (int i = 1; i < argc; i++) {
       if (strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "--size") == 0) {
+        if (value_missing(i)) {
+          return EXIT_FAILURE;
+        }
         i++;
         auto temp = std::stoul(argv[i]);
         size = (temp < min_size) ? min_size : (temp > max_size) ? max_size : temp;
       } else if (strcmp(argv[i], "-t") == 0 || strcmp(argv[i], "--threads") == 0) {
+        if (value_missing(i)) {
+          return EXIT_FAILURE;
+        }
         i++;
         auto temp = std::stoul(argv[i]);
         thread_count = (temp < 1) ? 1 : (temp > max_thread_count) ? max_thread_count : temp;
       } else if (strcmp(argv[i], "-r") == 0 || strcmp(argv[i], "--repeat") == 0) {
+        if (value_missing(i)) {
+          return EXIT_FAILURE;
+        }
         i++;
         auto temp = std::stoul(argv[i]);
         repeat_count = (temp < 1) ? 1 : temp;
+      } else if (strcmp(argv[i], "-w") == 0 || strcmp(argv[i], "--warmup") == 0) {
+        if (value_missing(i)) {
+          return EXIT_FAILURE;
+        }
+        i++;
+        warmup_count = static_cast<unsigned>(std::stoul(argv[i]));
       } else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--verbose") == 0) {
         // verbosity off makes minimal the sample self output -
         // so profiling output won't be intermixed with the sample output
@@ -468,6 +498,9 @@ int main(int argc, char* argv[]) {
         verbose = true;
 #if !defined(NO_PTI)
       } else if (strcmp(argv[i], "-c") == 0 || strcmp(argv[i], "--collect") == 0) {
+        if (value_missing(i)) {
+          return EXIT_FAILURE;
+        }
         i++;
         auto temp = std::string(argv[i]);
         if (temp.find("gpu") != std::string::npos) {
@@ -500,8 +533,9 @@ int main(int argc, char* argv[]) {
 
     StartTracing();
 
-    // The warm-up iteration of each thread is collected too.
-    const size_t expected_kernels = static_cast<size_t>(thread_count) * (repeat_count + 1);
+    // The warm-up iterations of each thread are collected too.
+    const size_t expected_kernels =
+        static_cast<size_t>(thread_count) * (repeat_count + warmup_count);
     pti_scope_collection_handle_t scope_handle = nullptr;
     if (collection_type & CollectionType::kScope) {
       scope_handle = StartScope(expected_kernels);
@@ -535,7 +569,7 @@ int main(int argc, char* argv[]) {
 
     std::cout << "DPC++ Matrix Multiplication (CPU threads: " << thread_count
               << ", matrix size: " << size << " x " << size << ", repeats: " << repeat_count
-              << " times, preceded by one warm-up iteration)" << std::endl;
+              << " times, preceded by " << warmup_count << " warm-up iteration(s))" << std::endl;
     std::cout << "Target device: "
               << queue.get_info<sycl::info::queue::device>().get_info<sycl::info::device::name>()
               << std::endl
@@ -543,13 +577,27 @@ int main(int argc, char* argv[]) {
 
     auto start = std::chrono::steady_clock::now();
 
+    // Deliver the records of the warm-up iterations before the timed interval starts, so that
+    // their processing is not charged to the measured throughput of the profiled run (the
+    // baseline has nothing to flush). The final flush below handles the measured records.
+    // The record count and the summed overhead time then restart from zero, so that, like the
+    // total execution time, they cover only the timed iterations.
+    [[maybe_unused]] auto flush_warm_up_records = []() {
+#if !defined(NO_PTI)
+      PTI_THROW(ptiFlushAllViews());
+      g_record_count = 0;
+      overhead_time_ns = 0;
+#endif
+    };
+
     if (thread_count > 1) {
       std::vector<std::thread> the_threads;
 
-      // Warm-up phase: 1 iteration per thread - to warm up caches and JIT
+      // Warm-up phase: warmup_count iterations per thread - to warm up caches, JIT, the GPU
+      // clock and the driver/runtime pools, so that the measurement sees the steady state
       the_threads.reserve(thread_count);
-      for (unsigned i = 0; i < thread_count; i++) {
-        the_threads.emplace_back(threadFunction, size, 1, expected_result);
+      for (unsigned i = 0; i < thread_count && warmup_count > 0; i++) {
+        the_threads.emplace_back(threadFunction, size, warmup_count, expected_result);
       }
 
       for (auto& th : the_threads) {
@@ -560,6 +608,7 @@ int main(int argc, char* argv[]) {
 
       // Clear threads from warm-up phase
       the_threads.clear();
+      flush_warm_up_records();
 
       the_threads.reserve(thread_count);
       // Measurement phase: actual repeat_count iterations per thread
@@ -576,7 +625,10 @@ int main(int argc, char* argv[]) {
 
     } else {
       // Warm-up for single-threaded case
-      threadFunction(size, 1, expected_result);
+      if (warmup_count > 0) {
+        threadFunction(size, warmup_count, expected_result);
+      }
+      flush_warm_up_records();
 
       // Measurement phase
       start = std::chrono::steady_clock::now();
