@@ -27,14 +27,13 @@ public:
             // loop multiple times to mitigate context switch impact
             for (int i = 0; i < 200; i++) {
                 const std::chrono::time_point<std::chrono::system_clock> t0 = std::chrono::system_clock::now();
-                uint64_t t1 = GetHostBootTimestamp();
-                uint64_t t2 = GetHostBootTimestamp();
+                uint64_t t1 = GetHostTimestamp();
+                uint64_t t2 = GetHostTimestamp();
                 const std::chrono::time_point<std::chrono::system_clock> t3 = std::chrono::system_clock::now();
                 uint64_t delta = std::chrono::duration_cast<std::chrono::nanoseconds>(t3.time_since_epoch()).count() - std::chrono::duration_cast<std::chrono::nanoseconds>(t0.time_since_epoch()).count();
                 if (delta < smallest_delta) {
-                    // approximate epoch time of system boot
-                    // t2 - t1 is the time to get boot time
-                    // t0 + (t2 - t1) - t1 is the epoch time of system boot
+                    // Calibrate the epoch offset using the same host clock
+                    // as GetHostTimestamp and the trace records.
                     epoch_start_time_ = std::chrono::duration_cast<std::chrono::nanoseconds>(t0.time_since_epoch()).count() + (t2 - t1) - t1;
                     smallest_delta = delta;
                 }
