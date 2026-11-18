@@ -133,8 +133,8 @@ void AggregateSample(uint64_t ip, const zet_typed_value_t* sample_values, size_t
                      size_t ip_metric_index, size_t reason_count,
                      pti_pc_sampling_device_status_t* device_status,
                      PendingKernelMap* pending_kernels, AggregationScratch* scratch) {
-  const KernelBinaryInfo* kernel_info = KernelInfoStorage::Instance().FindByIpAddress(ip);
-  if (kernel_info == nullptr) {
+  const auto kernel_info = KernelInfoStorage::Instance().FindByIpAddress(ip);
+  if (!kernel_info.has_value()) {
     // Drop PCs that do not map to a tracked kernel.
     scratch->dropped_sample_count +=
         AccumulateUnmappedSampleCount(sample_values, metric_count, ip_metric_index);
@@ -173,6 +173,7 @@ void AggregateDecodedReports(size_t ip_metric_index, size_t reason_count,
     return;
   }
 
+  const uint64_t address_mask = KernelInfoStorage::Instance().GetAddressMask();
   // Assumes the decoded report stride is reason_count + 1: every metric in the
   // group is an EVENT stall reason except the single IP metric.
   const size_t metric_count = reason_count + 1;
@@ -188,8 +189,8 @@ void AggregateDecodedReports(size_t ip_metric_index, size_t reason_count,
 
     for (size_t sample_index = 0; sample_index < sample_count; ++sample_index) {
       const zet_typed_value_t* sample_values = value + sample_index * metric_count;
-      const uint64_t ip =
-          NormalizeInstructionPointer(GetMetricValueAsUint64(sample_values[ip_metric_index]));
+      const uint64_t ip = NormalizeInstructionPointer(
+          GetMetricValueAsUint64(sample_values[ip_metric_index]), address_mask);
       if (ip == 0) {
         continue;
       }

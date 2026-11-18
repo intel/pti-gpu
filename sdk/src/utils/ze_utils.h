@@ -35,6 +35,8 @@ namespace ze {
 
 inline constexpr static uint32_t kIntelVendorId = 0x8086;
 inline constexpr static uint32_t kBmgIpVersion = 0x05004000;
+inline constexpr static uint32_t kNvlPIpVersion = 0x08c28000;
+inline constexpr static uint32_t kCriIpVersion = 0x08c2c000;
 inline constexpr std::string_view kCounterEventExtensionName = ZE_EVENT_POOL_COUNTER_BASED_EXP_NAME;
 
 struct MemDeleter;

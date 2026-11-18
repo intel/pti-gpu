@@ -45,6 +45,7 @@
 #include "pti_pc_sampling_raw_data_file.h"
 #include "utils/pti_string_pool.h"
 #include "utils/utils.h"
+#include "utils/ze_utils.h"
 
 namespace pti::pc_sampling {
 
@@ -130,32 +131,49 @@ inline const char* PcSamplingStateToString(PcSamplingState state) {
 }
 
 /**
+ * @brief Select the kernel-base mask using the full Intel product config.
+ *
+ * Product configs below kNvlPIpVersion use 32-bit addresses; NVL-P uses 48-bit
+ * addresses; CRI and later use full-width addresses. Level Zero leaves ipVersion
+ * implementation-defined.
+ * Keeping the CRI format for later product configs is our compatibility policy,
+ * not a Level Zero guarantee about future sampling formats.
+ * https://github.com/intel/compute-runtime/blob/master/shared/source/helpers/hw_ip_version.h
+ * https://github.com/intel/compute-runtime/blob/master/third_party/aot_config_headers/platforms.h
+ */
+inline std::optional<uint64_t> GetKernelAddressMask(std::optional<uint32_t> hardware_ip_version) {
+  if (!hardware_ip_version.has_value() || *hardware_ip_version == 0) {
+    return std::nullopt;
+  }
+  if (*hardware_ip_version >= ::utils::ze::kCriIpVersion) {
+    return (std::numeric_limits<uint64_t>::max)();
+  }
+  if (*hardware_ip_version >= ::utils::ze::kNvlPIpVersion) {
+    return (1ull << 48) - 1;
+  }
+  return 0xffffffffull;
+}
+
+/**
  * @brief Convert an EuStallSampling IP value into a byte address.
  *
- * EuStallSampling reports instruction pointers as 29 or 61 bit values.
- * They need to be shifted by 3 to align with kernel base address.
- * See e.g.:
+ * EuStallSampling reports instruction pointers as 29 (Xe HPC, Xe2, Xe3) or 61 (Xe3p and later) bit
+ * values. Shift by 3 and mask to match the kernel-base address domain, including
+ * decanonicalizing 48-bit NVL-P addresses. See e.g.:
  * https://github.com/intel/compute-runtime/blob/master/level_zero/core/source/gfx_core_helpers/l0_gfx_core_helper_xe2_hpg_xe3.inl
  */
-inline uint64_t NormalizeInstructionPointer(uint64_t instruction_pointer) {
+inline uint64_t NormalizeInstructionPointer(uint64_t instruction_pointer, uint64_t address_mask) {
   constexpr uint32_t kEuStallSamplingIpShift = 3;
-  return (instruction_pointer << kEuStallSamplingIpShift);
+  return (instruction_pointer << kEuStallSamplingIpShift) & address_mask;
 }
 
 /**
  * @brief Normalize a kernel base address into the EuStallSampling address domain.
  *
- * Kernel addresses returned by zexKernelGetBaseAddress may be 64-bit, while EuStallSampling reports
- * IPs in 29 or 61 bits. This function uses the device IP version to determine whether to truncate
- * the kernel base address to 32 bits for comparison with sampled IPs. See e.g.:
- * https://github.com/intel/compute-runtime/blob/master/shared/source/xe2_hpg_core/hw_info_bmg.cpp
- *
- * TODO: Make a proper check for the device IP version to determine if truncation is needed. For
- * now, we assume that if the device IP version is less than 7.0, we truncate to 32 bits.
+ * Match the address width of sampled instruction pointers after conversion to bytes.
  */
-inline uint64_t NormalizeKernelAddress(uint64_t kernel_address) {
-  constexpr uint64_t kInstructionPointerAddressMask = 0xFFFFFFFFull;
-  return kernel_address & kInstructionPointerAddressMask;
+inline uint64_t NormalizeKernelAddress(uint64_t kernel_address, uint64_t address_mask) {
+  return kernel_address & address_mask;
 }
 
 }  // namespace pti::pc_sampling
@@ -312,8 +330,21 @@ class KernelInfoStorage {
     return instance;
   }
 
+  void SetAddressMask(uint64_t address_mask) {
+    std::lock_guard<std::shared_mutex> lock(mutex_);
+    address_mask_ = address_mask;
+    for (auto& [raw_address, info] : kernel_info_map_) {
+      info->kernel_base_address_ = NormalizeKernelAddress(raw_address, address_mask_);
+    }
+  }
+
+  uint64_t GetAddressMask() const {
+    std::shared_lock<std::shared_mutex> lock(mutex_);
+    return address_mask_;
+  }
+
   /**
-   * @brief Add kernel information to the storage.
+   * @brief Add kernel information with a raw base address to the storage.
    *
    * Thread-safe: uses write lock.
    *
@@ -321,30 +352,30 @@ class KernelInfoStorage {
    */
   void Add(KernelBinaryInfo info) {
     std::lock_guard<std::shared_mutex> lock(mutex_);
-    // Use kernel base address as key since it's guaranteed unique
-    auto key = static_cast<uintptr_t>(info.kernel_base_address_);
+    const uint64_t key = info.kernel_base_address_;
+    info.kernel_base_address_ = NormalizeKernelAddress(key, address_mask_);
     kernel_info_map_[key] = std::make_unique<KernelBinaryInfo>(std::move(info));
   }
 
   /**
    * @brief Find kernel info by ip address.
    *
-   * Thread-safe: uses read lock. The returned pointer remains valid until
-   * Clear() is called (typically at ptiPcSamplingDisable).
+   * Thread-safe: copies metadata under the read lock. The kernel name remains
+   * owned by the session's string pool.
    *
    * @param[in] ip_address   The instruction pointer address to search for
    *
-   * @return Pointer to info if found, nullptr otherwise
+   * @return Metadata snapshot if found, std::nullopt otherwise
    */
-  const KernelBinaryInfo* FindByIpAddress(uint64_t ip_address) const {
+  std::optional<KernelBinaryInfo> FindByIpAddress(uint64_t ip_address) const {
     std::shared_lock<std::shared_mutex> lock(mutex_);
     for (const auto& [key, info_ptr] : kernel_info_map_) {
       if (info_ptr->kernel_base_address_ <= ip_address &&
           ip_address < info_ptr->kernel_base_address_ + info_ptr->kernel_binary_size_) {
-        return info_ptr.get();
+        return *info_ptr;
       }
     }
-    return nullptr;
+    return std::nullopt;
   }
 
   /**
@@ -361,6 +392,7 @@ class KernelInfoStorage {
   void Clear() {
     std::lock_guard<std::shared_mutex> lock(mutex_);
     kernel_info_map_.clear();
+    address_mask_ = (std::numeric_limits<uint64_t>::max)();
   }
 
  private:
@@ -370,7 +402,8 @@ class KernelInfoStorage {
   KernelInfoStorage& operator=(const KernelInfoStorage&) = delete;
 
   mutable std::shared_mutex mutex_;
-  std::unordered_map<uintptr_t, std::unique_ptr<KernelBinaryInfo>> kernel_info_map_;
+  std::unordered_map<uint64_t, std::unique_ptr<KernelBinaryInfo>> kernel_info_map_;
+  uint64_t address_mask_ = (std::numeric_limits<uint64_t>::max)();
 };
 
 //-----------------------------------------------------------------------------
@@ -453,7 +486,7 @@ inline void KernelCreatedCallback(pti_callback_domain domain, pti_api_group_id /
         SPDLOG_WARN("{}: zexKernelGetBaseAddress failed with status {:#x}", __FUNCTION__,
                     static_cast<uint32_t>(status));
       } else {
-        kernel_info.kernel_base_address_ = NormalizeKernelAddress(base_address);
+        kernel_info.kernel_base_address_ = base_address;
         SPDLOG_DEBUG("{}: kernel base address {:#x} for '{}'", __FUNCTION__, base_address,
                      kernel_info.kernel_name_);
       }
@@ -628,6 +661,7 @@ class PtiPcSamplingHandleStorage {
     if (callback_result != PTI_SUCCESS) {
       SPDLOG_ERROR("{}: ptiCallbackSubscribe failed with result {}", __FUNCTION__,
                    static_cast<uint32_t>(callback_result));
+      KernelInfoStorage::Instance().Clear();
       handle_.reset();
       ptiMetricsDisable(nullptr);
       return callback_result;
@@ -643,6 +677,7 @@ class PtiPcSamplingHandleStorage {
                    static_cast<uint32_t>(callback_result));
       ptiCallbackUnsubscribe(callback_subscriber_);
       callback_subscriber_ = nullptr;
+      KernelInfoStorage::Instance().Clear();
       handle_.reset();
       ptiMetricsDisable(nullptr);
       return callback_result;
@@ -835,6 +870,16 @@ inline pti_result ApplyConfiguration(pti_pc_sampling_handle_t handle,
     SPDLOG_ERROR("{}: None of the provided device(s) support PC sampling", __FUNCTION__);
     return PTI_ERROR_PC_SAMPLING_CONFIGURATION_FAIL;
   }
+
+  const auto device = reinterpret_cast<ze_device_handle_t>(handle->configured_devices_.front());
+  const auto hardware_ip_version = ::utils::ze::GetGpuDeviceIpVersion(device);
+  const auto address_mask = GetKernelAddressMask(hardware_ip_version);
+  if (!address_mask.has_value()) {
+    SPDLOG_ERROR("{}: selected device has no usable PC sampling address format", __FUNCTION__);
+    handle->configured_devices_.clear();
+    return PTI_ERROR_PC_SAMPLING_CONFIGURATION_FAIL;
+  }
+  KernelInfoStorage::Instance().SetAddressMask(*address_mask);
 
   handle->sampling_period_ns_ =
       (sampling_period_ns == 0) ? kDefaultSamplingPeriodNs : sampling_period_ns;

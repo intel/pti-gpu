@@ -16,6 +16,7 @@ Version 1.3.0
 * **Behavior change:** Add ``zeCommandListAppendMemoryCopyWithParameters``, ``zeCommandListAppendMemoryFillWithParameters``, ``zeCommandListImmediateAppendCommandListsWithParameters`` and ``zeCommandListAppendGraphExt`` to the ``PTI_API_CLASS_GPU_OPERATION_CORE`` API class. Applications that enable this class with ``ptiViewEnableDriverApiClass`` now receive ``PTI_VIEW_DRIVER_API`` records for these calls.
 * **Behavior change:** ``_device_handle`` in ``PTI_VIEW_DEVICE_GPU_MEM_COPY`` and ``PTI_VIEW_DEVICE_GPU_MEM_FILL`` records now reports the device that executed the operation, matching its documentation in ``pti_view.h``. Previously it reported the device of the source allocation (or fill pattern), which was ``nullptr`` when that pointer resided in host memory.
 * Fix a hang with Level Zero image copies in local collection mode: their signal events were never signaled. Also fix an abort when an image created before tracing started is destroyed while tracing.
+* Enable PC Sampling on CRI.
 
 Version 1.2.0
 ---------------

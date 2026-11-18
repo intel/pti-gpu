@@ -137,3 +137,117 @@ TEST(PcSamplingBasicTest, TempRawDataFileReadRangeReadsRequestedSlice) {
 TEST(PcSamplingBasicTest, ResolveKernelNameReturnsUnknownForNullHandle) {
   EXPECT_STREQ(pti::pc_sampling::ResolveKernelName(nullptr), "<unknown>");
 }
+
+TEST(PcSamplingBasicTest, KernelAddressMaskUsesProductConfig) {
+  using pti::pc_sampling::GetKernelAddressMask;
+
+  EXPECT_EQ(GetKernelAddressMask(std::nullopt), std::nullopt);
+  EXPECT_EQ(GetKernelAddressMask(0u), std::nullopt);
+  EXPECT_EQ(GetKernelAddressMask(1u), 0xffffffffull);
+  EXPECT_EQ(GetKernelAddressMask(utils::ze::kBmgIpVersion), 0xffffffffull);
+  EXPECT_EQ(GetKernelAddressMask(utils::ze::kNvlPIpVersion - 1), 0xffffffffull);
+  EXPECT_EQ(GetKernelAddressMask(utils::ze::kNvlPIpVersion), (1ull << 48) - 1);
+  EXPECT_EQ(GetKernelAddressMask(utils::ze::kNvlPIpVersion + 1), (1ull << 48) - 1);
+  EXPECT_EQ(GetKernelAddressMask(utils::ze::kCriIpVersion - 1), (1ull << 48) - 1);
+  EXPECT_EQ(GetKernelAddressMask(utils::ze::kCriIpVersion), (std::numeric_limits<uint64_t>::max)());
+  EXPECT_EQ(GetKernelAddressMask(utils::ze::kCriIpVersion + 1),
+            (std::numeric_limits<uint64_t>::max)());
+}
+
+TEST(PcSamplingBasicTest, AddressNormalizationHandlesLimits) {
+  using pti::pc_sampling::NormalizeInstructionPointer;
+  using pti::pc_sampling::NormalizeKernelAddress;
+
+  constexpr uint64_t full_mask = (std::numeric_limits<uint64_t>::max)();
+  for (uint64_t address_mask :
+       std::array<uint64_t, 3>{0xffffffffull, (1ull << 48) - 1, full_mask}) {
+    SCOPED_TRACE(address_mask);
+    EXPECT_EQ(NormalizeInstructionPointer(0, address_mask), 0u);
+    EXPECT_EQ(NormalizeInstructionPointer(0x1fffffffffffffffull, address_mask),
+              address_mask & ~7ull);
+    EXPECT_EQ(NormalizeKernelAddress(full_mask, address_mask), address_mask);
+  }
+  EXPECT_EQ(NormalizeInstructionPointer(0x1fffffffull, 0xffffffffull), 0xfffffff8ull);
+}
+
+TEST(PcSamplingBasicTest, KernelLookupMatchesSamplingAddressFormats) {
+  using pti::pc_sampling::KernelBinaryInfo;
+  using pti::pc_sampling::NormalizeInstructionPointer;
+
+  struct AddressCase {
+    uint64_t mask;
+    uint64_t sampled_ip;
+    uint64_t expected_base;
+  };
+  constexpr std::array<AddressCase, 4> cases = {{
+      {0xffffffffull, 0xff601880ull >> 3, 0xff601800ull},
+      {(1ull << 48) - 1, 0xffff8000ff601880ull >> 3, 0x8000ff601800ull},
+      {(std::numeric_limits<uint64_t>::max)(), 0x8000ff601880ull >> 3, 0x8000ff601800ull},
+      {0xffffffffull, 0xff601880ull >> 3, 0xff601800ull},
+  }};
+
+  auto& storage = pti::pc_sampling::KernelInfoStorage::Instance();
+  storage.Clear();
+  KernelBinaryInfo kernel;
+  kernel.kernel_base_address_ = 0x8000ff601800ull;
+  kernel.kernel_binary_size_ = 0x100;
+  storage.Add(kernel);
+
+  for (const auto& test_case : cases) {
+    SCOPED_TRACE(test_case.mask);
+    storage.SetAddressMask(test_case.mask);
+    EXPECT_EQ(storage.GetAddressMask(), test_case.mask);
+    EXPECT_EQ(storage.Size(), 1u);
+
+    const uint64_t ip = NormalizeInstructionPointer(test_case.sampled_ip, storage.GetAddressMask());
+    EXPECT_EQ(ip, test_case.expected_base + 0x80);
+    EXPECT_TRUE(storage.FindByIpAddress(ip).has_value());
+    EXPECT_TRUE(storage.FindByIpAddress(test_case.expected_base).has_value());
+    EXPECT_TRUE(storage.FindByIpAddress(test_case.expected_base + kernel.kernel_binary_size_ - 1)
+                    .has_value());
+    EXPECT_FALSE(storage.FindByIpAddress(test_case.expected_base - 1).has_value());
+    EXPECT_FALSE(
+        storage.FindByIpAddress(test_case.expected_base + kernel.kernel_binary_size_).has_value());
+    if (test_case.expected_base != kernel.kernel_base_address_) {
+      EXPECT_FALSE(storage.FindByIpAddress(kernel.kernel_base_address_ + 0x80).has_value());
+    }
+  }
+
+  storage.Clear();
+  EXPECT_EQ(storage.Size(), 0u);
+  EXPECT_EQ(storage.GetAddressMask(), (std::numeric_limits<uint64_t>::max)());
+  EXPECT_FALSE(storage.FindByIpAddress(cases.back().expected_base + 0x80).has_value());
+  storage.Add(kernel);
+  EXPECT_TRUE(storage.FindByIpAddress(kernel.kernel_base_address_).has_value());
+  storage.Clear();
+}
+
+TEST(PcSamplingBasicTest, KernelLookupSnapshotSurvivesReplacementAndClear) {
+  using pti::pc_sampling::KernelBinaryInfo;
+  auto& storage = pti::pc_sampling::KernelInfoStorage::Instance();
+  storage.Clear();
+  storage.SetAddressMask(0xffffffffull);
+
+  KernelBinaryInfo kernel;
+  kernel.kernel_base_address_ = 0x8000ff601800ull;
+  kernel.kernel_binary_size_ = 0x100;
+  kernel.kernel_name_ = "original";
+  storage.Add(kernel);
+  const auto original = storage.FindByIpAddress(0xff601880ull);
+
+  kernel.kernel_binary_size_ = 0x200;
+  kernel.kernel_name_ = "replacement";
+  storage.Add(kernel);
+  EXPECT_EQ(storage.Size(), 1u);
+  const auto replacement = storage.FindByIpAddress(0xff601980ull);
+  storage.Clear();
+
+  ASSERT_TRUE(original.has_value());
+  EXPECT_EQ(original->kernel_base_address_, 0xff601800ull);
+  EXPECT_EQ(original->kernel_binary_size_, 0x100u);
+  EXPECT_STREQ(original->kernel_name_, "original");
+  ASSERT_TRUE(replacement.has_value());
+  EXPECT_EQ(replacement->kernel_base_address_, 0xff601800ull);
+  EXPECT_EQ(replacement->kernel_binary_size_, 0x200u);
+  EXPECT_STREQ(replacement->kernel_name_, "replacement");
+}
