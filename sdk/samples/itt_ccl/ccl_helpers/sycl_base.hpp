@@ -280,6 +280,66 @@ inline std::vector<sycl::device> create_sycl_gpu_devices(bool select_root_device
     return result;
 }
 
+enum class gpu_availability { sufficient, insufficient, query_failed };
+
+// Check before initializing oneCCL or creating queues: sharing a GPU between
+// local MPI ranks is unsupported. All ranks must agree on availability.
+inline gpu_availability check_sycl_gpu_device_count(const std::string& device_type,
+                                                    const char* test_name) {
+    if (device_type != "gpu") {
+        return gpu_availability::sufficient;
+    }
+
+    int rank = 0;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    MPI_Comm local_comm = MPI_COMM_NULL;
+    const int split_result =
+        MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL, &local_comm);
+    int split_failed = split_result != MPI_SUCCESS || local_comm == MPI_COMM_NULL;
+    if (split_failed) {
+        std::cerr << "[MPI rank " << rank << "] " << test_name
+                  << ": MPI_Comm_split_type failed to create a local communicator"
+                  << " (MPI error code " << split_result << ").\n";
+    }
+    if (MPI_Allreduce(MPI_IN_PLACE, &split_failed, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD) !=
+            MPI_SUCCESS ||
+        split_failed) {
+        return gpu_availability::query_failed;
+    }
+    int local_size = 0;
+    MPI_Comm_size(local_comm, &local_size);
+    MPI_Comm_free(&local_comm);
+
+    int gpu_count = 0;
+    int device_query_failed = 0;
+    try {
+        if (has_gpu()) {
+            // Match queue selection, including the existing tile/subdevice handling.
+            gpu_count = static_cast<int>(create_sycl_gpu_devices(false).size());
+        }
+    }
+    catch (const std::exception& e) {
+        std::cerr << "[MPI rank " << rank << "] " << test_name
+                  << ": GPU device enumeration failed: " << e.what() << '\n';
+        device_query_failed = 1;
+    }
+
+    MPI_Allreduce(MPI_IN_PLACE, &device_query_failed, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+    if (device_query_failed) {
+        return gpu_availability::query_failed;
+    }
+
+    int enough_gpus = gpu_count >= local_size;
+    if (!enough_gpus) {
+        std::cerr << "[MPI rank " << rank << "] WARNING: Skipping " << test_name
+                  << ": requires at least " << local_size
+                  << " visible GPU devices for the local MPI ranks, found " << gpu_count << ".\n";
+    }
+    MPI_Allreduce(MPI_IN_PLACE, &enough_gpus, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+    return enough_gpus ? gpu_availability::sufficient : gpu_availability::insufficient;
+}
+
 inline std::vector<sycl::queue> create_sycl_queues(const std::string& device_type,
                                                    const std::vector<int>& ranks,
                                                    bool select_root_devices = false,

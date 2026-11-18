@@ -149,23 +149,31 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
-#if defined(USE_PTI_VIEW)
-    PTI_CHECK_SUCCESS(ptiViewSetCallbacks(ProvideBuffer, ParseBuffer));
-    StartTracing();
-#endif
-
     size_t count = 10 * 1024 * 1024;
 
     int size = 0;
     int rank = 0;
-
-    ccl::init();
 
     MPI_Init(NULL, NULL);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     atexit(mpi_finalize);
+
+    const auto gpu_check_result = check_sycl_gpu_device_count(device_type, "sycl_allreduce_test");
+    if (gpu_check_result == gpu_availability::query_failed) {
+        return 1;
+    }
+    if (gpu_check_result == gpu_availability::insufficient) {
+        return PTI_CCL_TEST_SKIP_RETURN_CODE;
+    }
+
+#if defined(USE_PTI_VIEW)
+    PTI_CHECK_SUCCESS(ptiViewSetCallbacks(ProvideBuffer, ParseBuffer));
+    StartTracing();
+#endif
+
+    ccl::init();
 
     test_args args(argc, argv, rank);
 

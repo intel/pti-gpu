@@ -52,8 +52,13 @@ endif()
 option(PTI_BUILD_SYCL_ALLREDUCE_TEST "Build sycl_allreduce_test sample" ON)
 option(PTI_BUILD_SYCL_ALLREDUCE_USM_TEST "Build sycl_allreduce_usm_test sample" ON)
 
+# Keep this value in sync with the CTest default in test/itt/CMakeLists.txt.
+set(PTI_CCL_TEST_SKIP_RETURN_CODE 77)
+
 if (PTI_BUILD_SYCL_ALLREDUCE_TEST AND NOT os_id STREQUAL "rocky")
   add_executable(sycl_allreduce_test sycl_allreduce_test.cpp)
+  target_compile_definitions(sycl_allreduce_test PRIVATE
+    PTI_CCL_TEST_SKIP_RETURN_CODE=${PTI_CCL_TEST_SKIP_RETURN_CODE})
 
   target_link_options(sycl_allreduce_test PUBLIC -fsycl)
   target_compile_options(sycl_allreduce_test PUBLIC -fsycl -Wno-unused-parameter)
@@ -76,6 +81,8 @@ endif()
 
 if (PTI_BUILD_SYCL_ALLREDUCE_USM_TEST AND NOT os_id STREQUAL "rocky")
   add_executable(sycl_allreduce_usm_test sycl_allreduce_usm_test.cpp)
+  target_compile_definitions(sycl_allreduce_usm_test PRIVATE
+    PTI_CCL_TEST_SKIP_RETURN_CODE=${PTI_CCL_TEST_SKIP_RETURN_CODE})
 
   target_link_options(sycl_allreduce_usm_test PUBLIC -fsycl)
   target_compile_options(sycl_allreduce_usm_test PUBLIC -fsycl -Wno-unused-parameter)

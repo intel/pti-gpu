@@ -208,6 +208,11 @@ if(HAVE_SYCL)
     TIMEOUT 60
     LABELS "functional;itt")
 
+  if (NOT DEFINED PTI_CCL_TEST_SKIP_RETURN_CODE)
+    # Match the sample exit code in samples/itt_ccl/CMakeLists.txt.
+    set(PTI_CCL_TEST_SKIP_RETURN_CODE 77)
+  endif()
+
   # Exercise self-registration with real oneCCL workloads. Keeping
   # INTEL_LIBITTNOTIFY64 empty verifies registration before oneCCL's first ITT call.
   if (TARGET sycl_allreduce_usm_test)
@@ -221,6 +226,7 @@ if(HAVE_SYCL)
                       ${MPIEXEC_EXECUTABLE} -n 2
                       $<TARGET_FILE:sycl_allreduce_usm_test> gpu device)
       set_tests_properties(sycl_allreduce_usm_test PROPERTIES
+        SKIP_RETURN_CODE "${PTI_CCL_TEST_SKIP_RETURN_CODE}"
         LABELS "functional;ccl;itt")
     endif()
   endif()
@@ -236,6 +242,7 @@ if(HAVE_SYCL)
                       ${MPIEXEC_EXECUTABLE} -n 2
                       $<TARGET_FILE:sycl_allreduce_test> gpu)
       set_tests_properties(sycl_allreduce_test PROPERTIES
+        SKIP_RETURN_CODE "${PTI_CCL_TEST_SKIP_RETURN_CODE}"
         LABELS "functional;ccl;itt")
     endif()
   endif()
