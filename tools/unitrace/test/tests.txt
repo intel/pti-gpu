@@ -130,6 +130,12 @@ scenario = --chrome-call-logging --chrome-kernel-logging --result-dir
 scenario = --chrome-device-logging --result-dir
 scenario = -q --result-dir
 
+[unitimer]
+command           = test_unitimer.py
+platform          = Linux
+requires          = none
+defaults-scenario = False
+
 [cl_gemm]
 command  = run_test.py cl_gemm GPU
 requires = OPENCL
